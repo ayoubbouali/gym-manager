@@ -1,7 +1,7 @@
 {
-  "name": "Club Ali Sport — Gym Manager",
-  "short_name": "Ali Sport",
-  "description": "Gestion du Club Ali Sport : adhérents, paiements, coachs, activités.",
+  "name": "Gym Manager",
+  "short_name": "Gym Manager",
+  "description": "Gestion de la salle : adhérents, paiements, coachs, activités.",
   "lang": "fr",
   "start_url": "/",
   "scope": "/",

@@ -37,7 +37,7 @@ export class ConfigService {
   }
 }
 
-/** "Club Ali Sport" → "AS" (ignores the word "club"). */
+/** "Club Gym Manager" → "GM" (ignores the word "club"). */
 export function initials(name: string): string {
   const words = name.split(/\s+/).filter((w) => w && !/^club$/i.test(w));
   const letters = (words.length ? words : name.split(/\s+/)).map((w) => w[0]?.toUpperCase() ?? '');

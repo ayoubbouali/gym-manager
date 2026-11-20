@@ -4,7 +4,7 @@
 # Database only, for local development (mvn -pl gym-manager-backend spring-boot:run):
 #   docker compose -f docker/docker-compose.yaml up -d db
 
-name: alisport
+name: gymmanager
 
 services:
   db:
@@ -28,7 +28,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: alisport/gym-manager:latest
+    image: gymmanager/gym-manager:latest
     restart: unless-stopped
     depends_on:
       db:

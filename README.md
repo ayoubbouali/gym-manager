@@ -1,4 +1,4 @@
-# Gym Manager — Club Ali Sport
+# Gym Manager
 
 Application web de gestion interne du club : adhérents, abonnements (packs, remises, durées) et **renouvellements**, **paiements avec reçus PDF numérotés**, sports et créneaux, coachs et personnel, **paie du personnel avec reçus de salaire**, activités et inscriptions, alertes de paiement WhatsApp, statistiques et paramètres. Interface entièrement en français, utilisable sur PC et sur tablette (≥ 768 px), thème clair ou sombre.
 
@@ -13,7 +13,7 @@ Application web de gestion interne du club : adhérents, abonnements (packs, rem
 | Base SQL | **PostgreSQL 17** | Une seule base, en développement comme en production (`docker compose` fournit l'instance locale). Les tests tournent sur PostgreSQL via Testcontainers (Docker requis). |
 | Migrations | **Liquibase** (`gym-manager-backend/src/main/resources/db/changelog`) | Schéma versionné, historique des changesets dans la table `databasechangelog`. Le seed charge les données de la section 11 au premier démarrage. |
 | Sécurité | Spring Security, mots de passe hachés **BCrypt**, session HttpOnly `SameSite=Strict` | Rôles vérifiés **côté serveur** sur chaque route de l'API. Changement de mot de passe forcé à la première connexion. |
-| Règles de calcul | `com.alisport.gym.rules.Rules` : module **pur** (aucune I/O, aucune horloge), couvert par des tests JUnit | Toutes les valeurs calculées (prix, fin, jours, statuts, salaires, CA) viennent de là et ne sont jamais stockées. Les formulaires affichent leur aperçu en direct en appelant le serveur, qui applique les mêmes règles. |
+| Règles de calcul | `com.gymmanager.gym.rules.Rules` : module **pur** (aucune I/O, aucune horloge), couvert par des tests JUnit | Toutes les valeurs calculées (prix, fin, jours, statuts, salaires, CA) viennent de là et ne sont jamais stockées. Les formulaires affichent leur aperçu en direct en appelant le serveur, qui applique les mêmes règles. |
 | Fichiers | Photos et logo dans `data/uploads/` (hors base), servis par des routes protégées | Contrôle du type réel (JPG/PNG) et de la taille (2 Mo maximum). |
 | Hébergement | **Un seul service** : un `.jar` contient l'API et l'interface Angular | Aucun service payant requis. |
 
@@ -122,7 +122,7 @@ Les horaires « Lun-Sam 07h-22h » ou « Mar-Jeu 09h-10h30 » sont lus comme des
 
 ```
 gym-manager-backend/
-  src/main/java/com/alisport/gym/
+  src/main/java/com/gymmanager/gym/
     rules/        Rules.java — module pur des règles RG-*
     domain/       entités JPA
     repository/   dépôts Spring Data

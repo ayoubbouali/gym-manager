@@ -23,7 +23,7 @@ describe('formats français', () => {
   });
 
   it('initiales du club', () => {
-    expect(initials('Club Ali Sport')).toBe('AS');
+    expect(initials('Club Gym Manager')).toBe('GM');
     expect(initials('Gym')).toBe('G');
   });
 });

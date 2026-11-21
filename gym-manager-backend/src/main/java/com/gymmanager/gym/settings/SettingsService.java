@@ -56,16 +56,44 @@ public class SettingsService {
                 Integer.parseInt(s.get("display.pageSize")), clock);
     }
 
-    /** Validates all values first, then saves them atomically. */
+    @Transactional(readOnly = true)
+    public MailConfig mail() {
+        Map<String, String> s = raw();
+        return new MailConfig(s.get("mail.from"), s.get(SettingsCatalog.MAIL_API_KEY), s.get("mail.smtp.host"),
+                Integer.parseInt(s.get("mail.smtp.port")), s.get("mail.smtp.security"));
+    }
+
+    /** For each secret setting, whether a value is stored. The values themselves are never exposed. */
+    @Transactional(readOnly = true)
+    public Map<String, Boolean> secretsSet() {
+        Map<String, String> s = raw();
+        Map<String, Boolean> set = new LinkedHashMap<>();
+        SettingsCatalog.ALL.stream().filter(SettingsCatalog::isSecret)
+                .forEach(d -> set.put(d.key(), !s.get(d.key()).isBlank()));
+        return set;
+    }
+
+    /** {@link #raw()} with every secret replaced by an empty string, for the API. */
+    @Transactional(readOnly = true)
+    public Map<String, String> masked() {
+        Map<String, String> s = raw();
+        SettingsCatalog.ALL.stream().filter(SettingsCatalog::isSecret).forEach(d -> s.put(d.key(), ""));
+        return s;
+    }
+
+    /** Validates all values first, then saves them atomically. An empty secret keeps the stored one. */
     @Transactional
     public void update(Map<String, String> values) {
         Map<String, String> merged = raw();
+        Map<String, String> toSave = new LinkedHashMap<>();
         for (var e : values.entrySet()) {
             SettingDef d = SettingsCatalog.find(e.getKey())
                     .orElseThrow(() -> ApiException.badRequest("Paramètre inconnu : " + e.getKey()));
+            if (SettingsCatalog.isSecret(d) && (e.getValue() == null || e.getValue().isBlank())) continue;
             String err = SettingsCatalog.validate(d, e.getValue());
             if (err != null) throw ApiException.invalid(d.key(), err);
             merged.put(d.key(), SettingsCatalog.normalize(d, e.getValue()));
+            toSave.put(d.key(), merged.get(d.key()));
         }
         if (Integer.parseInt(merged.get("salary.startDay")) > Integer.parseInt(merged.get("salary.endDay"))) {
             throw ApiException.invalid("salary.endDay", "Le jour de fin de la fenêtre doit être supérieur ou égal au jour de début.");
@@ -73,9 +101,7 @@ public class SettingsService {
         if (Integer.parseInt(merged.get("alerts.soonDays")) > Integer.parseInt(merged.get("alerts.followDays"))) {
             throw ApiException.invalid("alerts.followDays", "Le seuil « À suivre » doit être supérieur ou égal au seuil « Expire bientôt ».");
         }
-        for (var e : values.entrySet()) {
-            repo.save(new AppSetting(e.getKey(), merged.get(e.getKey())));
-        }
+        toSave.forEach((k, v) -> repo.save(new AppSetting(k, v)));
     }
 
     /** Restores the defaults of one group (tab). */

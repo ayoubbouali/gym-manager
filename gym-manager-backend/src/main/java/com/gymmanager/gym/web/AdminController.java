@@ -53,15 +53,16 @@ public class AdminController {
 
     // ---------------------------------------------------------------- settings
 
+    /** Secret values (Brevo API key) are always "" in {@code values}; {@code secretsSet} tells whether one is stored. */
     public record SettingsPayload(Map<String, String> groups, List<SettingDef> definitions, Map<String, String> values,
-                                  Map<String, String> nextCodes) {
+                                  Map<String, Boolean> secretsSet, Map<String, String> nextCodes) {
     }
 
     @GetMapping("/settings")
     public SettingsPayload getSettings() {
         Map<String, String> next = new LinkedHashMap<>();
         SettingsCatalog.CODE_ENTITIES.forEach(e -> next.put(e, codes.peek(e)));
-        return new SettingsPayload(SettingsCatalog.GROUPS, SettingsCatalog.ALL, settings.raw(), next);
+        return new SettingsPayload(SettingsCatalog.GROUPS, SettingsCatalog.ALL, settings.masked(), settings.secretsSet(), next);
     }
 
     @PutMapping("/settings")

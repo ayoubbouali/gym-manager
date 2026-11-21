@@ -21,6 +21,9 @@ public final class SettingsCatalog {
     public static final Map<String, String> GROUPS = new LinkedHashMap<>();
     public static final List<String> CODE_ENTITIES = List.of("member", "sport", "pack", "discount", "activity", "staff");
     public static final List<SettingDef> ALL;
+    public static final String MAIL_API_KEY = "mail.brevo.apiKey";
+    private static final Pattern EMAIL = Pattern.compile("[^\\s@]+@[^\\s@]+\\.[^\\s@]+");
+    private static final Pattern HOST = Pattern.compile("(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*");
 
     static {
         GROUPS.put("club", "Club");
@@ -31,6 +34,7 @@ public final class SettingsCatalog {
         GROUPS.put("salary", "Salaire");
         GROUPS.put("documents", "Reçus");
         GROUPS.put("display", "Affichage");
+        GROUPS.put("mail", "Brevo config");
 
         List<SettingDef> l = new ArrayList<>();
         l.add(SettingDef.required("club.name", "club", "string", "Nom du club", "Gym Manager"));
@@ -72,7 +76,19 @@ public final class SettingsCatalog {
 
         l.add(SettingDef.choice("display.pageSize", "display", "Lignes par page", "20",
                 new Option("10", "10"), new Option("20", "20"), new Option("50", "50"), new Option("100", "100")));
+
+        // Blank from/key fall back to MAIL_FROM / BREVO_API_KEY. SMTP values are stored only: sending uses the Brevo HTTP API.
+        l.add(SettingDef.of("mail.from", "mail", "email", "Adresse de l'expéditeur", ""));
+        l.add(SettingDef.of(MAIL_API_KEY, "mail", "secret", "Clé API Brevo", ""));
+        l.add(SettingDef.required("mail.smtp.host", "mail", "host", "Serveur SMTP", "smtp-relay.brevo.com"));
+        l.add(SettingDef.integer("mail.smtp.port", "mail", "Port SMTP", "587", 1, 65535));
+        l.add(SettingDef.choice("mail.smtp.security", "mail", "Connexion", "STARTTLS",
+                new Option("NONE", "Aucune"), new Option("STARTTLS", "STARTTLS"), new Option("SSL", "SSL/TLS")));
         ALL = List.copyOf(l);
+    }
+
+    public static boolean isSecret(SettingDef d) {
+        return "secret".equals(d.type());
     }
 
     public static Optional<SettingDef> find(String key) {
@@ -113,6 +129,12 @@ public final class SettingsCatalog {
                 } catch (Exception e) {
                     return "Fuseau horaire inconnu : " + v;
                 }
+            case "email":
+                return v.isEmpty() || EMAIL.matcher(v).matches() ? null : name + " n'est pas une adresse e-mail valide.";
+            case "host":
+                return HOST.matcher(v).matches() ? null : name + " n'est pas un nom de serveur valide.";
+            case "secret":
+                return v.isEmpty() || v.matches("\\S+") ? null : name + " ne doit pas contenir d'espace.";
             case "share":
                 return Rules.parseShare(v) == null ? name + " : saisir une fraction (1/3) ou un pourcentage entre 0 et 100." : null;
             default:

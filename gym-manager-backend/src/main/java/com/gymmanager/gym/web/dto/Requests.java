@@ -90,10 +90,18 @@ public final class Requests {
     public record ChangePasswordRequest(String currentPassword, String newPassword) {
     }
 
-    public record UserCreateRequest(String username, String password, Role role) {
+    /** email: optional, blank = none. */
+    public record UserCreateRequest(String username, String password, Role role, String email) {
     }
 
-    public record UserUpdateRequest(Role role, Boolean active) {
+    /** Null fields are left unchanged; a blank email removes it. */
+    public record UserUpdateRequest(Role role, Boolean active, String email) {
+    }
+
+    public record AccountUpdateRequest(String email) {
+    }
+
+    public record ForgotPasswordRequest(String username) {
     }
 
     public record ResetPasswordRequest(String password) {

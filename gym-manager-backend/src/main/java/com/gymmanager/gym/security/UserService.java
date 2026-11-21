@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -22,10 +23,20 @@ public class UserService {
     private final AppUserRepository users;
     private final PasswordEncoder encoder;
 
-    public record UserView(Long id, String username, Role role, boolean active, boolean mustChangePassword) {
+    public record UserView(Long id, String username, Role role, boolean active, boolean mustChangePassword, String email) {
         static UserView of(AppUser u) {
-            return new UserView(u.getId(), u.getUsername(), u.getRole(), u.isActive(), u.isMustChangePassword());
+            return new UserView(u.getId(), u.getUsername(), u.getRole(), u.isActive(), u.isMustChangePassword(), u.getEmail());
         }
+    }
+
+    private static final Pattern EMAIL = Pattern.compile("[^\\s@]+@[^\\s@]+\\.[^\\s@]+");
+
+    /** Optional email: blank becomes null, otherwise a basic format check. */
+    public static String email(String value) {
+        String v = Check.text(value, "email", "Adresse e-mail", 254, false);
+        if (v.isEmpty()) return null;
+        if (!EMAIL.matcher(v).matches()) throw ApiException.invalid("email", "Adresse e-mail invalide (exemple : prenom.nom@exemple.fr).");
+        return v;
     }
 
     public static String passwordError(String pw) {
@@ -49,6 +60,7 @@ public class UserService {
         u.setUsername(username);
         u.setPasswordHash(encoder.encode(r.password()));
         u.setRole(Check.required(r.role(), "role", "Rôle"));
+        u.setEmail(email(r.email()));
         u.setMustChangePassword(true);
         return UserView.of(users.save(u));
     }
@@ -61,8 +73,16 @@ public class UserService {
         if (self && (!active || role != Role.ADMIN)) throw ApiException.badRequest("Vous ne pouvez pas désactiver ni rétrograder votre propre compte.");
         boolean losesAdmin = u.getRole() == Role.ADMIN && u.isActive() && (role != Role.ADMIN || !active);
         if (losesAdmin && users.countByRoleAndActiveTrue(Role.ADMIN) <= 1) throw ApiException.badRequest("Il doit rester au moins un administrateur actif.");
+        String email = r.email() == null ? u.getEmail() : email(r.email());
         u.setRole(role);
         u.setActive(active);
+        u.setEmail(email);
+        return UserView.of(u);
+    }
+
+    public UserView updateOwnEmail(String username, String value) {
+        AppUser u = users.findByUsernameIgnoreCase(username).orElseThrow(() -> ApiException.notFound("Utilisateur introuvable."));
+        u.setEmail(email(value));
         return UserView.of(u);
     }
 
@@ -72,6 +92,7 @@ public class UserService {
         String err = passwordError(password);
         if (err != null) throw ApiException.invalid("password", err);
         u.setPasswordHash(encoder.encode(password));
+        u.clearTempPassword();
         u.setMustChangePassword(true);
     }
 
@@ -84,6 +105,7 @@ public class UserService {
         if (err != null) throw ApiException.invalid("newPassword", err);
         if (encoder.matches(next, u.getPasswordHash())) throw ApiException.invalid("newPassword", "Le nouveau mot de passe doit être différent de l'actuel.");
         u.setPasswordHash(encoder.encode(next));
+        u.clearTempPassword();
         u.setMustChangePassword(false);
     }
 

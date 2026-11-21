@@ -39,6 +39,9 @@ services:
       DB_NAME: gym
       DB_USER: gym
       DB_PASSWORD: ${DB_PASSWORD:-gym}
+      # Brevo HTTP API for password reset emails (see README, section 4 bis)
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-}
     ports:
       - "${APP_PORT:-8090}:8090"
     volumes:

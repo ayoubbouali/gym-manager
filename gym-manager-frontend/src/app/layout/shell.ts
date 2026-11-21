@@ -49,6 +49,7 @@ import { NAV } from './nav';
             <span class="badge" [class.info]="auth.isAdmin()" [class.warn]="!auth.isAdmin()">{{ auth.user()?.role }}</span>
           </button>
           <mat-menu #userMenu="matMenu" xPosition="before">
+            <button mat-menu-item routerLink="/mon-compte"><lucide-icon name="user-round" [size]="16" /> Mon compte</button>
             <button mat-menu-item routerLink="/mot-de-passe"><lucide-icon name="key-round" [size]="16" /> Changer le mot de passe</button>
             <button mat-menu-item (click)="auth.logout()"><lucide-icon name="log-out" [size]="16" /> Déconnexion</button>
           </mat-menu>

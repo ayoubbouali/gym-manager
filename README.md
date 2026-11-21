@@ -37,7 +37,7 @@ docker compose -f docker/docker-compose.yaml up -d --build   # construit l'image
 
 L'application est sur http://localhost:8090. Les données sont dans les volumes `gym-db` (base) et `gym-files` (photos, logo).
 
-Variables facultatives (fichier `docker/.env` ou environnement) : `APP_PORT` (port publié de l'application, 8090 par défaut), `DB_PUBLISHED_PORT` (port publié de PostgreSQL, 5432 par défaut), `DB_PASSWORD`.
+Variables facultatives (fichier `docker/.env` ou environnement) : `APP_PORT` (port publié de l'application, 8090 par défaut), `DB_PUBLISHED_PORT` (port publié de PostgreSQL, 5432 par défaut), `DB_PASSWORD`, et `BREVO_API_KEY` / `MAIL_FROM` de la section 4 bis.
 
 Arrêt : `docker compose -f docker/docker-compose.yaml down` (les données sont conservées ; `down -v` les efface).
 
@@ -64,7 +64,7 @@ mvn clean verify                                                    # tous les t
 
 **Remettre les données de démonstration à zéro** : arrêter le serveur, vider la base (`docker compose -f docker/docker-compose.yaml down -v`) et `gym-manager-backend/data/` (photos), relancer.
 
-Variables utiles : `PORT`, `DATA_DIR` (dossier des fichiers téléversés), `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`.
+Variables utiles : `PORT`, `DATA_DIR` (dossier des fichiers téléversés), `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, et `BREVO_API_KEY` / `MAIL_FROM` pour l'envoi des e-mails (section 4 bis).
 
 ## 4. Comptes par défaut
 
@@ -74,6 +74,46 @@ Variables utiles : `PORT`, `DATA_DIR` (dossier des fichiers téléversés), `DB_
 | `accueil` | `accueil123` | ACCUEIL : lecture de tout sauf Personnel, Paie, Statistiques et Paramètres ; écriture sur les adhérents, les **renouvellements**, les **encaissements** et les inscriptions aux activités ; alertes. La **modification et l'annulation d'un paiement** sont réservées à l'ADMIN. |
 
 Un nouveau mot de passe est demandé à la **première connexion** : 8 caractères minimum, avec au moins une lettre et un chiffre. Les comptes se gèrent ensuite dans Paramètres › Utilisateurs.
+
+## 4 bis. Mot de passe oublié (envoi d'e-mails)
+
+Chaque compte peut avoir une **adresse e-mail**, saisie par l'ADMIN (Paramètres › Utilisateurs) ou par l'utilisateur lui-même (menu utilisateur › **Mon compte**).
+
+Sur la page de connexion, **Mot de passe oublié ?** demande l'identifiant et envoie à cette adresse un **mot de passe provisoire** :
+
+- valable **30 minutes** ; il est stocké uniquement haché (BCrypt) ;
+- l'ancien mot de passe reste valable tant que le provisoire n'a pas servi (une connexion avec l'ancien annule le provisoire) ;
+- à la connexion avec le provisoire, celui-ci remplace l'ancien et reste le mot de passe du compte jusqu'à ce que l'utilisateur en choisisse un nouveau ; chaque connexion d'ici là impose ce changement ;
+- la réponse est **toujours la même**, que le compte existe ou non, soit actif ou non, ait une adresse ou non ;
+- limite : 3 demandes par heure et par identifiant, 10 par heure et par adresse IP (en mémoire, une seule instance). Au-delà, la réponse est identique mais rien n'est envoyé.
+
+L'envoi passe par l'**API HTTP transactionnelle de Brevo** (HTTPS uniquement, aucun port SMTP n'est nécessaire). L'expéditeur et la clé d'API se règlent dans **Paramètres › Brevo config** (ADMIN), enregistrés en base et pris en compte dès l'envoi suivant, sans redémarrage. La clé n'est jamais renvoyée par l'API : l'écran indique seulement qu'une clé est enregistrée ; laisser le champ vide la conserve, « Rétablir les valeurs par défaut » la supprime. Le serveur, le port et la sécurité SMTP de cet onglet sont enregistrés mais ne servent pas à l'envoi.
+
+Un champ laissé vide dans Paramètres reprend la variable d'environnement correspondante :
+
+| Variable | Défaut | Rôle |
+| --- | --- | --- |
+| `BREVO_API_KEY` | — | clé d'API Brevo (`xkeysib-…`) ; **vide ici et dans Paramètres = aucun e-mail n'est envoyé** (un avertissement est journalisé) |
+| `MAIL_FROM` | — | adresse d'expéditeur ; **vide ici et dans Paramètres = aucun e-mail n'est envoyé** (un avertissement est journalisé) |
+
+**Brevo** (en local comme en production) :
+
+1. créer un compte Brevo, puis dans *SMTP & API › API Keys* générer une **clé d'API** (`xkeysib-…`) et la saisir dans Paramètres › Brevo config (ou `BREVO_API_KEY`) ;
+2. dans *Senders, Domains & Dedicated IPs*, ajouter et **vérifier l'expéditeur** saisi dans Paramètres › Brevo config (ou `MAIL_FROM`) ;
+3. pour la production, **authentifier le domaine** de l'expéditeur : ajouter chez l'hébergeur DNS les enregistrements **SPF** et **DKIM** (et DMARC) fournis par Brevo, sinon les messages finissent en spam.
+
+**Proxy** : si la variable d'environnement `HTTPS_PROXY` (ou `https_proxy`) est définie, par exemple `http://localhost:3128` sur un réseau d'entreprise, l'appel à Brevo passe par ce proxy, sauf si l'hôte figure dans `NO_PROXY` / `no_proxy` (hôte exact, suffixe de domaine ou `*`). Sans ces variables (hébergement), la connexion est directe. Elles doivent être de vraies variables d'environnement : le fichier `.env` ci-dessous ne les applique pas.
+
+En développement, le plus simple est un fichier **`.env`**, ignoré par git et lu automatiquement au démarrage depuis le dossier de lancement : à la racine du dépôt quand l'application est lancée depuis la racine (IntelliJ), dans `gym-manager-backend/` quand elle est lancée avec Maven (`mvn -pl gym-manager-backend spring-boot:run`). Il est lu comme un fichier de propriétés Java : uniquement des lignes `CLE=valeur`, sans guillemets (ils seraient conservés dans la valeur) ni `export` :
+
+```properties
+BREVO_API_KEY=xkeysib-…
+MAIL_FROM=club@mon-domaine.fr
+```
+
+Les vraies variables d'environnement restent prioritaires sur ce fichier.
+
+Avec Docker, mettre ces variables dans `docker/.env` (fichier à ne pas versionner).
 
 ## 5. Paiements, renouvellements et paie
 
@@ -115,7 +155,7 @@ Les horaires « Lun-Sam 07h-22h » ou « Mar-Jeu 09h-10h30 » sont lus comme des
 
 - `gym-manager-backend/src/test/java/.../rules/RulesTest.java` : **54 tests** des règles RG-PACK, RG-PRIX (avec et sans cumul), RG-FIN (fins de mois, années bissextiles), RG-JOURS, RG-STATUT, RG-ACTIF, RG-SITUATION (seuils paramétrés), RG-SALAIRE (fixe, commission, bornes incluses, lendemain exclu, coachs multiples en part entière ou partagée, adhérent compté une seule fois), RG-MASSE, RG-CA (mois, trimestre, année, par sport), statut Payé / Partiel / Impayé, reste à payer et RG-RENOUV.
 - `gym-manager-backend/src/test/java/.../importer/ImportParsingTest.java` : lecture des horaires, des mois en français et des codes.
-- `gym-manager-backend/src/test/java/.../AcceptanceTest.java` : **15 tests** (dont l'import du classeur `src/test/resources/import/Gym_Manager.xlsx` et la réinitialisation) de bout en bout de l'API sur les données du seed, avec la date du jour figée au 18/11/2026, sur un PostgreSQL 17 lancé par Testcontainers (Docker requis). Ils couvrent les critères 2 à 7, 9 et 10 de la section 12, les validations et les activités complètes, ainsi que les paiements partiels, les reçus PDF, les modifications et annulations, les renouvellements, la paie et les droits de l'ACCUEIL.
+- `gym-manager-backend/src/test/java/.../AcceptanceTest.java` : **24 tests** (dont l'import du classeur `src/test/resources/import/Gym_Manager.xlsx` et la réinitialisation) de bout en bout de l'API sur les données du seed, avec la date du jour figée au 18/11/2026, sur un PostgreSQL 17 lancé par Testcontainers (Docker requis). Ils couvrent les critères 2 à 7, 9 et 10 de la section 12, les validations et les activités complètes, ainsi que les paiements partiels, les reçus PDF, les modifications et annulations, les renouvellements, la paie, les droits de l'ACCUEIL, ainsi que le mot de passe oublié (réponse identique, expiration, remplacement de l'ancien mot de passe, limites de fréquence, envoi non configuré ou en échec) et l'adresse e-mail des comptes.
 - `gym-manager-frontend/src/**/*.spec.ts` : formats français, recherche sans accents, tri, filtres et pagination des tableaux.
 
 ## 7. Organisation du code

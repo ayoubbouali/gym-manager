@@ -5,3 +5,6 @@ databaseChangeLog:
   - include:
       file: sql/V2__payments_and_payroll.sql
       relativeToChangelogFile: true
+  - include:
+      file: sql/V3__user_email_temp_password.sql
+      relativeToChangelogFile: true

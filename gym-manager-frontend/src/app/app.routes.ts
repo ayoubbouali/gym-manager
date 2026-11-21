@@ -4,6 +4,7 @@ import { Shell } from './layout/shell';
 
 export const routes: Routes = [
   { path: 'connexion', loadComponent: () => import('./pages/auth/login').then((m) => m.LoginPage), title: 'Connexion' },
+  { path: 'mot-de-passe-oublie', loadComponent: () => import('./pages/auth/forgot-password').then((m) => m.ForgotPasswordPage), title: 'Mot de passe oublié' },
   { path: 'mot-de-passe', canActivate: [passwordGuard], loadComponent: () => import('./pages/auth/change-password').then((m) => m.ChangePasswordPage), title: 'Changer le mot de passe' },
   {
     path: '',
@@ -24,6 +25,7 @@ export const routes: Routes = [
       { path: 'alertes', loadComponent: () => import('./pages/alerts/alerts-page').then((m) => m.AlertsPage), data: { title: 'Alertes paiements' } },
       { path: 'statistiques', canActivate: [adminGuard], loadComponent: () => import('./pages/stats/stats-page').then((m) => m.StatsPage), data: { title: 'Statistiques' } },
       { path: 'parametres', canActivate: [adminGuard], loadComponent: () => import('./pages/settings/settings-page').then((m) => m.SettingsPage), data: { title: 'Paramètres' } },
+      { path: 'mon-compte', loadComponent: () => import('./pages/account/account-page').then((m) => m.AccountPage), data: { title: 'Mon compte' } },
       { path: 'acces-refuse', loadComponent: () => import('./pages/auth/forbidden').then((m) => m.ForbiddenPage), data: { title: 'Accès refusé' } },
     ],
   },

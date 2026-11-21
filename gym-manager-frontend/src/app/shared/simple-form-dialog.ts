@@ -11,7 +11,7 @@ import { errorMessage } from '../core/notify.service';
 export interface SimpleField {
   key: string;
   label: string;
-  type?: 'text' | 'number' | 'select' | 'password';
+  type?: 'text' | 'number' | 'select' | 'password' | 'email';
   required?: boolean;
   min?: number;
   max?: number;

@@ -1,4 +1,4 @@
-import { ArrowRight, BadgePercent, Ban, Banknote, Briefcase, CalendarClock, CalendarDays, Camera, ChartColumn, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsUpDown, CircleAlert, CircleCheck, CreditCard, Database, Download, Dumbbell, Eye, EyeOff, FileSpreadsheet, FileText, HandCoins, History, Hourglass, House, IdCard, Info, KeyRound, Landmark, Lock, LogOut, Menu, MessageCircle, Moon, Pencil, Plus, Power, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sun, Ticket, Trash2, TrendingUp, TriangleAlert, Upload, UserPlus, Users, Wallet, X, Zap } from 'lucide-angular';
+import { ArrowRight, BadgePercent, Ban, Banknote, Briefcase, CalendarClock, CalendarDays, Camera, ChartColumn, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsUpDown, CircleAlert, CircleCheck, CreditCard, Database, Download, Dumbbell, Eye, EyeOff, FileSpreadsheet, FileText, HandCoins, History, Hourglass, House, IdCard, Info, KeyRound, Landmark, Lock, LogOut, Mail, Menu, MessageCircle, Moon, Pencil, Plus, Power, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sun, Ticket, Trash2, TrendingUp, TriangleAlert, Upload, UserPlus, UserRound, Users, Wallet, X, Zap } from 'lucide-angular';
 
 /** Icons available through <lucide-icon name="kebab-case-name" />. */
 export const APP_ICONS = {
@@ -36,6 +36,7 @@ export const APP_ICONS = {
   Landmark,
   Lock,
   LogOut,
+  Mail,
   Menu,
   MessageCircle,
   Moon,
@@ -54,6 +55,7 @@ export const APP_ICONS = {
   TriangleAlert,
   Upload,
   UserPlus,
+  UserRound,
   Users,
   Wallet,
   X,

@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -11,7 +11,7 @@ import { errorMessage } from '../../core/notify.service';
 
 @Component({
   selector: 'app-login',
-  imports: [FormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, LucideAngularModule],
+  imports: [FormsModule, RouterLink, MatFormFieldModule, MatInputModule, MatButtonModule, LucideAngularModule],
   template: `
     <div class="auth-page">
       <div class="auth-hero" aria-hidden="true">
@@ -38,6 +38,7 @@ import { errorMessage } from '../../core/notify.service';
             <lucide-icon [name]="show() ? 'eye-off' : 'eye'" [size]="18" />
           </button>
         </mat-form-field>
+        <a class="auth-link" routerLink="/mot-de-passe-oublie">Mot de passe oublié ?</a>
         @if (error()) {<p class="form-error" role="alert">{{ error() }}</p>}
         <button mat-flat-button class="w-full big" type="submit" [disabled]="busy()">Se connecter</button>
       </form>

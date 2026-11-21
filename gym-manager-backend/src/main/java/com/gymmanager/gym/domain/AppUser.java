@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "app_users")
 @Getter @Setter @NoArgsConstructor
@@ -20,4 +22,14 @@ public class AppUser {
 
     private boolean active = true;
     private boolean mustChangePassword = true;
+    private String email;
+
+    /** Pending emailed temporary password (BCrypt hash, UTC expiry); valid alongside passwordHash. */
+    private String tempPasswordHash;
+    private LocalDateTime tempPasswordExpiresAt;
+
+    public void clearTempPassword() {
+        tempPasswordHash = null;
+        tempPasswordExpiresAt = null;
+    }
 }

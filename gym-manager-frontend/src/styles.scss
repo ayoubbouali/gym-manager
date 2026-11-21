@@ -309,6 +309,10 @@ dd { margin: 0; font-weight: 500; }
 .auth-card h1 { font-size: 24px; margin-bottom: 4px; }
 .auth-card > p { margin: 0 0 20px; }
 .auth-card .big { height: 44px; font-size: 15px; }
+.auth-link { display: block; width: fit-content; margin: -8px 0 14px auto; font-size: 13px; }
+.auth-link.back { margin: 14px auto 0; }
+/* Edge / IE native reveal and clear buttons: the password fields have their own eye toggle */
+input[type=password]::-ms-reveal, input[type=password]::-ms-clear { display: none; }
 
 /* ---------- charts ---------- */
 .chart-box { position: relative; width: 100%; }

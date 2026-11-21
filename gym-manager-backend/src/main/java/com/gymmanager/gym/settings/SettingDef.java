@@ -4,7 +4,8 @@ import java.util.List;
 
 /**
  * Definition of a setting: key, group (tab), type, label, default value.
- * Types: string, template, digits, prefix, int, bool, enum, regex, timezone, share.
+ * Types: string, template, digits, prefix, int, bool, enum, regex, timezone, share, email, host,
+ * secret (write-only: never returned by the API, an empty value keeps the stored one).
  */
 public record SettingDef(String key, String group, String type, String label, String defaultValue,
                          boolean required, Integer min, Integer max, List<Option> options) {

@@ -97,9 +97,17 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                               @if (d.key.startsWith('alerts.')) {<span matTextSuffix>&nbsp;jours</span>}
                             </mat-form-field>
                           }
+                          @case ('secret') {
+                            <mat-form-field subscriptSizing="dynamic" class="w-full max-480">
+                              <input matInput [id]="d.key" type="password" autocomplete="new-password" [(ngModel)]="values[d.key]"
+                                [placeholder]="p.secretsSet[d.key] ? 'Clé enregistrée — laisser vide pour la conserver' : 'Aucune clé enregistrée'" />
+                              <mat-hint>{{ p.secretsSet[d.key] ? 'Une clé est enregistrée ; elle n’est jamais réaffichée. Saisir une nouvelle clé pour la remplacer.' : 'Laisser vide pour utiliser la variable BREVO_API_KEY du serveur.' }}</mat-hint>
+                            </mat-form-field>
+                          }
                           @default {
                             <mat-form-field subscriptSizing="dynamic" class="w-full max-480">
-                              <input matInput [id]="d.key" [(ngModel)]="values[d.key]" />
+                              <input matInput [id]="d.key" [type]="d.type === 'email' ? 'email' : 'text'" [(ngModel)]="values[d.key]" />
+                              @if (d.key === 'mail.from') {<mat-hint>Adresse vérifiée dans Brevo. Laisser vide pour utiliser la variable MAIL_FROM du serveur.</mat-hint>}
                               @if (d.type === 'share') {<mat-hint>Fraction (1/3) ou pourcentage (33,33 ou 40 %)</mat-hint>}
                               @if (d.type === 'regex') {<mat-hint>Ex. : ^0[5-7]\\d{{ '{' }}8{{ '}' }}$ pour 06XXXXXXXX</mat-hint>}
                             </mat-form-field>
@@ -109,6 +117,9 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                       </div>
                     }
                   </div>
+                }
+                @if (g === 'mail') {
+                  <p class="muted small">L’envoi des e-mails passe par l’API HTTP de Brevo : le serveur, le port et la connexion SMTP sont enregistrés mais pas utilisés pour l’envoi.</p>
                 }
                 <div class="row-end tab-actions">
                   <button mat-stroked-button (click)="reset(g)"><lucide-icon name="rotate-ccw" [size]="16" /> Rétablir les valeurs par défaut</button>
@@ -146,11 +157,12 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
           <mat-tab label="Utilisateurs">
             <div class="tab-body">
               <table class="table compact max-760">
-                <thead><tr><th>Identifiant</th><th>Rôle</th><th>Actif</th><th>Mot de passe</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <thead><tr><th>Identifiant</th><th>E-mail</th><th>Rôle</th><th>Actif</th><th>Mot de passe</th><th><span class="sr-only">Actions</span></th></tr></thead>
                 <tbody>
                   @for (u of users(); track u.id) {
                     <tr [class.inactive]="!u.active">
                       <td class="strong">{{ u.username }} @if (u.username === me()) {<span class="muted">(vous)</span>}</td>
+                      <td>@if (u.email) {<span>{{ u.email }}</span>} @else {<span class="muted">—</span>}</td>
                       <td>
                         <select class="cell-input" [ngModel]="u.role" (ngModelChange)="setRole(u, $event)" [disabled]="u.username === me()" [attr.aria-label]="'Rôle de ' + u.username">
                           <option value="ADMIN">ADMIN</option><option value="ACCUEIL">ACCUEIL</option>
@@ -159,6 +171,7 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                       <td><app-active-badge [active]="u.active" /></td>
                       <td>@if (u.mustChangePassword) {<span class="badge warn">à changer</span>} @else {<span class="muted">—</span>}</td>
                       <td class="actions">
+                        <button class="icon-btn" (click)="editEmail(u)" matTooltip="Modifier l'e-mail" [attr.aria-label]="'Modifier l’e-mail de ' + u.username"><lucide-icon name="mail" [size]="16" /></button>
                         <button mat-stroked-button class="sm" (click)="resetPassword(u)"><lucide-icon name="key-round" [size]="14" /> Réinitialiser</button>
                         @if (u.username !== me()) {
                           <button class="icon-btn" (click)="toggleUser(u)" [matTooltip]="u.active ? 'Désactiver' : 'Réactiver'" [attr.aria-label]="(u.active ? 'Désactiver ' : 'Réactiver ') + u.username"><lucide-icon name="power" [size]="16" /></button>
@@ -260,7 +273,9 @@ export class SettingsPage {
   async reset(group: string): Promise<void> {
     const ok = await this.confirm.confirm({
       title: `Rétablir les valeurs par défaut de l'onglet « ${this.payload()?.groups[group]} » ?`,
-      message: group === 'club' ? 'Le nom, l’adresse, le téléphone et le logo du club reviennent aux valeurs d’origine.' : 'Les valeurs de cet onglet reviennent à celles du cahier des charges.',
+      message: group === 'club' ? 'Le nom, l’adresse, le téléphone et le logo du club reviennent aux valeurs d’origine.'
+        : group === 'mail' ? 'L’expéditeur est vidé, la clé API Brevo enregistrée est supprimée et les paramètres SMTP reviennent aux valeurs d’origine.'
+        : 'Les valeurs de cet onglet reviennent à celles du cahier des charges.',
       confirmLabel: 'Rétablir', danger: true,
     });
     if (!ok) return;
@@ -346,12 +361,26 @@ export class SettingsPage {
         { key: 'username', label: 'Identifiant', required: true },
         { key: 'password', label: 'Mot de passe provisoire', type: 'password', required: true, hint: 'À changer à la première connexion (8 caractères, lettres et chiffres).' },
         { key: 'role', label: 'Rôle', type: 'select', required: true, options: [{ value: 'ACCUEIL', label: 'ACCUEIL' }, { value: 'ADMIN', label: 'ADMIN' }] },
+        { key: 'email', label: 'Adresse e-mail', type: 'email', hint: 'Facultative : permet de recevoir un mot de passe provisoire en cas d\'oubli.' },
       ],
-      value: { username: '', password: '', role: 'ACCUEIL' },
+      value: { username: '', password: '', role: 'ACCUEIL', email: '' },
       submit: (v) => this.api.post('/users', v),
     });
     if (ok) {
       this.notify.success('Utilisateur créé.');
+      this.loadUsers();
+    }
+  }
+
+  async editEmail(u: User): Promise<void> {
+    const ok = await openSimpleForm(this.dialog, {
+      title: `Adresse e-mail de ${u.username}`,
+      fields: [{ key: 'email', label: 'Adresse e-mail', type: 'email', hint: 'Laisser vide pour la retirer.' }],
+      value: { email: u.email ?? '' },
+      submit: (v) => this.api.put(`/users/${u.id}`, { email: v['email'] ?? '' }),
+    });
+    if (ok) {
+      this.notify.success('Adresse e-mail enregistrée.');
       this.loadUsers();
     }
   }

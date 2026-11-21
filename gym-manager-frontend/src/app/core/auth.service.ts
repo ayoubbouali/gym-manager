@@ -38,6 +38,10 @@ export class AuthService {
     this.user.set(await this.api.post<User>('/auth/change-password', { currentPassword, newPassword }));
   }
 
+  async updateEmail(email: string): Promise<void> {
+    this.user.set(await this.api.put<User>('/auth/me', { email }));
+  }
+
   async logout(): Promise<void> {
     try {
       await this.api.post('/auth/logout');

@@ -1,4 +1,4 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import * as M from './models';
@@ -33,6 +33,24 @@ export class ApiService {
 
   postForm<T>(url: string, form: FormData): Promise<T> {
     return firstValueFrom(this.http.post<T>(`/api${url}`, form));
+  }
+
+  /** Binary download. A JSON error body (received as a Blob) is parsed back so that errorMessage() can read it. */
+  async download(url: string): Promise<Blob> {
+    try {
+      return await firstValueFrom(this.http.get(`/api${url}`, { responseType: 'blob' }));
+    } catch (e) {
+      if (e instanceof HttpErrorResponse && e.error instanceof Blob) {
+        let error: unknown = null;
+        try {
+          error = JSON.parse(await e.error.text());
+        } catch {
+          // not JSON: keep the generic message
+        }
+        throw new HttpErrorResponse({ error, headers: e.headers, status: e.status, statusText: e.statusText, url: e.url ?? undefined });
+      }
+      throw e;
+    }
   }
 
   /** Create or update depending on the id. */

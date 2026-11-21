@@ -99,23 +99,6 @@ public class PaymentService {
         sub.setAmount(memberService.price(pack, dur, disc, cfg));
     }
 
-    /** Import of a historical payment (already checked by the importer): receipt number allocated, no balance check. */
-    public Payment importPayment(Long memberId, Long subscriptionId, BigDecimal amount, PaymentMethod method, LocalDate paidOn,
-                                 String note, String username) {
-        ClubConfig cfg = settings.config();
-        Payment p = new Payment();
-        p.setMemberId(memberId);
-        p.setSubscriptionId(subscriptionId);
-        p.setAmount(amount);
-        p.setMethod(method);
-        p.setPaidOn(paidOn);
-        p.setNote(note == null ? "" : note.length() > 500 ? note.substring(0, 500) : note);
-        p.setCreatedAt(cfg.now());
-        p.setCreatedBy(username);
-        p.setReceiptNumber(codes.nextDocument("receipt", cfg.receiptPrefix(), paidOn.getYear()));
-        return payments.save(p);
-    }
-
     /** ADMIN: corrects a payment (same receipt number, regenerated). */
     public Payment update(Long id, PaymentUpdateRequest r, String username) {
         Payment p = payments.findById(id).orElseThrow(() -> ApiException.notFound("Paiement introuvable."));

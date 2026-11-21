@@ -20,6 +20,7 @@ import com.gymmanager.gym.settings.SettingsCatalog;
 import com.gymmanager.gym.settings.SettingsService;
 import com.sun.net.httpserver.HttpServer;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -48,6 +49,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -117,6 +119,9 @@ class AcceptanceTest {
 
     @Autowired
     SettingsService settingsService;
+
+    @Autowired
+    org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     MockHttpSession admin;
 
@@ -408,60 +413,130 @@ class AcceptanceTest {
     }
 
     @Test
-    @DisplayName("Import Excel : analyse sans écriture, puis remplacement de toutes les données")
-    void excelImport() throws Exception {
-        byte[] xlsx;
-        try (var in = getClass().getResourceAsStream("/import/Gym_Manager.xlsx")) {
-            xlsx = in.readAllBytes();
-        }
-        var file = new org.springframework.mock.web.MockMultipartFile("file", "Gym_Manager.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xlsx);
+    @DisplayName("Sauvegarde : export, effacement puis restauration à l'identique (données, photos, logo, paramètres)")
+    void backupRoundTrip() throws Exception {
+        long a003 = id("/api/members", "$[?(@.code=='A003')].id");
+        byte[] photo = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 1, 2, 3, 4};
+        mvc.perform(multipart("/api/members/" + a003 + "/photo").file(new MockMultipartFile("file", "p.jpg", "image/jpeg", photo)).session(admin))
+                .andExpect(status().isOk());
+        byte[] logo = {(byte) 0x89, 'P', 'N', 'G', 13, 10, 26, 10, 9, 9};
+        mvc.perform(multipart("/api/club/logo").file(new MockMultipartFile("file", "logo.png", "image/png", logo)).session(admin))
+                .andExpect(status().isOk());
+        setting("club.name", "Club Sauvegardé");
 
-        // ACCUEIL cannot import
-        MockHttpSession accueil = login("accueil", "accueil123", "Accueil2026");
-        mvc.perform(multipart("/api/data/import/analyze").file(file).session(accueil)).andExpect(status().isForbidden());
+        String summary = body(get(admin, "/api/data/summary"));
+        String members = body(get(admin, "/api/members"));
+        String payments = body(get(admin, "/api/payments?from=2020-01-01&to=2026-11-18"));
+        String payroll = body(get(admin, "/api/payroll?month=2026-10"));
+        long firstPayment = ((Number) read(get(admin, "/api/payments?from=2020-01-01&to=2026-11-18"), "$[0].id")).longValue();
 
-        var analysis = mvc.perform(multipart("/api/data/import/analyze").file(file).session(admin)).andExpect(status().isOk());
-        analysis.andExpect(jsonPath("$.executed").value(false))
-                .andExpect(jsonPath("$.counts.sports").value(7)).andExpect(jsonPath("$.counts.members").value(15))
-                .andExpect(jsonPath("$.counts.staff").value(7)).andExpect(jsonPath("$.errors.length()").value(0))
-                .andExpect(jsonPath("$.existing.members").value(16));
-        // nothing written by the analysis
-        assertThat((List<Object>) read(get(admin, "/api/members"), "$[*].code")).hasSize(16);
+        var export = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/data/export").session(admin))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("gym-manager-2026-11-18.zip")))
+                .andReturn().getResponse();
+        Map<String, byte[]> entries = unzip(export.getContentAsByteArray());
+        assertThat(entries).containsKey("data.json");
+        assertThat(entries.keySet().stream().filter(k -> k.startsWith("uploads/"))).hasSize(2);
+        Map<String, Object> doc = JSON.readValue(entries.get("data.json"), Map.class);
+        assertThat(doc).containsEntry("format", "gym-manager-backup").containsKey("schemaVersion");
+        assertThat((Map<String, Object>) doc.get("tables")).doesNotContainKeys("app_users", "databasechangelog")
+                .containsKeys("members", "payments", "app_settings", "code_counters", "sport_coaches");
 
-        mvc.perform(multipart("/api/data/import/execute").file(file).param("confirm", "non").session(admin)).andExpect(status().isBadRequest());
-        mvc.perform(multipart("/api/data/import/execute").file(file).param("confirm", "SUPPRIMER").param("paymentMethod", "CARTE").session(admin))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.executed").value(true));
-
-        get(admin, "/api/data/summary").andExpect(jsonPath("$.members").value(15)).andExpect(jsonPath("$.sports").value(7))
-                .andExpect(jsonPath("$.activities").value(0)).andExpect(jsonPath("$.salaryPayments").value(0));
-        get(admin, "/api/members/by-code/A003").andExpect(jsonPath("$.member.firstName").value("Omar"))
-                .andExpect(jsonPath("$.member.sports[0].name").value("Cross-Training"))
-                .andExpect(jsonPath("$.member.pack.name").value("Cross-Training - Annuel"));
-        assertThat((List<Object>) read(get(admin, "/api/sports"), "$[*].code")).containsExactly("SP01", "SP02", "SP03", "SP04", "SP05", "SP06", "SP07");
-        assertThat((List<Object>) read(get(admin, "/api/sports"), "$[?(@.name=='Yoga')].coaches[0].name")).containsExactly("Imane");
-        // receipts are numbered in date order and use the chosen payment method
-        List<String> numbers = read(get(admin, "/api/payments?from=2020-01-01&to=2026-11-18"), "$[*].receiptNumber");
-        List<String> dates = read(get(admin, "/api/payments?from=2020-01-01&to=2026-11-18"), "$[*].paidOn");
-        assertThat(numbers).isNotEmpty();
-        assertThat(dates).isSortedAccordingTo(java.util.Comparator.reverseOrder());
-        assertThat(numbers).isSortedAccordingTo(java.util.Comparator.reverseOrder());
-        assertThat((List<Object>) read(get(admin, "/api/payments?from=2020-01-01&to=2026-11-18"), "$[*].method")).containsOnly("CARTE");
-        // users are kept: the admin session still works; a new member continues the numbering
-        long sport = id("/api/sports", "$[?(@.name=='Yoga')].id");
-        long pack = id("/api/packs", "$[?(@.name=='Yoga - Mensuel')].id");
-        send(admin, "POST", "/api/members", member("Nouveau", "Membre", "0612000009", sport, pack, null, "2026-11-18"))
-                .andExpect(jsonPath("$.code").value("A016"));
-
-        // full reset
         send(admin, "POST", "/api/data/wipe", Map.of("confirm", "oui")).andExpect(status().isBadRequest());
         send(admin, "POST", "/api/data/wipe", Map.of("confirm", "SUPPRIMER")).andExpect(status().isOk());
         get(admin, "/api/data/summary").andExpect(jsonPath("$.members").value(0)).andExpect(jsonPath("$.payments").value(0));
-        // base referentials are recreated: the club stays usable
+        // base referentials are recreated by the reset: the club stays usable
         assertThat((List<Object>) read(get(admin, "/api/discounts"), "$[?(@.system == true)].name")).containsExactly("Aucune");
         assertThat((List<Object>) read(get(admin, "/api/durations"), "$[*].label")).containsExactly("Mensuel", "Trimestriel", "Annuel");
         assertThat((List<Object>) read(get(admin, "/api/functions"), "$[*].label")).containsExactlyInAnyOrder("Coach", "Accueil", "Entretien");
+        setting("club.name", "Autre club");
+        // fresh installation: identity sequences start again at 1 (the restore must realign them)
+        jdbc.queryForList("SELECT pg_get_serial_sequence(table_name, column_name) FROM information_schema.columns "
+                + "WHERE table_schema = current_schema() AND is_identity = 'YES' AND table_name <> 'app_users'", String.class)
+                .forEach(seq -> jdbc.execute("ALTER SEQUENCE " + seq + " RESTART WITH 1"));
+        get(admin, "/api/members/" + a003 + "/photo").andExpect(status().isNotFound());
+
+        mvc.perform(multipart("/api/data/restore").file(new MockMultipartFile("file", "sauvegarde.zip", "application/zip", export.getContentAsByteArray()))
+                .param("confirm", "SUPPRIMER").session(admin)).andExpect(status().isOk()).andExpect(jsonPath("$.restored.members").value(16));
+
+        assertThat(body(get(admin, "/api/data/summary"))).isEqualTo(summary);
+        assertThat(body(get(admin, "/api/members"))).isEqualTo(members);
+        assertThat(body(get(admin, "/api/payments?from=2020-01-01&to=2026-11-18"))).isEqualTo(payments);
+        assertThat(body(get(admin, "/api/payroll?month=2026-10"))).isEqualTo(payroll);
+        get(admin, "/api/config").andExpect(jsonPath("$.clubName").value("Club Sauvegardé"));
+        assertThat(get(admin, "/api/members/" + a003 + "/photo").andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray()).isEqualTo(photo);
+        assertThat(get(admin, "/api/club/logo").andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray()).isEqualTo(logo);
+        get(admin, "/api/payments/" + firstPayment + "/receipt.pdf").andExpect(status().isOk());
+        // users are untouched; identities and codes continue after the restored data
         assertThat((List<Object>) read(get(admin, "/api/users"), "$[*].username")).contains("admin", "accueil");
+        long sport = id("/api/sports", "$[?(@.name=='Karaté')].id");
+        long pack = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
+        send(admin, "POST", "/api/members", member("Nouveau", "Membre", "0612000009", sport, pack, null, "2026-11-18"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value("A017"));
+        long newMember = id("/api/members", "$[?(@.code=='A017')].id");
+        send(admin, "POST", "/api/payments", Map.of("memberId", newMember, "amount", 100, "method", "ESPECES")).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Sauvegarde : confirmation, fichier illisible, autre version du schéma, accès ACCUEIL — rien n'est modifié")
+    void backupRejections() throws Exception {
+        byte[] zip = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/data/export").session(admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        String summary = body(get(admin, "/api/data/summary"));
+
+        MockHttpSession accueil = login("accueil", "accueil123", "Accueil2026");
+        get(accueil, "/api/data/export").andExpect(status().isForbidden());
+        restore(accueil, zip, "SUPPRIMER").andExpect(status().isForbidden());
+
+        restore(admin, zip, "non").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("Tapez SUPPRIMER")));
+        restore(admin, "pas une archive".getBytes(StandardCharsets.UTF_8), "SUPPRIMER").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("Fichier de sauvegarde illisible")));
+        byte[] json = unzip(zip).get("data.json");
+        restore(admin, zip(Map.of("data.json", java.util.Arrays.copyOf(json, json.length / 2))), "SUPPRIMER").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("Fichier de sauvegarde illisible")));
+
+        Map<String, Object> doc = JSON.readValue(json, Map.class);
+        String current = (String) doc.get("schemaVersion");
+        doc.put("schemaVersion", "alisport:V0__old");
+        restore(admin, zip(Map.of("data.json", JSON.writeValueAsBytes(doc))), "SUPPRIMER").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("alisport:V0__old"), org.hamcrest.Matchers.containsString(current))));
+
+        // inconsistent data (payments without their members): the whole restore is rolled back
+        doc.put("schemaVersion", current);
+        ((Map<String, Object>) doc.get("tables")).put("members", List.of());
+        restore(admin, zip(Map.of("data.json", JSON.writeValueAsBytes(doc))), "SUPPRIMER").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("Fichier de sauvegarde illisible")));
+
+        assertThat(body(get(admin, "/api/data/summary"))).isEqualTo(summary);
+    }
+
+    static final tools.jackson.databind.json.JsonMapper JSON = tools.jackson.databind.json.JsonMapper.builder().build();
+
+    ResultActions restore(MockHttpSession s, byte[] archive, String confirm) throws Exception {
+        return mvc.perform(multipart("/api/data/restore").file(new MockMultipartFile("file", "sauvegarde.zip", "application/zip", archive))
+                .param("confirm", confirm).session(s));
+    }
+
+    static Map<String, byte[]> unzip(byte[] archive) throws Exception {
+        Map<String, byte[]> entries = new java.util.HashMap<>();
+        try (var in = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(archive))) {
+            for (var e = in.getNextEntry(); e != null; e = in.getNextEntry()) entries.put(e.getName(), in.readAllBytes());
+        }
+        return entries;
+    }
+
+    static byte[] zip(Map<String, byte[]> entries) throws Exception {
+        var out = new java.io.ByteArrayOutputStream();
+        try (var zip = new java.util.zip.ZipOutputStream(out)) {
+            for (var e : entries.entrySet()) {
+                zip.putNextEntry(new java.util.zip.ZipEntry(e.getKey()));
+                zip.write(e.getValue());
+                zip.closeEntry();
+            }
+        }
+        return out.toByteArray();
     }
 
     @Test

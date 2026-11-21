@@ -33,19 +33,6 @@ public class CodeService {
         return Rules.formatCode(f.prefix(), f.digits(), n);
     }
 
-    /**
-     * Import: makes the next code at least {@code n} (to keep the codes of an imported file).
-     * Never moves a counter backwards.
-     */
-    @Transactional(propagation = Propagation.MANDATORY)
-    public synchronized void reserveFrom(String entity, long n) {
-        CodeCounter c = repo.lockByEntity(entity).orElseGet(() -> repo.saveAndFlush(new CodeCounter(entity, 1)));
-        if (n > c.getNextValue()) {
-            c.setNextValue(n);
-            repo.save(c);
-        }
-    }
-
     /** Receipt / pay slip number PREFIX-YYYY-NNNN; the counter restarts every year and never goes back. */
     @Transactional(propagation = Propagation.MANDATORY)
     public synchronized String nextDocument(String kind, String prefix, int year) {

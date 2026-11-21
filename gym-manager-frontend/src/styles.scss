@@ -385,23 +385,7 @@ input[type=password]::-ms-reveal, input[type=password]::-ms-clear { display: non
 .table td.slips { min-width: 0; }
 .receipt-chip { white-space: nowrap; }
 
-/* ---------- data import ---------- */
+/* ---------- data (backup / restore) ---------- */
 .data-section { max-width: 1100px; margin-bottom: 26px; }
 .data-section h3 { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.import-form { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin: 14px 0; }
 .file-pick { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.import-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 14px 0 6px; }
-.import-kpis div { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--card-2); display: flex; flex-direction: column; }
-.import-kpis b { font-size: 20px; }
-.import-kpis span { color: var(--muted); font-size: 12px; }
-.data-section details { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin: 10px 0; }
-.data-section summary { cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 6px; }
-.data-section details .table { margin-top: 8px; }
-.issues ul { margin: 8px 0 0; padding-left: 18px; max-height: 260px; overflow: auto; font-size: 13px; }
-.issues li { margin-bottom: 4px; }
-.issues summary { color: var(--warn); }
-.issues.errors summary { color: var(--ko); }
-.danger-box { border: 1px solid color-mix(in srgb, var(--ko) 45%, var(--line)); background: var(--ko-bg); border-radius: 12px; padding: 12px 14px; margin-top: 14px; }
-.danger-box p { margin: 0 0 10px; }
-.row-start { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.ok-note { background: var(--ok-bg); color: var(--ok); display: flex; gap: 8px; align-items: center; margin: 12px 0; }

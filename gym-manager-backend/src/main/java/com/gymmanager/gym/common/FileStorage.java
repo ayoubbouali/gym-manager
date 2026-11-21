@@ -42,10 +42,42 @@ public class FileStorage {
         }
     }
 
+    /** A bare file name of the uploads folder: no path separator nor parent reference. */
+    public static boolean isValidName(String name) {
+        return name != null && !name.isBlank() && !name.equals(".") && !name.contains("/") && !name.contains("\\")
+                && !name.contains("..") && name.indexOf('\0') < 0;
+    }
+
+    /**
+     * Writes a file restored from a backup under its original name.
+     * Returns the previous content ({@code null} if the file did not exist) so that a rollback can undo the write.
+     */
+    public byte[] restore(String name, byte[] bytes) {
+        if (!isValidName(name)) throw new IllegalArgumentException("Invalid file name: " + name);
+        Path p = root.resolve(name);
+        try {
+            byte[] previous = Files.exists(p) ? Files.readAllBytes(p) : null;
+            if (previous == null || !java.util.Arrays.equals(previous, bytes)) Files.write(p, bytes);
+            return previous;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     public Optional<Path> find(String name) {
-        if (name == null || name.contains("/") || name.contains("\\") || name.contains("..")) return Optional.empty();
+        if (!isValidName(name)) return Optional.empty();
         Path p = root.resolve(name);
         return Files.isRegularFile(p) ? Optional.of(p) : Optional.empty();
+    }
+
+    /** Puts back the content a {@link #restore} replaced (best effort, used on rollback). */
+    public void rewrite(String name, byte[] bytes) {
+        if (!isValidName(name)) return;
+        try {
+            Files.write(root.resolve(name), bytes);
+        } catch (IOException ignored) {
+            // best effort
+        }
     }
 
     public void delete(String name) {

@@ -48,7 +48,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     ResponseEntity<Map<String, Object>> tooLarge(MaxUploadSizeExceededException e) {
-        return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE).body(body("Fichier trop volumineux (10 Mo maximum pour un fichier Excel, 2 Mo pour une image).", "file", null));
+        return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE).body(body("Fichier trop volumineux (100 Mo maximum pour une sauvegarde, 2 Mo pour une image).", "file", null));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

@@ -19,9 +19,9 @@ spring:
     change-log: classpath:db/changelog/db.changelog-master.yaml
   servlet:
     multipart:
-      # 10 MB for Excel imports (images are limited to 2 MB by FileStorage)
-      max-file-size: 10MB
-      max-request-size: 11MB
+      # 100 MB for backup archives (images are limited to 2 MB by FileStorage)
+      max-file-size: 100MB
+      max-request-size: 101MB
 
 server:
   port: ${PORT:8090}

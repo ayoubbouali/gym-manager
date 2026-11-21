@@ -126,26 +126,11 @@ Avec Docker, mettre ces variables dans `docker/.env` (fichier à ne pas versionn
 - Les préfixes `REC` et `SAL` et la mention en pied de reçu se règlent dans Paramètres › Reçus.
 - **Envoi WhatsApp des reçus** : prévu pour une étape ultérieure. Pour l'instant, le PDF s'ouvre, se télécharge et se joint manuellement.
 
-## 5 bis. Import Excel et réinitialisation (Paramètres › Données, ADMIN)
+## 5 bis. Sauvegarde, restauration et réinitialisation (Paramètres › Données, ADMIN)
 
-**Importer un fichier Excel** au format de l'ancien `Gym_Manager.xlsx`. Le classeur est d'abord **analysé sans rien modifier**. Le rapport montre les feuilles reconnues, ce qui sera créé (sports, coachs, packs, adhérents, périodes, paiements et montants), les lignes ignorées et les ajustements. L'import ne se lance qu'après avoir tapé `SUPPRIMER` : il **remplace toutes les données actuelles**, en une seule transaction (tout ou rien). Les comptes utilisateurs, les paramètres et le logo sont conservés.
+**Exporter la base** télécharge une sauvegarde complète `gym-manager-AAAA-MM-JJ.zip` : `data.json` (toutes les tables des données du club et les paramètres) et `uploads/` (photos des adhérents et logo du club). Les comptes utilisateurs ne sont pas exportés.
 
-| Feuille | Colonnes reconnues (par leur titre) | Devient |
-| --- | --- | --- |
-| Sports | ID Sport, Nom du sport, Coach, Horaires, Capacité, Prix mensuel | sports (codes conservés), coachs (personnel, commission), créneaux, packs Mensuel / Trimestriel / Annuel sans remise |
-| Adhérents | ID, Nom, Prénom, Téléphone, Date naissance, Sport(s) inscrit, Date inscription, Date fin abonnement, Prix mensuel | adhérents (codes conservés) avec leur période d'abonnement ; durée = écart entre inscription et fin, arrondi au mois |
-| Factures (facultative) | N° facture, ID adhérent, Date facture, Mois concerné, Montant, Statut | paiements avec reçus numérotés dans l'ordre des dates ; le n° de facture figure dans la note |
-| Personnel (facultative) | Nom, Prénom, Téléphone, Fonction, Salaire | personnel (fixe si un salaire est indiqué) |
-
-Les feuilles calculées (Accueil, Fiche, Alertes, Statistiques, Guide) et les colonnes E-mail, Statut, Dernier paiement et Photo sont ignorées.
-
-Règles de conversion des factures :
-- une facture d'un mois **antérieur** à l'inscription devient une période mensuelle passée, payée, ou due si la facture est impayée ;
-- une facture **payée** à partir du mois d'inscription règle l'abonnement en cours ; une fois celui-ci soldé et terminé, chaque facture payée suivante devient un **renouvellement mensuel** ;
-- une facture impayée postérieure à la fin de l'abonnement n'est pas reprise (avertissement) ;
-- le mode de paiement (absent du fichier) et l'assurance par défaut se choisissent avant l'import.
-
-Les horaires « Lun-Sam 07h-22h » ou « Mar-Jeu 09h-10h30 » sont lus comme des plages de jours (« Mar-Jeu » = mardi, mercredi, jeudi). Ils restent modifiables dans la page Sports.
+**Importer une sauvegarde** remplace **toutes les données actuelles** par celles du fichier, après avoir tapé `SUPPRIMER`, en une seule transaction (tout ou rien) : en cas d'erreur, rien n'est modifié. Les comptes utilisateurs sont conservés, l'ADMIN qui importe garde donc son accès. Une sauvegarde produite par une autre version du schéma de base est refusée, avec un message qui nomme les deux versions. L'archive est limitée à 100 Mo.
 
 **Réinitialiser les données** : efface adhérents, paiements, sports, personnel, packs, remises, durées, activités et paie, et remet les numéros à zéro, après avoir tapé `SUPPRIMER`. Les comptes, les paramètres et le logo sont conservés.
 
@@ -154,8 +139,7 @@ Les horaires « Lun-Sam 07h-22h » ou « Mar-Jeu 09h-10h30 » sont lus comme des
 ## 6. Tests
 
 - `gym-manager-backend/src/test/java/.../rules/RulesTest.java` : **54 tests** des règles RG-PACK, RG-PRIX (avec et sans cumul), RG-FIN (fins de mois, années bissextiles), RG-JOURS, RG-STATUT, RG-ACTIF, RG-SITUATION (seuils paramétrés), RG-SALAIRE (fixe, commission, bornes incluses, lendemain exclu, coachs multiples en part entière ou partagée, adhérent compté une seule fois), RG-MASSE, RG-CA (mois, trimestre, année, par sport), statut Payé / Partiel / Impayé, reste à payer et RG-RENOUV.
-- `gym-manager-backend/src/test/java/.../importer/ImportParsingTest.java` : lecture des horaires, des mois en français et des codes.
-- `gym-manager-backend/src/test/java/.../AcceptanceTest.java` : **24 tests** (dont l'import du classeur `src/test/resources/import/Gym_Manager.xlsx` et la réinitialisation) de bout en bout de l'API sur les données du seed, avec la date du jour figée au 18/11/2026, sur un PostgreSQL 17 lancé par Testcontainers (Docker requis). Ils couvrent les critères 2 à 7, 9 et 10 de la section 12, les validations et les activités complètes, ainsi que les paiements partiels, les reçus PDF, les modifications et annulations, les renouvellements, la paie, les droits de l'ACCUEIL, ainsi que le mot de passe oublié (réponse identique, expiration, remplacement de l'ancien mot de passe, limites de fréquence, envoi non configuré ou en échec) et l'adresse e-mail des comptes.
+- `gym-manager-backend/src/test/java/.../AcceptanceTest.java` : **28 tests** (dont la sauvegarde, la restauration à l'identique, les sauvegardes refusées et la réinitialisation) de bout en bout de l'API sur les données du seed, avec la date du jour figée au 18/11/2026, sur un PostgreSQL 17 lancé par Testcontainers (Docker requis). Ils couvrent les critères 2 à 7, 9 et 10 de la section 12, les validations et les activités complètes, ainsi que les paiements partiels, les reçus PDF, les modifications et annulations, les renouvellements, la paie, les droits de l'ACCUEIL, ainsi que le mot de passe oublié (réponse identique, expiration, remplacement de l'ancien mot de passe, limites de fréquence, envoi non configuré ou en échec) et l'adresse e-mail des comptes.
 - `gym-manager-frontend/src/**/*.spec.ts` : formats français, recherche sans accents, tri, filtres et pagination des tableaux.
 
 ## 7. Organisation du code

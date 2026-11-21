@@ -72,13 +72,13 @@ public class DemoDataSeeder implements ApplicationRunner {
     }
 
     @org.springframework.beans.factory.annotation.Autowired
-    private com.gymmanager.gym.importer.ImportService importer;
+    private com.gymmanager.gym.importer.BaseDataService baseData;
 
     @Override
     public void run(ApplicationArguments args) {
         if (users.count() > 0) {
             // existing installation: make sure the base referentials exist (e.g. after a reset)
-            if (importer.ensureBase()) log.info("Données de base recréées (fonctions, durées, remises).");
+            if (baseData.ensureBase()) log.info("Données de base recréées (fonctions, durées, remises).");
             return;
         }
         if (!enabled) return;

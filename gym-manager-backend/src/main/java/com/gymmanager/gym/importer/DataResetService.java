@@ -15,7 +15,7 @@ import java.util.Map;
  */
 @Service
 public class DataResetService {
-    private static final List<String> TABLES = List.of(
+    static final List<String> TABLES = List.of(
             "payments", "salary_payments", "activity_registrations", "subscriptions", "member_sports", "members",
             "activities", "packs", "sport_schedules", "sport_coaches", "sports", "staff", "staff_functions",
             "durations", "discounts", "code_counters");

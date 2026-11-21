@@ -97,9 +97,17 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                               @if (d.key.startsWith('alerts.')) {<span matTextSuffix>&nbsp;jours</span>}
                             </mat-form-field>
                           }
+                          @case ('secret') {
+                            <mat-form-field subscriptSizing="dynamic" class="w-full max-480">
+                              <input matInput [id]="d.key" type="password" autocomplete="new-password" [(ngModel)]="values[d.key]"
+                                [placeholder]="p.secretsSet[d.key] ? 'Clé enregistrée — laisser vide pour la conserver' : 'Aucune clé enregistrée'" />
+                              <mat-hint>{{ p.secretsSet[d.key] ? 'Une clé est enregistrée ; elle n’est jamais réaffichée. Saisir une nouvelle clé pour la remplacer.' : 'Laisser vide pour utiliser la variable BREVO_API_KEY du serveur.' }}</mat-hint>
+                            </mat-form-field>
+                          }
                           @default {
                             <mat-form-field subscriptSizing="dynamic" class="w-full max-480">
-                              <input matInput [id]="d.key" [(ngModel)]="values[d.key]" />
+                              <input matInput [id]="d.key" [type]="d.type === 'email' ? 'email' : 'text'" [(ngModel)]="values[d.key]" />
+                              @if (d.key === 'mail.from') {<mat-hint>Adresse vérifiée dans Brevo. Laisser vide pour utiliser la variable MAIL_FROM du serveur.</mat-hint>}
                               @if (d.type === 'share') {<mat-hint>Fraction (1/3) ou pourcentage (33,33 ou 40 %)</mat-hint>}
                               @if (d.type === 'regex') {<mat-hint>Ex. : ^0[5-7]\\d{{ '{' }}8{{ '}' }}$ pour 06XXXXXXXX</mat-hint>}
                             </mat-form-field>
@@ -109,6 +117,9 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                       </div>
                     }
                   </div>
+                }
+                @if (g === 'mail') {
+                  <p class="muted small">L’envoi des e-mails passe par l’API HTTP de Brevo : le serveur, le port et la connexion SMTP sont enregistrés mais pas utilisés pour l’envoi.</p>
                 }
                 <div class="row-end tab-actions">
                   <button mat-stroked-button (click)="reset(g)"><lucide-icon name="rotate-ccw" [size]="16" /> Rétablir les valeurs par défaut</button>
@@ -262,7 +273,9 @@ export class SettingsPage {
   async reset(group: string): Promise<void> {
     const ok = await this.confirm.confirm({
       title: `Rétablir les valeurs par défaut de l'onglet « ${this.payload()?.groups[group]} » ?`,
-      message: group === 'club' ? 'Le nom, l’adresse, le téléphone et le logo du club reviennent aux valeurs d’origine.' : 'Les valeurs de cet onglet reviennent à celles du cahier des charges.',
+      message: group === 'club' ? 'Le nom, l’adresse, le téléphone et le logo du club reviennent aux valeurs d’origine.'
+        : group === 'mail' ? 'L’expéditeur est vidé, la clé API Brevo enregistrée est supprimée et les paramètres SMTP reviennent aux valeurs d’origine.'
+        : 'Les valeurs de cet onglet reviennent à celles du cahier des charges.',
       confirmLabel: 'Rétablir', danger: true,
     });
     if (!ok) return;

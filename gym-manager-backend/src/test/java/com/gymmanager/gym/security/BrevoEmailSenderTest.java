@@ -109,6 +109,35 @@ class BrevoEmailSenderTest {
     }
 
     @Test
+    @DisplayName("Clé et expéditeur relus à chaque envoi : un changement s'applique sans recréer l'émetteur")
+    void readsCredentialsAtEachSend() {
+        String url = "http://localhost:" + server.getAddress().getPort() + "/v3/smtp/email";
+        AtomicReference<BrevoEmailSender.Credentials> current = new AtomicReference<>(new BrevoEmailSender.Credentials("k1", "one@gym.test"));
+        BrevoEmailSender sender = new BrevoEmailSender(url, current::get, ProxySelector.of(null));
+        sender.send("a@club.test", "s", "t");
+        assertThat(apiKey.get()).isEqualTo("k1");
+        assertThat(body.get()).contains("one@gym.test");
+
+        current.set(new BrevoEmailSender.Credentials("k2", "two@gym.test"));
+        sender.send("a@club.test", "s", "t");
+        assertThat(apiKey.get()).isEqualTo("k2");
+        assertThat(body.get()).contains("two@gym.test");
+        assertThat(current.get().toString()).doesNotContain("k2");
+    }
+
+    @Test
+    @DisplayName("Repli : une valeur non vide des paramètres l'emporte, sinon la variable d'environnement")
+    void resolveFallsBackPerField() {
+        var none = new com.gymmanager.gym.settings.MailConfig("", "", "smtp-relay.brevo.com", 587, "STARTTLS");
+        var both = new com.gymmanager.gym.settings.MailConfig("db@gym.test", "db-key", "smtp-relay.brevo.com", 587, "STARTTLS");
+        assertThat(BrevoEmailSender.Credentials.resolve(none, "env-key", "env@gym.test"))
+                .isEqualTo(new BrevoEmailSender.Credentials("env-key", "env@gym.test"));
+        assertThat(BrevoEmailSender.Credentials.resolve(both, "env-key", "env@gym.test"))
+                .isEqualTo(new BrevoEmailSender.Credentials("db-key", "db@gym.test"));
+        assertThat(BrevoEmailSender.Credentials.resolve(none, "", "").isComplete()).isFalse();
+    }
+
+    @Test
     @DisplayName("Proxy : le sélecteur fourni est consulté pour la requête")
     void usesProxySelector() {
         AtomicReference<URI> asked = new AtomicReference<>();

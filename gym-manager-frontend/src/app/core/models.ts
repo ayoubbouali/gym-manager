@@ -170,7 +170,9 @@ export interface SettingDef {
 export interface SettingsPayload {
   groups: Record<string, string>;
   definitions: SettingDef[];
+  /** Secret values are always '' in `values`; this tells whether one is stored on the server. */
   values: Record<string, string>;
+  secretsSet: Record<string, boolean>;
   nextCodes: Record<string, string>;
 }
 

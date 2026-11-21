@@ -14,13 +14,19 @@ import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.MediaType;
 import org.mockito.ArgumentCaptor;
+import com.gymmanager.gym.security.BrevoEmailSender;
 import com.gymmanager.gym.security.EmailSender;
+import com.gymmanager.gym.settings.SettingsService;
+import com.sun.net.httpserver.HttpServer;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -106,6 +112,9 @@ class AcceptanceTest {
 
     @MockitoBean
     EmailSender mailSender;
+
+    @Autowired
+    SettingsService settingsService;
 
     MockHttpSession admin;
 
@@ -299,6 +308,9 @@ class AcceptanceTest {
             get(accueil, url).andExpect(status().isForbidden());
         }
         send(accueil, "PUT", "/api/settings", Map.of("values", Map.of("club.name", "X"))).andExpect(status().isForbidden());
+        send(accueil, "PUT", "/api/settings", Map.of("values", Map.of("mail.from", "x@club.test", "mail.brevo.apiKey", "xkeysib-x")))
+                .andExpect(status().isForbidden());
+        send(accueil, "POST", "/api/settings/reset/mail", null).andExpect(status().isForbidden());
         send(accueil, "POST", "/api/discounts", Map.of("name", "X", "percent", 5)).andExpect(status().isForbidden());
         get(accueil, "/api/members").andExpect(status().isOk());
         get(accueil, "/api/alerts").andExpect(status().isOk());
@@ -682,5 +694,89 @@ class AcceptanceTest {
         // a role change leaves the email untouched; a blank email removes it
         send(admin, "PUT", "/api/users/" + accueilId, Map.of("role", "ACCUEIL")).andExpect(jsonPath("$.email").value("accueil@club.test"));
         send(admin, "PUT", "/api/users/" + accueilId, Map.of("email", "")).andExpect(status().isOk()).andExpect(jsonPath("$.email").isEmpty());
+    }
+
+    @Test
+    @DisplayName("Paramètres › Brevo config : la clé Brevo n'est jamais renvoyée ; vide = conservée, saisie = remplacée")
+    void mailSettingsSecret() throws Exception {
+        get(admin, "/api/settings")
+                .andExpect(jsonPath("$.groups.mail").value("Brevo config"))
+                .andExpect(jsonPath("$.values['mail.brevo.apiKey']").value(""))
+                .andExpect(jsonPath("$.secretsSet['mail.brevo.apiKey']").value(false))
+                .andExpect(jsonPath("$.values['mail.smtp.host']").value("smtp-relay.brevo.com"))
+                .andExpect(jsonPath("$.values['mail.smtp.port']").value("587"))
+                .andExpect(jsonPath("$.values['mail.smtp.security']").value("STARTTLS"));
+
+        String saved = body(send(admin, "PUT", "/api/settings", Map.of("values", Map.of("mail.from", "club@gym.test",
+                "mail.brevo.apiKey", "xkeysib-first", "mail.smtp.host", "smtp.gym.test", "mail.smtp.port", "465", "mail.smtp.security", "SSL")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.values['mail.brevo.apiKey']").value(""))
+                .andExpect(jsonPath("$.secretsSet['mail.brevo.apiKey']").value(true)));
+        assertThat(saved).doesNotContain("xkeysib-first");
+        assertThat(body(get(admin, "/api/settings"))).doesNotContain("xkeysib-first");
+        assertThat(settingsService.mail().apiKey()).isEqualTo("xkeysib-first");
+        assertThat(settingsService.mail().smtpPort()).isEqualTo(465);
+
+        // the form sends the whole tab with an empty key field: the stored key is kept
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("mail.from", "accueil@gym.test", "mail.brevo.apiKey", "")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.secretsSet['mail.brevo.apiKey']").value(true));
+        assertThat(settingsService.mail().apiKey()).isEqualTo("xkeysib-first");
+        assertThat(settingsService.mail().from()).isEqualTo("accueil@gym.test");
+
+        setting("mail.brevo.apiKey", "xkeysib-second");
+        assertThat(settingsService.mail().apiKey()).isEqualTo("xkeysib-second");
+
+        // field-level validation
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("mail.from", "abc")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("mail.from"));
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("mail.smtp.port", "70000")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("mail.smtp.port"));
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("mail.smtp.host", "smtp gym")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("mail.smtp.host"));
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("mail.smtp.security", "TLS13")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("mail.smtp.security"));
+        assertThat(settingsService.mail().from()).isEqualTo("accueil@gym.test");
+
+        // reset clears the key too
+        send(admin, "POST", "/api/settings/reset/mail", null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.secretsSet['mail.brevo.apiKey']").value(false))
+                .andExpect(jsonPath("$.values['mail.from']").value(""))
+                .andExpect(jsonPath("$.values['mail.smtp.port']").value("587"));
+        assertThat(settingsService.mail().apiKey()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Paramètres › Brevo config : l'envoi suivant utilise l'expéditeur et la clé enregistrés, sans redémarrage")
+    void mailSettingsApplyAtNextSend() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        AtomicReference<String> key = new AtomicReference<>();
+        AtomicReference<String> payload = new AtomicReference<>();
+        server.createContext("/v3/smtp/email", exchange -> {
+            key.set(exchange.getRequestHeaders().getFirst("api-key"));
+            payload.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            exchange.sendResponseHeaders(201, -1);
+            exchange.close();
+        });
+        server.start();
+        try {
+            // same constructor Spring uses, with blank environment values and a local URL (http: no proxy)
+            BrevoEmailSender sender = new BrevoEmailSender("http://localhost:" + server.getAddress().getPort() + "/v3/smtp/email",
+                    "", "", settingsService);
+            assertThat(sender.isConfigured()).isFalse();
+
+            send(admin, "PUT", "/api/settings", Map.of("values", Map.of("mail.from", "club@gym.test", "mail.brevo.apiKey", "xkeysib-one")))
+                    .andExpect(status().isOk());
+            assertThat(sender.isConfigured()).isTrue();
+            sender.send("a@club.test", "s", "t");
+            assertThat(key.get()).isEqualTo("xkeysib-one");
+            assertThat(payload.get()).contains("club@gym.test");
+
+            send(admin, "PUT", "/api/settings", Map.of("values", Map.of("mail.from", "autre@gym.test", "mail.brevo.apiKey", "xkeysib-two")))
+                    .andExpect(status().isOk());
+            sender.send("a@club.test", "s", "t");
+            assertThat(key.get()).isEqualTo("xkeysib-two");
+            assertThat(payload.get()).contains("autre@gym.test");
+        } finally {
+            server.stop(0);
+        }
     }
 }

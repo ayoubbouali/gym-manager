@@ -42,9 +42,10 @@ app:
   seed:
     enabled: true
   mail:
-    # Sender address (verified in Brevo); empty = password reset emails are not sent.
+    # Fallbacks used when Paramètres > Brevo config leaves the field blank (the database value wins).
+    # Sender address (verified in Brevo); empty everywhere = password reset emails are not sent.
     from: ${MAIL_FROM:}
     brevo:
-      # Brevo transactional API key (xkeysib-…); empty = password reset emails are not sent.
+      # Brevo transactional API key (xkeysib-…); empty everywhere = password reset emails are not sent.
       api-key: ${BREVO_API_KEY:}
       url: https://api.brevo.com/v3/smtp/email

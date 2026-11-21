@@ -87,17 +87,19 @@ Sur la page de connexion, **Mot de passe oublié ?** demande l'identifiant et en
 - la réponse est **toujours la même**, que le compte existe ou non, soit actif ou non, ait une adresse ou non ;
 - limite : 3 demandes par heure et par identifiant, 10 par heure et par adresse IP (en mémoire, une seule instance). Au-delà, la réponse est identique mais rien n'est envoyé.
 
-L'envoi passe par l'**API HTTP transactionnelle de Brevo** (HTTPS uniquement, aucun port SMTP n'est nécessaire), configurée **uniquement par variables d'environnement** (aucun secret dans le dépôt) :
+L'envoi passe par l'**API HTTP transactionnelle de Brevo** (HTTPS uniquement, aucun port SMTP n'est nécessaire). L'expéditeur et la clé d'API se règlent dans **Paramètres › Brevo config** (ADMIN), enregistrés en base et pris en compte dès l'envoi suivant, sans redémarrage. La clé n'est jamais renvoyée par l'API : l'écran indique seulement qu'une clé est enregistrée ; laisser le champ vide la conserve, « Rétablir les valeurs par défaut » la supprime. Le serveur, le port et la sécurité SMTP de cet onglet sont enregistrés mais ne servent pas à l'envoi.
+
+Un champ laissé vide dans Paramètres reprend la variable d'environnement correspondante :
 
 | Variable | Défaut | Rôle |
 | --- | --- | --- |
-| `BREVO_API_KEY` | — | clé d'API Brevo (`xkeysib-…`) ; **vide = aucun e-mail n'est envoyé** (un avertissement est journalisé) |
-| `MAIL_FROM` | — | adresse d'expéditeur ; **vide = aucun e-mail n'est envoyé** (un avertissement est journalisé) |
+| `BREVO_API_KEY` | — | clé d'API Brevo (`xkeysib-…`) ; **vide ici et dans Paramètres = aucun e-mail n'est envoyé** (un avertissement est journalisé) |
+| `MAIL_FROM` | — | adresse d'expéditeur ; **vide ici et dans Paramètres = aucun e-mail n'est envoyé** (un avertissement est journalisé) |
 
 **Brevo** (en local comme en production) :
 
-1. créer un compte Brevo, puis dans *SMTP & API › API Keys* générer une **clé d'API** (`xkeysib-…`) et la mettre dans `BREVO_API_KEY` ;
-2. dans *Senders, Domains & Dedicated IPs*, ajouter et **vérifier l'expéditeur** utilisé dans `MAIL_FROM` ;
+1. créer un compte Brevo, puis dans *SMTP & API › API Keys* générer une **clé d'API** (`xkeysib-…`) et la saisir dans Paramètres › Brevo config (ou `BREVO_API_KEY`) ;
+2. dans *Senders, Domains & Dedicated IPs*, ajouter et **vérifier l'expéditeur** saisi dans Paramètres › Brevo config (ou `MAIL_FROM`) ;
 3. pour la production, **authentifier le domaine** de l'expéditeur : ajouter chez l'hébergeur DNS les enregistrements **SPF** et **DKIM** (et DMARC) fournis par Brevo, sinon les messages finissent en spam.
 
 **Proxy** : si la variable d'environnement `HTTPS_PROXY` (ou `https_proxy`) est définie, par exemple `http://localhost:3128` sur un réseau d'entreprise, l'appel à Brevo passe par ce proxy, sauf si l'hôte figure dans `NO_PROXY` / `no_proxy` (hôte exact, suffixe de domaine ou `*`). Sans ces variables (hébergement), la connexion est directe. Elles doivent être de vraies variables d'environnement : le fichier `.env` ci-dessous ne les applique pas.

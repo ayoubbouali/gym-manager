@@ -76,7 +76,7 @@ public class PasswordResetService {
     private void process(String username) {
         try {
             if (!emailSender.isConfigured()) {
-                log.warn("Password reset requested but mail is not configured (BREVO_API_KEY / MAIL_FROM): nothing sent");
+                log.warn("Password reset requested but mail is not configured (Paramètres › Brevo config, or BREVO_API_KEY / MAIL_FROM): nothing sent");
                 return;
             }
             String temp = newTempPassword();

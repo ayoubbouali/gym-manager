@@ -2,6 +2,9 @@ package com.gymmanager.gym.security;
 
 import com.gymmanager.gym.domain.AppUser;
 import com.gymmanager.gym.repository.AppUserRepository;
+import com.gymmanager.gym.rules.Rules;
+import com.gymmanager.gym.settings.SettingsCatalog;
+import com.gymmanager.gym.settings.SettingsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -35,7 +38,6 @@ public class PasswordResetService {
     static final int MAX_PER_USERNAME = 3;
     static final int MAX_PER_IP = 10;
     private static final int TEMP_LENGTH = 12;
-    private static final String SUBJECT = "Gym Manager : votre mot de passe provisoire";
     // no look-alike characters (0/O, 1/l/I)
     private static final String ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 
@@ -45,17 +47,20 @@ public class PasswordResetService {
     private final TaskExecutor executor;
     private final TransactionTemplate tx;
     private final EmailSender emailSender;
+    private final SettingsService settings;
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Deque<Instant>> attempts = new ConcurrentHashMap<>();
 
     public PasswordResetService(AppUserRepository users, PasswordEncoder encoder, Clock clock, TaskExecutor executor,
-                                PlatformTransactionManager txManager, EmailSender emailSender) {
+                                PlatformTransactionManager txManager, EmailSender emailSender,
+                                SettingsService settings) {
         this.users = users;
         this.encoder = encoder;
         this.clock = clock;
         this.executor = executor;
         this.tx = new TransactionTemplate(txManager);
         this.emailSender = emailSender;
+        this.settings = settings;
     }
 
     /** Never throws and never reveals anything: the caller always answers the same way. */
@@ -90,27 +95,15 @@ public class PasswordResetService {
                     })
                     .orElse(null));
             if (mail == null) return;
-            emailSender.send(mail.email(), SUBJECT, text(mail, temp));
+            Map<String, String> s = settings.raw();
+            Map<String, Object> vars = Map.of("identifiant", mail.username(), "mot_de_passe", temp,
+                    "duree", TEMP_VALIDITY.toMinutes(), "club", s.get("club.name"));
+            emailSender.send(mail.email(), Rules.renderTemplate(s.get(SettingsCatalog.RESET_SUBJECT), vars),
+                    Rules.renderTemplate(s.get(SettingsCatalog.RESET_TEMPLATE), vars));
             log.info("Password reset email sent to user #{}", mail.userId());
         } catch (RuntimeException e) {
             log.error("Password reset email failed", e);
         }
-    }
-
-    private static String text(Mail mail, String temp) {
-        return """
-                Bonjour %s,
-
-                Une demande de réinitialisation du mot de passe a été faite pour votre compte Gym Manager.
-
-                Mot de passe provisoire : %s
-
-                Il permet de vous connecter pendant 30 minutes. À la connexion, \
-                vous devrez choisir un nouveau mot de passe.
-                Votre mot de passe actuel reste valable tant que vous n'utilisez pas le mot de passe provisoire.
-
-                Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.
-                """.formatted(mail.username(), temp);
     }
 
     /**

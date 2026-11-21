@@ -22,6 +22,9 @@ public final class SettingsCatalog {
     public static final List<String> CODE_ENTITIES = List.of("member", "sport", "pack", "discount", "activity", "staff");
     public static final List<SettingDef> ALL;
     public static final String MAIL_API_KEY = "mail.brevo.apiKey";
+    public static final String RESET_SUBJECT = "mail.reset.subject";
+    public static final String RESET_TEMPLATE = "mail.reset.template";
+    public static final String RESET_PASSWORD_VARIABLE = "{mot_de_passe}";
     private static final Pattern EMAIL = Pattern.compile("[^\\s@]+@[^\\s@]+\\.[^\\s@]+");
     private static final Pattern HOST = Pattern.compile("(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*");
 
@@ -84,6 +87,21 @@ public final class SettingsCatalog {
         l.add(SettingDef.integer("mail.smtp.port", "mail", "Port SMTP", "587", 1, 65535));
         l.add(SettingDef.choice("mail.smtp.security", "mail", "Connexion", "STARTTLS",
                 new Option("NONE", "Aucune"), new Option("STARTTLS", "STARTTLS"), new Option("SSL", "SSL/TLS")));
+        l.add(SettingDef.required(RESET_SUBJECT, "mail", "string", "Objet de l'e-mail « mot de passe oublié »",
+                "Gym Manager : votre mot de passe provisoire"));
+        l.add(SettingDef.required(RESET_TEMPLATE, "mail", "template", "Modèle de l'e-mail « mot de passe oublié »", """
+                Bonjour {identifiant},
+
+                Une demande de réinitialisation du mot de passe a été faite pour votre compte Gym Manager.
+
+                Mot de passe provisoire : {mot_de_passe}
+
+                Il permet de vous connecter pendant {duree} minutes. À la connexion, \
+                vous devrez choisir un nouveau mot de passe.
+                Votre mot de passe actuel reste valable tant que vous n'utilisez pas le mot de passe provisoire.
+
+                Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.
+                """));
         ALL = List.copyOf(l);
     }
 
@@ -101,6 +119,12 @@ public final class SettingsCatalog {
         String name = "« " + d.label() + " »";
         if (d.required() && v.isEmpty()) return name + " est obligatoire.";
         if (v.length() > 1000) return name + " est trop long.";
+        // without the temporary password the reset email is useless
+        if (d.key().equals(RESET_TEMPLATE) && !v.contains(RESET_PASSWORD_VARIABLE))
+            return name + " doit contenir la variable " + RESET_PASSWORD_VARIABLE + ".";
+        // subjects show up in notification previews and mail logs
+        if (d.key().equals(RESET_SUBJECT) && v.contains(RESET_PASSWORD_VARIABLE))
+            return name + " ne doit pas contenir le mot de passe provisoire " + RESET_PASSWORD_VARIABLE + ".";
         switch (d.type()) {
             case "digits":
                 return v.matches("\\d{1,4}") ? null : name + " doit contenir de 1 à 4 chiffres.";

@@ -289,6 +289,7 @@ dd { margin: 0; font-weight: 500; }
 .textarea:focus { outline: 2px solid var(--brand); border-color: transparent; }
 .chips-row { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
 .preview-box { margin-top: 8px; max-width: 640px; background: var(--ok-bg); border-radius: 10px; padding: 10px 12px; color: var(--ink); }
+.preview-box.pre-line { white-space: pre-line; }
 .logo-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .tab-actions { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 8px; }
 

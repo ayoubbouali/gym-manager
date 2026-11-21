@@ -16,6 +16,7 @@ import org.springframework.http.MediaType;
 import org.mockito.ArgumentCaptor;
 import com.gymmanager.gym.security.BrevoEmailSender;
 import com.gymmanager.gym.security.EmailSender;
+import com.gymmanager.gym.settings.SettingsCatalog;
 import com.gymmanager.gym.settings.SettingsService;
 import com.sun.net.httpserver.HttpServer;
 import org.springframework.mock.web.MockHttpSession;
@@ -40,6 +41,7 @@ import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -577,6 +579,32 @@ class AcceptanceTest {
         rawLogin("accueil", temp).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("BAD_CREDENTIALS"));
         rawLogin("accueil", "accueil123").andExpect(status().isUnauthorized());
         rawLogin("accueil", "Nouveau2026").andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Mot de passe oublié : objet et message suivent le modèle de l'onglet Brevo config")
+    void forgotPasswordUsesConfiguredTemplate() throws Exception {
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("mail.reset.template", "Salut {identifiant}")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("mail.reset.template"));
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("mail.reset.subject", "{club} : accès provisoire",
+                "mail.reset.template", "Salut {identifiant}, code {mot_de_passe} valable {duree} min ({club}).")))
+                .andExpect(status().isOk());
+        setEmail("accueil", "accueil@club.test");
+        forgot("accueil", "10.0.0.1").andExpect(status().isAccepted());
+
+        ArgumentCaptor<String> subject = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> text = ArgumentCaptor.forClass(String.class);
+        verify(mailSender).send(eq("accueil@club.test"), subject.capture(), text.capture());
+        String club = settingsService.config().clubName();
+        assertThat(subject.getValue()).isEqualTo(club + " : accès provisoire");
+        Matcher m = Pattern.compile("Salut accueil, code (\\S{12}) valable 30 min \\((.+)\\)\\.").matcher(text.getValue());
+        assertThat(m.matches()).as(text.getValue()).isTrue();
+        assertThat(m.group(2)).isEqualTo(club);
+        rawLogin("accueil", m.group(1)).andExpect(status().isOk()).andExpect(jsonPath("$.mustChangePassword").value(true));
+
+        send(admin, "POST", "/api/settings/reset/mail", null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.values['mail.reset.subject']").value("Gym Manager : votre mot de passe provisoire"))
+                .andExpect(jsonPath("$.values['mail.reset.template']").value(SettingsCatalog.find("mail.reset.template").orElseThrow().defaultValue()));
     }
 
     @Test

@@ -21,6 +21,8 @@ import { openSimpleForm } from '../../shared/simple-form-dialog';
 import { DataImport } from './data-import';
 
 const VARIABLES = ['prenom', 'nom', 'jours', 'date_fin', 'club', 'pack'];
+const RESET_TEMPLATE = 'mail.reset.template';
+const RESET_VARIABLES = ['identifiant', 'mot_de_passe', 'duree', 'club'];
 const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'Sport'], ['pack', 'Pack'], ['discount', 'Remise'], ['activity', 'Activité'], ['staff', 'Personnel']];
 
 @Component({
@@ -84,12 +86,12 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                             }
                           }
                           @case ('template') {
-                            <textarea [id]="d.key" class="textarea" rows="3" [(ngModel)]="values[d.key]" (focus)="focusedTemplate = d.key"></textarea>
+                            <textarea [id]="d.key" class="textarea" [rows]="d.key === resetTemplate ? 12 : 3" [(ngModel)]="values[d.key]" (focus)="focusedTemplate = d.key"></textarea>
                             <div class="chips-row">
                               <span class="muted small">Variables :</span>
-                              @for (v of variables; track v) {<button type="button" class="chip chip-btn" (click)="insert(d.key, v)">{{ '{' + v + '}' }}</button>}
+                              @for (v of variablesFor(d.key); track v) {<button type="button" class="chip chip-btn" (click)="insert(d.key, v)">{{ '{' + v + '}' }}</button>}
                             </div>
-                            <div class="preview-box"><span class="muted small">Aperçu</span> {{ render(values[d.key]) }}</div>
+                            <div class="preview-box" [class.pre-line]="d.key === resetTemplate"><span class="muted small">Aperçu</span> {{ render(values[d.key]) }}</div>
                           }
                           @case ('int') {
                             <mat-form-field subscriptSizing="dynamic" class="w-140">
@@ -107,6 +109,7 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                           @default {
                             <mat-form-field subscriptSizing="dynamic" class="w-full max-480">
                               <input matInput [id]="d.key" [type]="d.type === 'email' ? 'email' : 'text'" [(ngModel)]="values[d.key]" />
+                              @if (d.key === 'mail.reset.subject') {<mat-hint>Variables possibles : {{ '{' }}identifiant{{ '}' }}, {{ '{' }}duree{{ '}' }}, {{ '{' }}club{{ '}' }} — jamais le mot de passe.</mat-hint>}
                               @if (d.key === 'mail.from') {<mat-hint>Adresse vérifiée dans Brevo. Laisser vide pour utiliser la variable MAIL_FROM du serveur.</mat-hint>}
                               @if (d.type === 'share') {<mat-hint>Fraction (1/3) ou pourcentage (33,33 ou 40 %)</mat-hint>}
                               @if (d.type === 'regex') {<mat-hint>Ex. : ^0[5-7]\\d{{ '{' }}8{{ '}' }}$ pour 06XXXXXXXX</mat-hint>}
@@ -207,7 +210,7 @@ export class SettingsPage {
   fieldError = signal<{ field?: string; message: string } | null>(null);
   values: Record<string, string> = {};
   focusedTemplate = '';
-  variables = VARIABLES;
+  resetTemplate = RESET_TEMPLATE;
   codeEntities = CODE_ENTITIES;
   me = computed(() => this.auth.user()?.username);
   groupKeys = computed(() => Object.keys(this.payload()?.groups ?? {}));
@@ -244,8 +247,13 @@ export class SettingsPage {
   }
 
   render(template: string): string {
-    const sample: Record<string, string> = { prenom: 'Hamza', nom: 'Amrani', jours: '246', date_fin: '17/03/2026', club: this.config.clubName(), pack: 'Aérobic - Mensuel' };
+    const sample: Record<string, string> = { prenom: 'Hamza', nom: 'Amrani', jours: '246', date_fin: '17/03/2026', club: this.config.clubName(), pack: 'Aérobic - Mensuel',
+      identifiant: 'accueil', mot_de_passe: 'Xk7mP2qR9tWb', duree: '30' };
     return (template ?? '').replace(/\{(\w+)\}/g, (all, k: string) => sample[k] ?? all);
+  }
+
+  variablesFor(key: string): string[] {
+    return key === RESET_TEMPLATE ? RESET_VARIABLES : VARIABLES;
   }
 
   insert(key: string, variable: string): void {
@@ -274,7 +282,7 @@ export class SettingsPage {
     const ok = await this.confirm.confirm({
       title: `Rétablir les valeurs par défaut de l'onglet « ${this.payload()?.groups[group]} » ?`,
       message: group === 'club' ? 'Le nom, l’adresse, le téléphone et le logo du club reviennent aux valeurs d’origine.'
-        : group === 'mail' ? 'L’expéditeur est vidé, la clé API Brevo enregistrée est supprimée et les paramètres SMTP reviennent aux valeurs d’origine.'
+        : group === 'mail' ? 'L’expéditeur est vidé, la clé API Brevo enregistrée est supprimée, et les paramètres SMTP et le modèle de l’e-mail « mot de passe oublié » reviennent aux valeurs d’origine.'
         : 'Les valeurs de cet onglet reviennent à celles du cahier des charges.',
       confirmLabel: 'Rétablir', danger: true,
     });

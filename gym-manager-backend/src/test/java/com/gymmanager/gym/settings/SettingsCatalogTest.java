@@ -20,7 +20,8 @@ class SettingsCatalogTest {
     void mailGroup() {
         assertThat(SettingsCatalog.GROUPS).containsEntry("mail", "Brevo config");
         assertThat(SettingsCatalog.ALL.stream().filter(d -> d.group().equals("mail")).map(SettingDef::key))
-                .containsExactly("mail.from", "mail.brevo.apiKey", "mail.smtp.host", "mail.smtp.port", "mail.smtp.security");
+                .containsExactly("mail.from", "mail.brevo.apiKey", "mail.smtp.host", "mail.smtp.port", "mail.smtp.security",
+                        "mail.reset.subject", "mail.reset.template");
         assertThat(def("mail.from").defaultValue()).isEmpty();
         assertThat(def("mail.brevo.apiKey").defaultValue()).isEmpty();
         assertThat(def("mail.brevo.apiKey").type()).isEqualTo("secret");
@@ -28,6 +29,23 @@ class SettingsCatalogTest {
         assertThat(def("mail.smtp.port").defaultValue()).isEqualTo("587");
         assertThat(def("mail.smtp.security").defaultValue()).isEqualTo("STARTTLS");
         assertThat(def("mail.smtp.security").options()).extracting(SettingDef.Option::value).containsExactly("NONE", "STARTTLS", "SSL");
+    }
+
+    @Test
+    @DisplayName("Modèle « mot de passe oublié » : texte d'origine par défaut, {mot_de_passe} obligatoire")
+    void resetTemplate() {
+        assertThat(def("mail.reset.subject").defaultValue()).isEqualTo("Gym Manager : votre mot de passe provisoire");
+        assertThat(def("mail.reset.template").type()).isEqualTo("template");
+        assertThat(def("mail.reset.template").defaultValue())
+                .startsWith("Bonjour {identifiant},\n\nUne demande de réinitialisation du mot de passe a été faite pour votre compte Gym Manager.")
+                .contains("Mot de passe provisoire : {mot_de_passe}")
+                .contains("pendant {duree} minutes. À la connexion, vous devrez choisir");
+        assertThat(error("mail.reset.template", def("mail.reset.template").defaultValue())).isNull();
+        assertThat(error("mail.reset.template", "Bonjour {identifiant}")).contains("{mot_de_passe}");
+        assertThat(error("mail.reset.template", "")).contains("obligatoire");
+        assertThat(error("mail.reset.subject", " ")).contains("obligatoire");
+        assertThat(error("mail.reset.subject", "{club} : {mot_de_passe}")).contains("ne doit pas contenir");
+        assertThat(error("mail.reset.subject", "{club} : accès provisoire")).isNull();
     }
 
     @Test

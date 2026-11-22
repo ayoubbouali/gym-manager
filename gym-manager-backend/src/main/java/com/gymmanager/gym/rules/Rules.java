@@ -1,5 +1,9 @@
 package com.gymmanager.gym.rules;
 
+import com.google.i18n.phonenumbers.NumberParseException;
+import com.google.i18n.phonenumbers.PhoneNumberUtil;
+import com.google.i18n.phonenumbers.Phonenumber;
+
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
@@ -188,12 +192,29 @@ public final class Rules {
         return sb.toString();
     }
 
-    /** https://wa.me/{dial code}{phone without the leading 0}?text={encoded message} */
+    /**
+     * https://wa.me/{international number}?text={encoded message}. The trunk prefix of the stored national number is
+     * not always a single 0 (8 for 7, 06 for 36): libphonenumber strips it; "dial code + number without the leading 0"
+     * is the fallback when the number cannot be parsed.
+     */
     public static String whatsappLink(String dialCode, String phone, String message) {
-        String digits = (phone == null ? "" : phone.replaceAll("\\D", "")).replaceFirst("^0", "");
+        String national = phone == null ? "" : phone.replaceAll("\\D", "");
         String code = dialCode == null ? "" : dialCode.replaceAll("\\D", "");
         String text = URLEncoder.encode(message == null ? "" : message, StandardCharsets.UTF_8).replace("+", "%20");
-        return "https://wa.me/" + code + digits + "?text=" + text;
+        return "https://wa.me/" + internationalDigits(code, national) + "?text=" + text;
+    }
+
+    private static String internationalDigits(String code, String national) {
+        String fallback = code + national.replaceFirst("^0", "");
+        if (code.isEmpty() || code.length() > 4 || national.isEmpty()) return fallback;
+        PhoneNumberUtil util = PhoneNumberUtil.getInstance();
+        try {
+            Phonenumber.PhoneNumber n = util.parse(national, util.getRegionCodeForCountryCode(Integer.parseInt(code)));
+            if (n.getCountryCode() != Integer.parseInt(code)) return fallback;
+            return util.format(n, PhoneNumberUtil.PhoneNumberFormat.E164).substring(1);
+        } catch (NumberParseException e) {
+            return fallback;
+        }
     }
 
     // ------------------------------------------------------------------ salary

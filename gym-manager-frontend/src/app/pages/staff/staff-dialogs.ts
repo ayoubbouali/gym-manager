@@ -7,6 +7,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { ApiService } from '../../core/api.service';
+import { ConfigService } from '../../core/config.service';
 import { FrDatePipe, MoneyPipe, formatAmount, monthName } from '../../core/format';
 import { FunctionView, SportView, StaffView } from '../../core/models';
 import { NotifyService, errorMessage } from '../../core/notify.service';
@@ -21,7 +22,7 @@ import { MultiSelect, SelectOption } from '../../shared/multi-select';
       <form id="staff-form" class="form-grid" (ngSubmit)="save()">
         <mat-form-field><mat-label>Nom</mat-label><input matInput name="last" [(ngModel)]="v.lastName" required /></mat-form-field>
         <mat-form-field><mat-label>Prénom</mat-label><input matInput name="first" [(ngModel)]="v.firstName" /></mat-form-field>
-        <mat-form-field><mat-label>Téléphone</mat-label><input matInput name="phone" [(ngModel)]="v.phone" inputmode="tel" /></mat-form-field>
+        <mat-form-field><mat-label>Téléphone</mat-label><input matInput name="phone" [(ngModel)]="v.phone" inputmode="tel" [placeholder]="config.phoneExample()" /></mat-form-field>
         <mat-form-field><mat-label>Fonction</mat-label>
           <mat-select name="fn" [(ngModel)]="v.functionId" required>
             @for (f of functions; track f.id) {<mat-option [value]="f.id">{{ f.label }}</mat-option>}
@@ -54,6 +55,7 @@ export class StaffFormDialog {
   private api = inject(ApiService);
   private ref = inject(MatDialogRef<StaffFormDialog>);
   private notify = inject(NotifyService);
+  config = inject(ConfigService);
   functions = this.d.functions.filter((f) => f.active || f.id === this.d.staff?.functionId);
   sportOptions: SelectOption[] = this.d.sports.map((s) => ({ id: s.id, label: s.name, color: s.color, disabled: !s.active }));
   v = {

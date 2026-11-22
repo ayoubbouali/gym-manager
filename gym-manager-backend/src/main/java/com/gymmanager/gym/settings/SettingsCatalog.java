@@ -3,14 +3,12 @@ package com.gymmanager.gym.settings;
 import com.gymmanager.gym.rules.Rules;
 import com.gymmanager.gym.settings.SettingDef.Option;
 
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
 /** Every business constant with its default value (specification, section 6). */
 public final class SettingsCatalog {
@@ -44,10 +42,10 @@ public final class SettingsCatalog {
         l.add(SettingDef.of("club.address", "club", "string", "Adresse", ""));
         l.add(SettingDef.of("club.phone", "club", "string", "Téléphone", ""));
 
-        l.add(SettingDef.required("regional.currency", "regional", "string", "Devise (symbole affiché)", "DH"));
+        l.add(SettingDef.required("regional.currencyCode", "regional", "currency", "Devise", "MAD"));
+        l.add(SettingDef.required("regional.currency", "regional", "string", "Symbole affiché", "DH"));
         l.add(SettingDef.required("regional.timezone", "regional", "timezone", "Fuseau horaire", "Africa/Casablanca"));
-        l.add(SettingDef.required("regional.dialCode", "regional", "digits", "Indicatif téléphonique international", "212"));
-        l.add(SettingDef.required("regional.phoneRegex", "regional", "regex", "Format de téléphone local (expression régulière)", "^0[5-7]\\d{8}$"));
+        l.add(SettingDef.required("regional.dialCode", "regional", "dialCode", "Indicatif téléphonique international", "212"));
 
         String[][] codes = {{"member", "Adhérent", "A", "3"}, {"sport", "Sport", "SP", "2"}, {"pack", "Pack", "PK", "2"},
                 {"discount", "Remise", "R", "2"}, {"activity", "Activité", "AC", "2"}, {"staff", "Personnel", "E", "3"}};
@@ -126,8 +124,10 @@ public final class SettingsCatalog {
         if (d.key().equals(RESET_SUBJECT) && v.contains(RESET_PASSWORD_VARIABLE))
             return name + " ne doit pas contenir le mot de passe provisoire " + RESET_PASSWORD_VARIABLE + ".";
         switch (d.type()) {
-            case "digits":
-                return v.matches("\\d{1,4}") ? null : name + " doit contenir de 1 à 4 chiffres.";
+            case "currency":
+                return RegionalCatalog.isCurrency(v) ? null : name + " : code de devise ISO 4217 inconnu (" + v + ").";
+            case "dialCode":
+                return RegionalCatalog.isDialCode(v) ? null : name + " : indicatif inconnu (+" + v + ").";
             case "prefix":
                 return v.matches("[A-Za-z]{1,5}") ? null : name + " : 1 à 5 lettres.";
             case "int": {
@@ -139,20 +139,8 @@ public final class SettingsCatalog {
                 return v.equals("true") || v.equals("false") ? null : name + " : valeur invalide.";
             case "enum":
                 return d.options().stream().anyMatch(o -> o.value().equals(v)) ? null : name + " : valeur invalide.";
-            case "regex":
-                try {
-                    Pattern.compile(v);
-                    return null;
-                } catch (PatternSyntaxException e) {
-                    return name + " n'est pas une expression régulière valide.";
-                }
             case "timezone":
-                try {
-                    ZoneId.of(v);
-                    return null;
-                } catch (Exception e) {
-                    return "Fuseau horaire inconnu : " + v;
-                }
+                return RegionalCatalog.isTimezone(v) ? null : name + " : fuseau horaire inconnu (" + v + ").";
             case "email":
                 return v.isEmpty() || EMAIL.matcher(v).matches() ? null : name + " n'est pas une adresse e-mail valide.";
             case "host":

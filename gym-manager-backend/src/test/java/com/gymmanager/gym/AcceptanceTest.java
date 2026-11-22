@@ -599,6 +599,91 @@ class AcceptanceTest {
         get(admin, "/api/dashboard").andExpect(jsonPath("$.upcomingActivityCount").value(1));
     }
 
+    // ------------------------------------------------------------------ regional settings
+
+    @Test
+    @DisplayName("Onglet Régional : listes officielles et options envoyées avec la page, valeur hors liste refusée")
+    void regionalLists() throws Exception {
+        get(admin, "/api/settings")
+                .andExpect(jsonPath("$.values['regional.currencyCode']").value("MAD"))
+                .andExpect(jsonPath("$.values['regional.currency']").value("DH"))
+                .andExpect(jsonPath("$.regional.timezones[?(@.id=='Europe/Paris')].dialCode").value("33"))
+                .andExpect(jsonPath("$.regional.currencies[?(@.code=='EUR')].symbol").value("€"))
+                .andExpect(jsonPath("$.regional.dialCodes[?(@.code=='212')].label").value("Maroc"));
+        get(admin, "/api/config")
+                .andExpect(jsonPath("$.currency").value("DH")).andExpect(jsonPath("$.currencyCode").value("MAD"))
+                .andExpect(jsonPath("$.phoneExample").value("06 50 12 34 56")).andExpect(jsonPath("$.phoneRegex").doesNotExist());
+
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.currencyCode", "XYZ")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("regional.currencyCode"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("« Devise »")));
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.dialCode", "999")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("regional.dialCode"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("« Indicatif téléphonique international »")));
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.timezone", "Mars/Base")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("regional.timezone"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("« Fuseau horaire »")));
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.phoneRegex", "^0\\d{9}$")))
+                .andExpect(status().isBadRequest());
+
+        // the displayed symbol stays the only source of amounts, whatever the ISO code
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.currencyCode", "EUR", "regional.timezone", "Europe/Paris",
+                "regional.dialCode", "33"))).andExpect(status().isOk());
+        get(admin, "/api/config").andExpect(jsonPath("$.currency").value("DH")).andExpect(jsonPath("$.currencyCode").value("EUR"))
+                .andExpect(jsonPath("$.timezone").value("Europe/Paris"));
+    }
+
+    @Test
+    @DisplayName("Téléphone validé par libphonenumber pour l'indicatif du club, stocké au format national")
+    void phoneByDialCode() throws Exception {
+        long karate = id("/api/sports", "$[?(@.name=='Karaté')].id");
+        long pack = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
+        String invalid = "Numéro de téléphone invalide pour l'indicatif +212 (ex. : 06 50 12 34 56).";
+        send(admin, "POST", "/api/members", member("Tel", "Court", "0812", karate, pack, null, "2026-11-18"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("phone")).andExpect(jsonPath("$.message").value(invalid));
+        send(admin, "POST", "/api/members", member("Tel", "France", "+33612345678", karate, pack, null, "2026-11-18"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("phone")).andExpect(jsonPath("$.message").value(invalid));
+        send(admin, "POST", "/api/members", member("Tel", "Ponctué", "06 12-34.56 78", karate, pack, null, "2026-11-18"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.phone").value("0612345678"));
+        send(admin, "POST", "/api/members", member("Tel", "International", "+212 6 12 00 00 10", karate, pack, null, "2026-11-18"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.phone").value("0612000010"));
+
+        // a stored number is never revalidated: an unchanged one passes even if libphonenumber rejects it
+        long coachFn = id("/api/functions", "$[?(@.label=='Coach')].id");
+        Map<String, Object> staff = new java.util.HashMap<>(Map.of("lastName", "Ancien", "firstName", "Numéro",
+                "phone", "0661112299", "functionId", coachFn, "payMode", "COMMISSION"));
+        long staffId = ((Number) read(send(admin, "POST", "/api/staff", staff), "$.id")).longValue();
+        jdbc.update("UPDATE staff SET phone = '0500000000' WHERE id = ?", staffId);
+        staff.put("phone", "0500000000");
+        send(admin, "PUT", "/api/staff/" + staffId, staff).andExpect(status().isOk());
+        staff.put("phone", "0500000001");
+        send(admin, "PUT", "/api/staff/" + staffId, staff).andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("phone"));
+
+        // another country: French example, French numbers accepted
+        setting("regional.dialCode", "33");
+        get(admin, "/api/config").andExpect(jsonPath("$.phoneExample").value(org.hamcrest.Matchers.startsWith("06")));
+        send(admin, "POST", "/api/members", member("Tel", "Paris", "0612345678", karate, pack, null, "2026-11-18"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.phone").value("0612345678"));
+    }
+
+    @Test
+    @DisplayName("Ancienne ligne regional.phoneRegex : ignorée, en base comme dans une sauvegarde réimportée")
+    void legacyPhoneRegexRow() throws Exception {
+        jdbc.update("INSERT INTO app_settings (setting_key, setting_value) VALUES ('regional.phoneRegex', '^9$')");
+        // a backup still holding the row restores normally (no data-only migration bumps the schema version)
+        byte[] backup = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/data/export").session(admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        mvc.perform(multipart("/api/data/restore").file(new MockMultipartFile("file", "sauvegarde.zip", "application/zip", backup))
+                .param("confirm", "SUPPRIMER").session(admin)).andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM app_settings WHERE setting_key = 'regional.phoneRegex'", Integer.class)).isOne();
+        assertThat(settingsService.raw()).doesNotContainKey("regional.phoneRegex");
+        get(admin, "/api/settings").andExpect(status().isOk()).andExpect(jsonPath("$.values['regional.phoneRegex']").doesNotExist());
+        long karate = id("/api/sports", "$[?(@.name=='Karaté')].id");
+        long pack = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
+        send(admin, "POST", "/api/members", member("Regex", "Ignorée", "0612000011", karate, pack, null, "2026-11-18"))
+                .andExpect(status().isOk());
+    }
+
     // ------------------------------------------------------------------ forgotten password
 
     ResultActions rawLogin(String user, String password) throws Exception {

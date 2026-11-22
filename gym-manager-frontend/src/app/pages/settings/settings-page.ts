@@ -19,6 +19,8 @@ import { ActiveBadge } from '../../shared/badges';
 import { ConfirmService } from '../../shared/confirm.service';
 import { openSimpleForm } from '../../shared/simple-form-dialog';
 import { DataImport } from './data-import';
+import { ListPicker, PickOption } from './list-picker';
+import { applyRegional } from './regional';
 
 const VARIABLES = ['prenom', 'nom', 'jours', 'date_fin', 'club', 'pack'];
 const RESET_TEMPLATE = 'mail.reset.template';
@@ -28,7 +30,7 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
 @Component({
   selector: 'app-settings',
   imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatRadioModule, MatSelectModule, MatSlideToggleModule,
-    MatTabsModule, MatTooltipModule, LucideAngularModule, ActiveBadge, DataImport],
+    MatTabsModule, MatTooltipModule, LucideAngularModule, ActiveBadge, DataImport, ListPicker],
   template: `
     @if (payload(); as p) {
       <section class="card no-pad">
@@ -106,13 +108,24 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                               <mat-hint>{{ p.secretsSet[d.key] ? 'Une clé est enregistrée ; elle n’est jamais réaffichée. Saisir une nouvelle clé pour la remplacer.' : 'Laisser vide pour utiliser la variable BREVO_API_KEY du serveur.' }}</mat-hint>
                             </mat-form-field>
                           }
+                          @case ('currency') {
+                            <app-list-picker [inputId]="d.key" [ariaLabel]="d.label" [options]="currencyOptions()" [value]="values[d.key]"
+                              (valueChange)="setRegional(d.key, $event)" hint="Choisir une devise renseigne le symbole affiché, qui reste modifiable." />
+                          }
+                          @case ('timezone') {
+                            <app-list-picker [inputId]="d.key" [ariaLabel]="d.label" [options]="timezoneOptions()" [value]="values[d.key]"
+                              (valueChange)="setRegional(d.key, $event)" hint="Choisir un fuseau renseigne l’indicatif, qui reste modifiable." />
+                          }
+                          @case ('dialCode') {
+                            <app-list-picker [inputId]="d.key" [ariaLabel]="d.label" [options]="dialCodeOptions()" [value]="values[d.key]"
+                              (valueChange)="setRegional(d.key, $event)" hint="Les téléphones des adhérents et du personnel sont vérifiés pour cet indicatif." />
+                          }
                           @default {
                             <mat-form-field subscriptSizing="dynamic" class="w-full max-480">
                               <input matInput [id]="d.key" [type]="d.type === 'email' ? 'email' : 'text'" [(ngModel)]="values[d.key]" />
                               @if (d.key === 'mail.reset.subject') {<mat-hint>Variables possibles : {{ '{' }}identifiant{{ '}' }}, {{ '{' }}duree{{ '}' }}, {{ '{' }}club{{ '}' }} — jamais le mot de passe.</mat-hint>}
                               @if (d.key === 'mail.from') {<mat-hint>Adresse vérifiée dans Brevo. Laisser vide pour utiliser la variable MAIL_FROM du serveur.</mat-hint>}
                               @if (d.type === 'share') {<mat-hint>Fraction (1/3) ou pourcentage (33,33 ou 40 %)</mat-hint>}
-                              @if (d.type === 'regex') {<mat-hint>Ex. : ^0[5-7]\\d{{ '{' }}8{{ '}' }}$ pour 06XXXXXXXX</mat-hint>}
                             </mat-form-field>
                           }
                         }
@@ -214,6 +227,11 @@ export class SettingsPage {
   codeEntities = CODE_ENTITIES;
   me = computed(() => this.auth.user()?.username);
   groupKeys = computed(() => Object.keys(this.payload()?.groups ?? {}));
+  currencyOptions = computed<PickOption[]>(() =>
+    (this.payload()?.regional.currencies ?? []).map((c) => ({ value: c.code, label: `${c.code} — ${c.label} (${c.symbol})` })));
+  timezoneOptions = computed<PickOption[]>(() => (this.payload()?.regional.timezones ?? []).map((z) => ({ value: z.id, label: z.id })));
+  dialCodeOptions = computed<PickOption[]>(() =>
+    (this.payload()?.regional.dialCodes ?? []).map((d) => ({ value: d.code, label: `+${d.code} — ${d.label}` })));
 
   constructor() {
     this.load();
@@ -244,6 +262,10 @@ export class SettingsPage {
     const n = Number(next.replace(/\D/g, '')) || 1;
     const digits = Math.max(1, Math.min(8, Number(this.values[`codes.${entity}.digits`]) || 1));
     return `${(this.values[`codes.${entity}.prefix`] ?? '').toUpperCase()}${String(n).padStart(digits, '0')}`;
+  }
+
+  setRegional(key: string, value: string): void {
+    applyRegional(this.values, key, value, this.payload()?.regional);
   }
 
   render(template: string): string {

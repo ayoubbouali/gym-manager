@@ -11,7 +11,7 @@ import java.util.Map;
 /** Typed, immutable view of all settings at a given moment. */
 public record ClubConfig(
         String clubName, String clubAddress, String clubPhone,
-        String currency, ZoneId timezone, String dialCode, String phoneRegex,
+        String currency, String currencyCode, ZoneId timezone, String dialCode,
         Map<String, CodeFormat> codes,
         boolean cumulative, Rules.Rounding rounding,
         int soonThreshold, int followThreshold, String expiredTemplate, String soonTemplate,

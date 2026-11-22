@@ -10,6 +10,7 @@ export class ConfigService {
   readonly publicName = signal('Gym Manager');
 
   readonly currency = computed(() => this.config()?.currency ?? 'DH');
+  readonly phoneExample = computed(() => this.config()?.phoneExample ?? '');
   readonly clubName = computed(() => this.config()?.clubName ?? this.publicName());
   readonly pageSize = computed(() => this.config()?.pageSize ?? 20);
   /** Uploaded logo (Paramètres › Club), if any. */

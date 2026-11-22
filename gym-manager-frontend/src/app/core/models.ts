@@ -21,10 +21,13 @@ export interface AppConfig {
   clubAddress: string;
   clubPhone: string;
   logoVersion: string | null;
+  /** Displayed symbol: the only source for amounts. */
   currency: string;
+  currencyCode: string;
   timezone: string;
   dialCode: string;
-  phoneRegex: string;
+  /** Example mobile number in national format for the dial code, used as phone placeholder. */
+  phoneExample: string;
   cumulative: boolean;
   rounding: string;
   soonThreshold: number;
@@ -174,6 +177,14 @@ export interface SettingsPayload {
   values: Record<string, string>;
   secretsSet: Record<string, boolean>;
   nextCodes: Record<string, string>;
+  /** Official lists offered by the Régional tab. */
+  regional: RegionalOptions;
 }
+
+export interface CurrencyOption { code: string; label: string; symbol: string; }
+/** `dialCode` is null for zones without a country (UTC, Etc/GMT+1…). */
+export interface TimezoneOption { id: string; dialCode: string | null; }
+export interface DialCodeOption { code: string; label: string; }
+export interface RegionalOptions { currencies: CurrencyOption[]; timezones: TimezoneOption[]; dialCodes: DialCodeOption[]; }
 
 export interface ApiError { message: string; field?: string; code?: string; }

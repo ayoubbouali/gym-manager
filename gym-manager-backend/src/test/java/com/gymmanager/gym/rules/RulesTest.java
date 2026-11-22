@@ -352,6 +352,14 @@ class RulesTest {
         }
 
         @Test
+        @DisplayName("Lien WhatsApp : préfixe national retiré selon le pays (212 : 0, 7 : 8, 36 : 06)")
+        void whatsappLinkStripsCountryTrunkPrefix() {
+            assertThat(Rules.whatsappLink("212", "0695822412", "Bonjour")).isEqualTo("https://wa.me/212695822412?text=Bonjour");
+            assertThat(Rules.whatsappLink("7", "89123456789", "Bonjour")).isEqualTo("https://wa.me/79123456789?text=Bonjour");
+            assertThat(Rules.whatsappLink("36", "06201234567", "Bonjour")).isEqualTo("https://wa.me/36201234567?text=Bonjour");
+        }
+
+        @Test
         void templateVariablesAreReplaced() {
             String msg = Rules.renderTemplate("Bonjour {prenom} {nom}, {jours} jour(s) — {inconnu}",
                     Map.of("prenom", "Hamza", "nom", "Amrani", "jours", 246));

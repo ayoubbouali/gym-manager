@@ -25,7 +25,7 @@ import { MultiSelect, SelectOption } from '../../shared/multi-select';
       <form [formGroup]="form" class="form-grid" (ngSubmit)="save()" id="member-form">
         <mat-form-field><mat-label>Nom</mat-label><input matInput formControlName="lastName" required /></mat-form-field>
         <mat-form-field><mat-label>Prénom</mat-label><input matInput formControlName="firstName" required /></mat-form-field>
-        <mat-form-field><mat-label>Téléphone</mat-label><input matInput formControlName="phone" required inputmode="tel" placeholder="06…" /></mat-form-field>
+        <mat-form-field><mat-label>Téléphone</mat-label><input matInput formControlName="phone" required inputmode="tel" [placeholder]="config.phoneExample()" /></mat-form-field>
         <mat-form-field><mat-label>Date de naissance</mat-label><input matInput type="date" formControlName="birthDate" /></mat-form-field>
         <app-multi-select class="span-2" label="Sport(s) *" formControlName="sportIds" [options]="sportOptions()" />
         <mat-form-field class="span-2">
@@ -78,7 +78,7 @@ export class MemberFormDialog {
   private fb = inject(FormBuilder);
   private ref = inject(MatDialogRef<MemberFormDialog>);
   private notify = inject(NotifyService);
-  private config = inject(ConfigService);
+  config = inject(ConfigService);
 
   sports = signal<SportView[]>([]);
   packs = signal<PackView[]>([]);

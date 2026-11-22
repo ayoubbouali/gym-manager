@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-/** A payment of a member for a subscription period, with its numbered receipt. Never deleted: cancelled. */
+/** A payment of a member for a subscription period, with its numbered receipt. Cancelled first; only a cancelled payment can then be deleted. */
 @Entity
 @Table(name = "payments")
 @Getter @Setter @NoArgsConstructor

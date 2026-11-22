@@ -27,7 +27,7 @@ import java.nio.charset.StandardCharsets;
  * - ADMIN: everything;
  * - ACCUEIL: read everything except staff (salaries), payroll, statistics, settings and users;
  *   write members (list + card, renewals), payments and activity registrations; correcting or
- *   cancelling a payment is ADMIN only.
+ *   cancelling or deleting a payment is ADMIN only.
  * CSRF: the session cookie is SameSite=Strict and HttpOnly, and the API only accepts JSON/multipart.
  */
 @Configuration
@@ -51,8 +51,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").authenticated()
                         // ADMIN only, including reads
                         .requestMatchers("/api/staff/**", "/api/stats/**", "/api/settings/**", "/api/users/**", "/api/functions/**", "/api/data/**").hasRole(ADMIN)
-                        // payments: ACCUEIL records them; correcting / cancelling is ADMIN only
+                        // payments: ACCUEIL records them; correcting / cancelling / deleting is ADMIN only
                         .requestMatchers(HttpMethod.PUT, "/api/payments/**").hasRole(ADMIN)
+                        .requestMatchers(HttpMethod.DELETE, "/api/payments/**").hasRole(ADMIN)
                         .requestMatchers("/api/payments/*/cancel", "/api/payroll/**").hasRole(ADMIN)
                         .requestMatchers(HttpMethod.POST, "/api/payments").authenticated()
                         // ACCUEIL may write members (incl. renewals) and registrations

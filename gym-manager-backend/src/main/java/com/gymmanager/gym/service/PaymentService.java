@@ -126,6 +126,13 @@ public class PaymentService {
         return p;
     }
 
+    /** ADMIN: removes a cancelled payment from the history. Its receipt number is never reused (the counter never goes back). */
+    public void delete(Long id) {
+        Payment p = payments.findById(id).orElseThrow(() -> ApiException.notFound("Paiement introuvable."));
+        if (!p.isCancelled()) throw ApiException.badRequest("Seul un paiement annulé peut être supprimé : annulez-le d'abord.");
+        payments.delete(p);
+    }
+
     /** Default start of a renewal (RG-RENOUV). */
     @Transactional(readOnly = true)
     public LocalDate renewalStart(Long memberId) {

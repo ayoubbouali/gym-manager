@@ -143,15 +143,19 @@ public class MemberService {
     }
 
     /**
-     * Deletes the member, their subscription periods, activity registrations and photo. The code is never reused.
-     * A member with recorded payments is kept for accounting: deactivate instead.
+     * Deletes the member, their subscription periods, cancelled payments, activity registrations and photo.
+     * The code is never reused. A member with a non-cancelled payment is kept for accounting: deactivate instead.
      */
     public void delete(Long id) {
         Member m = members.findById(id).orElseThrow(() -> ApiException.notFound("Adhérent introuvable."));
-        if (payments.existsByMemberId(id)) {
+        if (payments.existsByMemberIdAndCancelledFalse(id)) {
             throw new ApiException(org.springframework.http.HttpStatus.CONFLICT,
-                    "Cet adhérent a des paiements enregistrés : désactivez-le au lieu de le supprimer (l'historique des reçus est conservé).", null, "IN_USE");
+                    "Cet adhérent a des paiements non annulés : annulez-les ou désactivez-le au lieu de le supprimer.", null, "IN_USE");
         }
+        // payments reference members and subscriptions without ON DELETE CASCADE; a live payment
+        // recorded meanwhile is left in place so the foreign key refuses the delete
+        payments.deleteByMemberIdAndCancelledTrue(id);
+        payments.flush();
         registrations.deleteByMemberId(id);
         String photo = m.getPhoto();
         members.delete(m);

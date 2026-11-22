@@ -286,14 +286,14 @@ dd { margin: 0; font-weight: 500; }
 /* member preview: hover card on the ID link of the members table */
 .cdk-overlay-pane.member-preview-pane { pointer-events: none; }
 .member-preview {
-  display: block; width: 320px; max-width: calc(100vw - 16px); overflow: hidden; pointer-events: none;
+  display: block; width: 340px; max-width: calc(100vw - 16px); overflow: hidden; pointer-events: none;
   background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-lg);
   animation: preview-in .16s ease-out; transform-origin: left center;
 }
 .mp-banner { height: 56px; background: linear-gradient(135deg, var(--brand), var(--brand-dark)); }
-.mp-head { display: flex; align-items: flex-end; gap: 12px; padding: 0 16px; margin-top: -44px; }
-.mp-photo { flex: none; width: 88px; height: 88px; border-radius: 50%; object-fit: cover; border: 3px solid var(--card); background: var(--card); }
-.mp-initials { display: grid; place-items: center; font-size: 32px; font-weight: 800; color: var(--brand);
+.mp-head { display: flex; align-items: flex-end; gap: 12px; padding: 0 16px; margin-top: -46px; }
+.mp-photo { flex: none; width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid var(--card); background: var(--card); }
+.mp-initials { display: grid; place-items: center; font-size: 44px; font-weight: 800; color: var(--brand);
   background: linear-gradient(135deg, var(--brand-soft), color-mix(in srgb, var(--brand) 22%, var(--card))); }
 .mp-identity { min-width: 0; padding-bottom: 2px; }
 .mp-name { font-size: 15px; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

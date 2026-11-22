@@ -408,6 +408,26 @@ class AcceptanceTest {
         long current = id("/api/members", "$[?(@.code=='A001')].subscriptionId");
         send(admin, "DELETE", "/api/subscriptions/" + current, null).andExpect(status().isConflict());
 
+        // deleting the last payment of a renewal removes the renewal
+        List<Number> renewalPayments = read(get(admin, "/api/members/by-code/A001"), "$.subscriptions[?(@.id==" + current + ")].payments[*].id");
+        assertThat(renewalPayments).hasSize(1);
+        long renewalPayment = renewalPayments.getFirst().longValue();
+        send(admin, "POST", "/api/payments/" + renewalPayment + "/cancel", Map.of("reason", "Erreur")).andExpect(status().isOk());
+        send(admin, "DELETE", "/api/payments/" + renewalPayment, null).andExpect(status().isNoContent());
+        get(admin, "/api/members/by-code/A001").andExpect(jsonPath("$.subscriptions.length()").value(1))
+                .andExpect(jsonPath("$.subscriptions[0].id").value(org.hamcrest.Matchers.not((int) current)));
+
+        // the first period is kept even without any payment left
+        long karate = id("/api/sports", "$[?(@.name=='Karaté')].id");
+        long karatePack = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
+        long newcomer = ((Number) read(send(admin, "POST", "/api/members", member("Periode", "Premiere", "0612000009", karate, karatePack, null, "2026-11-18")), "$.id")).longValue();
+        String newcomerCode = (String) ((List<Object>) read(get(admin, "/api/members"), "$[?(@.id==" + newcomer + ")].code")).getFirst();
+        long onlyPayment = ((Number) read(send(admin, "POST", "/api/payments", Map.of("memberId", newcomer, "amount", 10, "method", "ESPECES")), "$.id")).longValue();
+        send(admin, "POST", "/api/members/" + newcomer + "/renew", Map.of("packId", karatePack)).andExpect(status().isOk());
+        send(admin, "POST", "/api/payments/" + onlyPayment + "/cancel", Map.of("reason", "Erreur")).andExpect(status().isOk());
+        send(admin, "DELETE", "/api/payments/" + onlyPayment, null).andExpect(status().isNoContent());
+        get(admin, "/api/members/by-code/" + newcomerCode).andExpect(jsonPath("$.subscriptions.length()").value(2));
+
         // a renewal without payment can be removed
         long a002 = id("/api/members", "$[?(@.code=='A002')].id");
         long pack = id("/api/packs", "$[?(@.name=='Aérobic - Mensuel')].id");

@@ -1,4 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { CdkConnectedOverlay, ConnectedPosition } from '@angular/cdk/overlay';
+import { CdkScrollable } from '@angular/cdk/scrolling';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
@@ -19,14 +21,27 @@ import { DaysLeft, PaidBadge, SportChip } from '../../shared/badges';
 import { Pager, SortHeader, TableState } from '../../shared/table';
 import { openMemberForm } from './member-form-dialog';
 import { openMemberNote } from './member-note-dialog';
+import { MemberPreview } from './member-preview';
 
 /** Shared by the table and the count pill, so the filtered count can never exceed the base. */
 const isActive = (m: MemberView) => m.active;
 
+/** Hover delay before the preview card opens, so sweeping the mouse across the ID column does not flicker. */
+export const PREVIEW_DELAY_MS = 300;
+export const PREVIEW_ID = 'member-preview';
+
+/** Right of the ID, then left, then below, then above: the card always stays in the viewport. */
+const PREVIEW_POSITIONS: ConnectedPosition[] = [
+  { originX: 'end', originY: 'center', overlayX: 'start', overlayY: 'center', offsetX: 10 },
+  { originX: 'start', originY: 'center', overlayX: 'end', overlayY: 'center', offsetX: -10 },
+  { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 8 },
+  { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -8 },
+];
+
 @Component({
   selector: 'app-members',
   imports: [RouterLink, FormsModule, MatButtonModule, MatSelectModule, MatFormFieldModule, MatSlideToggleModule, MatTooltipModule,
-    LucideAngularModule, SortHeader, Pager, SportChip, PaidBadge, DaysLeft, MoneyPipe, FrDatePipe],
+    LucideAngularModule, SortHeader, Pager, SportChip, PaidBadge, DaysLeft, MoneyPipe, FrDatePipe, CdkConnectedOverlay, CdkScrollable, MemberPreview],
   template: `
     <div class="toolbar">
       <div class="count-pill" role="status">
@@ -76,7 +91,7 @@ const isActive = (m: MemberView) => m.active;
       }
     </div>
 
-    <div class="table-wrap">
+    <div class="table-wrap" cdkScrollable>
       <table class="table">
         <thead>
           <tr>
@@ -101,7 +116,8 @@ const isActive = (m: MemberView) => m.active;
         <tbody>
           @for (m of t.page(); track m.id) {
             <tr [class.inactive]="!m.active">
-              <td><a class="code-link" [routerLink]="['/fiche', m.code]">{{ m.code }}</a></td>
+              <td><a class="code-link" [routerLink]="['/fiche', m.code]" [attr.aria-describedby]="preview()?.member?.id === m.id ? previewId : null"
+                     (mouseenter)="openPreview(m, $event)" (focus)="openPreview(m, $event)" (mouseleave)="closePreview()" (blur)="closePreview()" (keydown.escape)="closePreview()">{{ m.code }}</a></td>
               <td class="strong">{{ m.lastName }}</td>
               <td>{{ m.firstName }}</td>
               <td>{{ m.phone }}</td>
@@ -133,6 +149,13 @@ const isActive = (m: MemberView) => m.active;
       </table>
     </div>
     <app-pager [table]="t" />
+    @if (preview(); as p) {
+      <ng-template cdkConnectedOverlay [cdkConnectedOverlayOpen]="true" [cdkConnectedOverlayOrigin]="p.origin"
+                   [cdkConnectedOverlayPositions]="previewPositions" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="8"
+                   cdkConnectedOverlayPanelClass="member-preview-pane" (detach)="closePreview()">
+        <app-member-preview [id]="previewId" [member]="p.member" />
+      </ng-template>
+    }
   `,
 })
 export class MembersPage {
@@ -180,7 +203,18 @@ export class MembersPage {
   unit = computed(() => ((this.narrowed() ? this.base() : this.t.filtered().length) > 1 ? 'adhérents' : 'adhérent'));
   count = computed(() => `${this.t.filtered().length} ${this.narrowed() ? `sur ${this.base()} ` : ''}${this.unit()}`);
 
+  readonly previewId = PREVIEW_ID;
+  readonly previewPositions = PREVIEW_POSITIONS;
+  preview = signal<{ member: MemberView; origin: HTMLElement } | null>(null);
+  private previewTimer: ReturnType<typeof setTimeout> | undefined;
+
   constructor() {
+    // A row that disappears under the pointer (search, paging, reload) never fires mouseleave.
+    effect(() => {
+      this.t.page();
+      untracked(() => this.closePreview());
+    });
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.previewTimer));
     this.load();
     Promise.all([this.api.sports(), this.api.packs()]).then(([s, p]) => {
       this.sports.set(s);
@@ -196,6 +230,19 @@ export class MembersPage {
     } finally {
       this.loaded.set(true);
     }
+  }
+
+  openPreview(m: MemberView, event: Event): void {
+    const origin = event.currentTarget as HTMLElement;
+    clearTimeout(this.previewTimer);
+    // The delay only guards against mouse flicker: on focus, open at once so screen readers announce the description.
+    if (event.type === 'focus') this.preview.set({ member: m, origin });
+    else this.previewTimer = setTimeout(() => this.preview.set({ member: m, origin }), PREVIEW_DELAY_MS);
+  }
+
+  closePreview(): void {
+    clearTimeout(this.previewTimer);
+    this.preview.set(null);
   }
 
   async add(): Promise<void> {

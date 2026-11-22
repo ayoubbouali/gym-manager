@@ -45,6 +45,8 @@ public class MemberService {
         Subscription current = periods.isEmpty() ? null : periods.getLast();
         Long currentPack = current == null ? null : current.getPackId();
         Long currentDiscount = current == null ? null : current.getDiscountId();
+        // An existing member without subscription keeps none: the form never creates a period (use "Nouvel abonnement").
+        boolean withoutSubscription = id != null && current == null;
         ClubConfig cfg = settings.config();
         String last = Check.text(r.lastName(), "lastName", "Nom", 80, true);
         String first = Check.text(r.firstName(), "firstName", "Prénom", 80, true);
@@ -62,16 +64,20 @@ public class MemberService {
                 throw ApiException.invalid("sportIds", "Le sport « " + s.getName() + " » est inactif.");
             }
         }
-        Pack pack = packs.findById(Check.required(r.packId(), "packId", "Type d'abonnement"))
-                .orElseThrow(() -> ApiException.invalid("packId", "Pack introuvable."));
-        Check.activeOrUnchanged(pack.isActive(), pack.getId(), currentPack, "packId", "Ce pack est inactif.");
-        if (!sportIds.contains(pack.getSportId())) {
-            throw ApiException.invalid("packId", "Le pack choisi ne correspond à aucun des sports sélectionnés.");
+        Pack pack = null;
+        Discount disc = null;
+        if (!withoutSubscription) {
+            pack = packs.findById(Check.required(r.packId(), "packId", "Type d'abonnement"))
+                    .orElseThrow(() -> ApiException.invalid("packId", "Pack introuvable."));
+            Check.activeOrUnchanged(pack.isActive(), pack.getId(), currentPack, "packId", "Ce pack est inactif.");
+            if (!sportIds.contains(pack.getSportId())) {
+                throw ApiException.invalid("packId", "Le pack choisi ne correspond à aucun des sports sélectionnés.");
+            }
+            disc = r.discountId() == null
+                    ? discounts.findFirstBySystemTrue().orElseThrow()
+                    : discounts.findById(r.discountId()).orElseThrow(() -> ApiException.invalid("discountId", "Remise introuvable."));
+            Check.activeOrUnchanged(disc.isActive(), disc.getId(), currentDiscount, "discountId", "Cette remise est inactive.");
         }
-        Discount disc = r.discountId() == null
-                ? discounts.findFirstBySystemTrue().orElseThrow()
-                : discounts.findById(r.discountId()).orElseThrow(() -> ApiException.invalid("discountId", "Remise introuvable."));
-        Check.activeOrUnchanged(disc.isActive(), disc.getId(), currentDiscount, "discountId", "Cette remise est inactive.");
 
         String key = Rules.normalize(last) + "|" + Rules.normalize(first) + "|" + phone;
         boolean duplicate = members.findAll().stream().anyMatch(o -> !Objects.equals(o.getId(), id)
@@ -83,21 +89,24 @@ public class MemberService {
         m.setFirstName(first);
         m.setPhone(phone);
         m.setBirthDate(r.birthDate());
+        LocalDate previousReg = m.getRegistrationDate();
         m.setRegistrationDate(reg);
         m.getSportIds().clear();
         m.getSportIds().addAll(sportIds);
         m.setInsurance(r.insurance() == null ? Insurance.IMPAYE : r.insurance());
         m.setNotes(Check.text(r.notes(), "notes", "Notes", 2000, false));
         Member saved = members.save(m);
+        if (withoutSubscription) return saved;
 
-        // The form edits the current (latest) period; with a single period, its start follows the registration date.
+        // The form edits the current (latest) period; a single period still starting on the registration date follows it
+        // (not one left after deleting the first period, nor a later "Nouvel abonnement").
         Subscription sub = current == null ? new Subscription() : current;
         if (current == null) {
             sub.setMemberId(saved.getId());
             sub.setCreatedAt(cfg.now());
             sub.setCreatedBy(username == null ? "" : username);
         }
-        if (current == null || periods.size() == 1) sub.setStartDate(reg);
+        if (current == null || (periods.size() == 1 && current.getStartDate().equals(previousReg))) sub.setStartDate(reg);
         Duration dur = durations.findById(pack.getDurationId()).orElseThrow();
         sub.setPackId(pack.getId());
         sub.setDiscountId(disc.getId());

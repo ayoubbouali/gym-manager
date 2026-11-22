@@ -44,7 +44,8 @@ public final class Rules {
 
     public enum PaymentMethod { ESPECES, CARTE, VIREMENT }
 
-    public enum Situation { EXPIRED, SOON, FOLLOW, OK }
+    /** NONE: the member has no subscription period at all. */
+    public enum Situation { EXPIRED, SOON, FOLLOW, OK, NONE }
 
     public enum MultiCoach { FULL, SPLIT }
 
@@ -104,6 +105,30 @@ public final class Rules {
         return registrationDate.plusMonths(months);
     }
 
+    public record PeriodSpan(LocalDate start, int months, BigDecimal amount) {
+    }
+
+    /**
+     * RG-JOURS reference period, in a list sorted by start. Payments are pooled, like RG-STATUT: the total paid fills
+     * the periods in order, and the latest period it reaches is the reference — so a payment imputed on arrears still
+     * counts, while an unpaid renewal does not extend the member's days. Without any payment, the latest period
+     * already started, else the first one.
+     */
+    public static int referencePeriod(List<PeriodSpan> periods, BigDecimal totalPaid, LocalDate today) {
+        BigDecimal left = totalPaid == null ? BigDecimal.ZERO : totalPaid;
+        int ref = -1;
+        for (int i = 0; i < periods.size() && left.signum() >= 0; i++) {
+            BigDecimal amount = periods.get(i).amount();
+            if (left.signum() > 0 || amount.signum() == 0) ref = i;
+            left = left.subtract(amount);
+        }
+        if (ref >= 0) return ref;
+        for (int i = periods.size() - 1; i >= 0; i--) {
+            if (!periods.get(i).start().isAfter(today)) return i;
+        }
+        return 0;
+    }
+
     /** RG-JOURS: end − today in whole days, may be negative. */
     public static long remainingDays(LocalDate endDate, LocalDate today) {
         return ChronoUnit.DAYS.between(today, endDate);
@@ -159,9 +184,9 @@ public final class Rules {
 
     /**
      * All computed values of a member.
-     * @param periodStart start of the latest subscription period (first registration or renewal)
+     * @param periodStart start of the reference period (see {@link #referencePeriod})
      * @param months      duration of that period
-     * @param periodPrice frozen price of that period (RG-PRIX when it was created)
+     * @param periodPrice frozen price of the latest period (RG-PRIX when it was created)
      * @param totalDue    Σ prices of all the member's periods (arrears included)
      * @param totalPaid   Σ non-cancelled payments of the member
      */

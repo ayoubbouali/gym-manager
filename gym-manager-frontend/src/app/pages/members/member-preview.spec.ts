@@ -79,4 +79,14 @@ describe('carte d’aperçu adhérent', () => {
     expect(el.querySelector('.mp-sports')!.textContent).toContain('Boxe');
     expect(el.querySelector('.mp-note')!.textContent).toBe('Allergie\nau pollen');
   });
+
+  it('affiche « Sans abonnement » et des tirets quand l’adhérent n’a aucune période', () => {
+    const { el } = render(member({ pack: null, endDate: null, remainingDays: null, paymentStatus: null, situation: 'NONE' }));
+    expect(el.querySelector('app-situation-badge')!.textContent!.trim()).toBe('Sans abonnement');
+    const grid = el.querySelector('.mp-grid')!.textContent!;
+    expect(grid).toContain('Abonnement—');
+    expect(grid).toContain('Fin—');
+    expect(grid).not.toMatch(/\d j/);
+    expect(grid).toContain('Paiement—');
+  });
 });

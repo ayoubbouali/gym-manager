@@ -9,7 +9,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { LucideAngularModule } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
-import { FrDatePipe, FrDateTimePipe, MoneyPipe, norm } from '../../core/format';
+import { FrDatePipe, FrDateTimePipe, MoneyPipe, formatDate, norm } from '../../core/format';
 import { ActivityView, MemberCard, MemberView } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ConfirmService } from '../../shared/confirm.service';
@@ -79,8 +79,8 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
             <dl>
               <dt>Sport(s)</dt><dd>@for (s of c.member.sports; track s.id) {<app-sport-chip [name]="s.name" [color]="s.color" />}</dd>
               <dt>Inscrit le</dt><dd>{{ c.member.registrationDate | frDate }}</dd>
-              <dt>Abonnement</dt><dd>{{ c.member.pack.name }}</dd>
-              <dt>Remise</dt><dd>{{ c.member.discount.name }}</dd>
+              <dt>Abonnement</dt><dd>{{ c.member.pack?.name ?? '—' }}</dd>
+              <dt>Remise</dt><dd>{{ c.member.discount?.name ?? '—' }}</dd>
               <dt>Prix</dt><dd class="strong">{{ c.member.price | money }}</dd>
             </dl>
           </div>
@@ -103,8 +103,12 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
         <div class="card-head">
           <h3>Abonnement & paiements</h3>
           <span class="grow"></span>
-          <button mat-stroked-button (click)="renew(c)"><lucide-icon name="refresh-cw" [size]="16" /> Renouveler</button>
-          <button mat-flat-button (click)="pay(c)" [disabled]="c.member.balance <= 0"><lucide-icon name="wallet" [size]="16" /> Encaisser</button>
+          @if (c.subscriptions.length) {
+            <button mat-stroked-button (click)="renew(c)"><lucide-icon name="refresh-cw" [size]="16" /> Renouveler</button>
+            <button mat-flat-button (click)="pay(c)" [disabled]="c.member.balance <= 0"><lucide-icon name="wallet" [size]="16" /> Encaisser</button>
+          } @else {
+            <button mat-flat-button (click)="renew(c)"><lucide-icon name="plus" [size]="16" /> Nouvel abonnement</button>
+          }
         </div>
         @for (s of c.subscriptions; track s.id) {
           <div class="period" [class.current]="s.current">
@@ -119,8 +123,8 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
                 <small class="muted">payé {{ s.paid | money }} · reste <b [class.red]="s.balance > 0">{{ s.balance | money }}</b></small>
               </div>
               <app-paid-badge [value]="s.paymentStatus" />
-              @if (admin() && s.current && c.subscriptions.length > 1 && !s.payments.length) {
-                <button class="icon-btn danger" (click)="cancelRenewal(s)" matTooltip="Supprimer ce renouvellement" aria-label="Supprimer ce renouvellement"><lucide-icon name="trash-2" [size]="16" /></button>
+              @if (admin() && !s.payments.length) {
+                <button class="icon-btn danger" (click)="cancelRenewal(c, s)" matTooltip="Supprimer cette période" aria-label="Supprimer cette période"><lucide-icon name="trash-2" [size]="16" /></button>
               }
             </div>
             @if (s.payments.length) {
@@ -152,6 +156,8 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
               <p class="muted small no-pay">Aucun paiement sur cette période.</p>
             }
           </div>
+        } @empty {
+          <p class="muted">Aucun abonnement.</p>
         }
       </section>
 
@@ -362,13 +368,16 @@ export class MemberCardPage {
     if (s) {
       const p = s.payments.at(-1);
       if (p) notifyReceipt(this.notify, p);
-      else this.notify.success('Abonnement renouvelé.');
+      else this.notify.success(c.subscriptions.length ? 'Abonnement renouvelé.' : 'Abonnement créé.');
       this.reload();
     }
   }
 
-  async cancelRenewal(s: SubscriptionView): Promise<void> {
-    if (!(await this.confirm.confirm({ title: `Supprimer le renouvellement « ${s.packName} » ?`, message: 'La période précédente redevient la période en cours.', confirmLabel: 'Supprimer', danger: true }))) return;
+  async cancelRenewal(c: MemberCard, s: SubscriptionView): Promise<void> {
+    const message = c.subscriptions.length === 1 ? 'C\'est la seule période : l\'adhérent sera sans abonnement.'
+      : s.current ? 'La période précédente redevient la période en cours.' : 'Les autres périodes ne changent pas.';
+    const title = `Supprimer la période « ${s.packName} » du ${formatDate(s.startDate)} ?`;
+    if (!(await this.confirm.confirm({ title, message, confirmLabel: 'Supprimer', danger: true }))) return;
     try {
       await this.api.remove('subscriptions', s.id);
       this.reload();

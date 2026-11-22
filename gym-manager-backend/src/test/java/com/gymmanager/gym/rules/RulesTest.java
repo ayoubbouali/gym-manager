@@ -138,6 +138,24 @@ class RulesTest {
         }
 
         @Test
+        @DisplayName("RG-JOURS : la période de référence est la dernière atteinte par les paiements cumulés")
+        void referencePeriodFollowsPooledPayments() {
+            var today = d("2026-11-18");
+            var periods = List.of(new Rules.PeriodSpan(d("2026-10-25"), 1, bd("300")), new Rules.PeriodSpan(d("2026-11-25"), 1, bd("300")));
+            assertThat(Rules.referencePeriod(periods, bd("300"), today)).as("renouvellement impayé").isZero();
+            assertThat(Rules.referencePeriod(periods, bd("100"), today)).as("1re période partiellement payée").isZero();
+            assertThat(Rules.referencePeriod(periods, bd("350"), today)).as("paiement imputé sur l'arriéré qui entame le renouvellement").isEqualTo(1);
+            var freeRenewal = List.of(new Rules.PeriodSpan(d("2026-10-25"), 1, bd("300")), new Rules.PeriodSpan(d("2026-11-25"), 1, bd("0")));
+            assertThat(Rules.referencePeriod(freeRenewal, bd("300"), today)).as("renouvellement gratuit après une période soldée").isEqualTo(1);
+            assertThat(Rules.referencePeriod(freeRenewal, bd("200"), today)).as("renouvellement gratuit après un arriéré").isZero();
+            // without any payment: the latest period already started, else the first one
+            var nonePaid = List.of(new Rules.PeriodSpan(d("2026-10-01"), 1, bd("300")), new Rules.PeriodSpan(d("2026-11-01"), 1, bd("300")),
+                    new Rules.PeriodSpan(d("2026-12-01"), 1, bd("300")));
+            assertThat(Rules.referencePeriod(nonePaid, bd("0"), today)).isEqualTo(1);
+            assertThat(Rules.referencePeriod(List.of(new Rules.PeriodSpan(d("2026-12-01"), 1, bd("300"))), bd("0"), today)).isZero();
+        }
+
+        @Test
         void memberTotalsCoverAllPeriods() {
             // current period 250 (renewal), arrears 187.50 unpaid, 250 paid
             var c = Rules.computeMember(d("2026-11-10"), 1, bd("250"), bd("437.50"), bd("250"), true,

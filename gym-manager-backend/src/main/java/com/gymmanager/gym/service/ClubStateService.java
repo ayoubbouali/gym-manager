@@ -140,13 +140,16 @@ public class ClubStateService {
 
         List<MemberView> members = memberRepo.findAll().stream().sorted(Comparator.comparing(Member::getCode)).map(m -> {
             List<Subscription> periods = subsByMember.getOrDefault(m.getId(), List.of());
+            List<Long> sportIds = m.getSportIds().stream().sorted().toList();
+            if (periods.isEmpty()) return withoutSubscription(m, sportIds, sportRef, activitiesByMember);
             Subscription cur = periods.getLast();
             PackView pack = packById.get(cur.getPackId());
             DiscountView disc = discById.get(cur.getDiscountId());
             BigDecimal totalDue = periods.stream().map(Subscription::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal totalPaid = periods.stream().map(x -> paidBySub.getOrDefault(x.getId(), BigDecimal.ZERO)).reduce(BigDecimal.ZERO, BigDecimal::add);
-            List<Long> sportIds = m.getSportIds().stream().sorted().toList();
-            Rules.MemberComputed c = Rules.computeMember(cur.getStartDate(), cur.getMonths(), cur.getAmount(), totalDue, totalPaid,
+            Subscription ref = periods.get(Rules.referencePeriod(periods.stream()
+                    .map(x -> new Rules.PeriodSpan(x.getStartDate(), x.getMonths(), x.getAmount())).toList(), totalPaid, today));
+            Rules.MemberComputed c = Rules.computeMember(ref.getStartDate(), ref.getMonths(), cur.getAmount(), totalDue, totalPaid,
                     m.isActive(), cfg.pricing(), today);
             return new MemberView(m.getId(), m.getCode(), m.getLastName(), m.getFirstName(), m.getPhone(),
                     m.getBirthDate(), m.getRegistrationDate(), sportIds,
@@ -227,6 +230,17 @@ public class ClubStateService {
                 subscriptions, payments, coachesBySport, subsByMember);
     }
 
+    private static MemberView withoutSubscription(Member m, List<Long> sportIds, Function<Long, SportRef> sportRef,
+                                                  Map<Long, List<Long>> activitiesByMember) {
+        BigDecimal zero = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        return new MemberView(m.getId(), m.getCode(), m.getLastName(), m.getFirstName(), m.getPhone(),
+                m.getBirthDate(), m.getRegistrationDate(), sportIds,
+                sportIds.stream().map(sportRef).filter(Objects::nonNull).toList(),
+                null, null, 0, null, null, null, null, m.getInsurance(), m.getPhoto() != null, m.getNotes(), m.isActive(),
+                activitiesByMember.getOrDefault(m.getId(), List.of()),
+                null, null, null, zero, zero, null, false, Rules.Situation.NONE);
+    }
+
     /** Detached copy of a period priced with the current rules (RG-PRIX) — used while nothing has been paid. */
     static Subscription livePriced(Subscription x, Map<Long, PackView> packById, Map<Long, DiscountView> discById, ClubConfig cfg) {
         PackView pack = packById.get(x.getPackId());
@@ -262,7 +276,7 @@ public class ClubStateService {
             MemberView m = memberById.get(l.memberId());
             Rules.MemberFacts f = factByMember.get(l.memberId());
             String pack = subsByMember.get(m.id()).stream().filter(x -> x.getStartDate().equals(f.registrationDate()))
-                    .reduce((a, b) -> b).map(x -> packNames.get(x.getPackId())).orElse(m.pack().name());
+                    .reduce((a, b) -> b).map(x -> packNames.get(x.getPackId())).orElse(m.pack() == null ? null : m.pack().name());
             return new SalaryLineView(m.id(), m.code(), m.fullName(), pack, f.registrationDate(), l.price(),
                     l.factor().setScale(4, RoundingMode.HALF_UP).stripTrailingZeros(),
                     l.sportIds().stream().map(sportNames::get).toList());
@@ -292,7 +306,7 @@ public class ClubStateService {
         String template = switch (m.situation()) {
             case EXPIRED -> cfg.expiredTemplate();
             case SOON, FOLLOW -> cfg.soonTemplate();
-            case OK -> null;
+            case OK, NONE -> null;
         };
         if (template == null) return new Alert("", null);
         long days = m.situation() == Rules.Situation.EXPIRED ? -m.remainingDays() : m.remainingDays();

@@ -4,7 +4,8 @@ export type Role = 'ADMIN' | 'ACCUEIL';
 export type PaymentStatus = 'PAYE' | 'PARTIEL' | 'IMPAYE';
 export type PaymentMethod = 'ESPECES' | 'CARTE' | 'VIREMENT';
 export type Insurance = 'PAYE' | 'IMPAYE';
-export type Situation = 'EXPIRED' | 'SOON' | 'FOLLOW' | 'OK';
+/** NONE: the member has no subscription period at all. */
+export type Situation = 'EXPIRED' | 'SOON' | 'FOLLOW' | 'OK' | 'NONE';
 export type PayMode = 'COMMISSION' | 'FIXED';
 
 export interface User {
@@ -54,12 +55,14 @@ export interface MemberView {
   id: number; code: string; lastName: string; firstName: string; phone: string;
   birthDate: string | null; registrationDate: string;
   sportIds: number[]; sports: SportRef[];
-  subscriptionId: number; periodStart: string; periodCount: number;
-  packId: number; pack: PackRef; discountId: number; discount: DiscountView;
+  /** Subscription fields are null for a member without subscription (situation NONE). */
+  subscriptionId: number | null; periodStart: string | null; periodCount: number;
+  packId: number | null; pack: PackRef | null; discountId: number | null; discount: DiscountView | null;
   insurance: Insurance; hasPhoto: boolean; notes: string; active: boolean; activityIds: number[];
-  price: number; endDate: string; remainingDays: number;
+  price: number | null; endDate: string | null; remainingDays: number | null;
   paid: number; balance: number;
-  paymentStatus: PaymentStatus; activeMember: boolean; situation: Situation;
+  /** Null without subscription: nothing is due, so there is no payment status. */
+  paymentStatus: PaymentStatus | null; activeMember: boolean; situation: Situation;
 }
 
 export interface PaymentView {

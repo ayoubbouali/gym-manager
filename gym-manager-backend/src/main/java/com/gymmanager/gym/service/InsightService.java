@@ -50,7 +50,7 @@ public class InsightService {
                 .sorted(Comparator.comparing(ActivityView::startsAt)).toList();
         return new Dashboard(
                 (int) st.members().stream().filter(MemberView::activeMember).count(),
-                (int) alertMembers(st).stream().filter(m -> m.remainingDays() < 0).count(),
+                (int) alertMembers(st).stream().filter(InsightService::expired).count(),
                 upcoming.size(),
                 Rules.revenue(sales(st), YearMonth.from(st.today()).atDay(1), st.today()),
                 toCollect(st),
@@ -69,9 +69,13 @@ public class InsightService {
     public record Alerts(int alertCount, int soonThreshold, int followThreshold, List<AlertRow> rows) {
     }
 
-    /** Members that are not deactivated (expired ones included), sorted by remaining days ascending. */
+    private static boolean expired(MemberView m) {
+        return m.remainingDays() != null && m.remainingDays() < 0;
+    }
+
+    /** Members that are not deactivated and have a subscription (expired ones included), sorted by remaining days ascending. */
     private static List<MemberView> alertMembers(ClubState st) {
-        return st.members().stream().filter(MemberView::active)
+        return st.members().stream().filter(m -> m.active() && m.situation() != Rules.Situation.NONE)
                 .sorted(Comparator.comparingLong(MemberView::remainingDays).thenComparing(MemberView::code)).toList();
     }
 

@@ -451,6 +451,89 @@ class AcceptanceTest {
     }
 
     @Test
+    @DisplayName("Adhérent sans abonnement : suppression de toute période sans paiement, puis « Nouvel abonnement »")
+    void memberWithoutSubscription() throws Exception {
+        long karate = id("/api/sports", "$[?(@.name=='Karaté')].id");
+        long karatePack = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
+        long m = ((Number) read(send(admin, "POST", "/api/members", member("Sans", "Abonnement", "0612000010", karate, karatePack, null, "2026-11-01")), "$.id")).longValue();
+        String code = (String) ((List<Object>) read(get(admin, "/api/members"), "$[?(@.id==" + m + ")].code")).getFirst();
+        long first = id("/api/members", "$[?(@.id==" + m + ")].subscriptionId");
+        long middle = ((Number) read(send(admin, "POST", "/api/members/" + m + "/renew", Map.of("packId", karatePack)), "$.id")).longValue();
+        long last = ((Number) read(send(admin, "POST", "/api/members/" + m + "/renew", Map.of("packId", karatePack)), "$.id")).longValue();
+
+        // ACCUEIL cannot remove a period
+        MockHttpSession accueil = login("accueil", "accueil123", "Accueil2026");
+        send(accueil, "DELETE", "/api/subscriptions/" + middle, null).andExpect(status().isForbidden());
+
+        // an intermediate period, then the first one, can be removed: the others are unchanged
+        send(admin, "DELETE", "/api/subscriptions/" + middle, null).andExpect(status().isNoContent());
+        get(admin, "/api/members/by-code/" + code).andExpect(jsonPath("$.subscriptions.length()").value(2))
+                .andExpect(jsonPath("$.subscriptions[0].id").value((int) last))
+                .andExpect(jsonPath("$.subscriptions[0].startDate").value("2027-01-01"))
+                .andExpect(jsonPath("$.subscriptions[1].startDate").value("2026-11-01"));
+        send(admin, "DELETE", "/api/subscriptions/" + first, null).andExpect(status().isNoContent());
+        get(admin, "/api/members/by-code/" + code).andExpect(jsonPath("$.subscriptions.length()").value(1))
+                .andExpect(jsonPath("$.subscriptions[0].id").value((int) last))
+                .andExpect(jsonPath("$.subscriptions[0].startDate").value("2027-01-01"));
+        // the single period left is not the registration one: a form save keeps its start
+        send(admin, "PUT", "/api/members/" + m, member("Sans", "Abonnement", "0612000010", karate, karatePack, null, "2026-11-01"))
+                .andExpect(status().isOk());
+        get(admin, "/api/members/by-code/" + code).andExpect(jsonPath("$.subscriptions[0].startDate").value("2027-01-01"));
+
+        // the only period left can be removed too: the member is then without subscription
+        send(admin, "DELETE", "/api/subscriptions/" + last, null).andExpect(status().isNoContent());
+        get(admin, "/api/members/by-code/" + code).andExpect(status().isOk())
+                .andExpect(jsonPath("$.subscriptions.length()").value(0))
+                .andExpect(jsonPath("$.renewalStart").value("2026-11-18"))
+                .andExpect(jsonPath("$.member.situation").value("NONE"))
+                .andExpect(jsonPath("$.member.periodCount").value(0))
+                .andExpect(jsonPath("$.member.pack").doesNotExist())
+                .andExpect(jsonPath("$.member.endDate").doesNotExist())
+                .andExpect(jsonPath("$.member.remainingDays").doesNotExist())
+                .andExpect(jsonPath("$.member.activeMember").value(false))
+                .andExpect(jsonPath("$.member.paymentStatus").doesNotExist())
+                .andExpect(jsonPath("$.alertMessage").doesNotExist());
+        assertThat((List<Object>) read(get(admin, "/api/members"), "$[?(@.id==" + m + ")].situation")).containsExactly("NONE");
+
+        // no page fails, and the member is neither alerted nor paid as commission
+        assertThat((List<Object>) read(get(admin, "/api/alerts"), "$.rows[?(@.code=='" + code + "')]")).isEmpty();
+        get(admin, "/api/dashboard").andExpect(status().isOk());
+        get(admin, "/api/stats").andExpect(status().isOk());
+        assertThat(body(get(admin, "/api/payroll?month=2026-11").andExpect(status().isOk()))).doesNotContain(code);
+
+        // cashing is refused
+        send(admin, "POST", "/api/payments", Map.of("memberId", m, "amount", 10, "method", "ESPECES"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("Aucun abonnement")));
+
+        // saving the form neither requires a pack nor recreates a period
+        send(admin, "PUT", "/api/members/" + m, Map.of("lastName", "Sans", "firstName", "Abonnement", "phone", "0612000010",
+                        "sportIds", List.of(karate), "registrationDate", "2026-11-01", "insurance", "PAYE"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.situation").value("NONE"));
+        send(admin, "PUT", "/api/members/" + m, member("Sans", "Abonnement", "0612000010", karate, karatePack, null, "2026-11-01"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.periodCount").value(0));
+
+        // "Nouvel abonnement": a period starting today with the chosen pack and an optional payment
+        send(admin, "POST", "/api/members/" + m + "/renew", Map.of("packId", karatePack, "paymentAmount", 10, "paymentMethod", "ESPECES"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.startDate").value("2026-11-18"))
+                .andExpect(jsonPath("$.paymentStatus").value("PARTIEL"));
+        get(admin, "/api/members/by-code/" + code).andExpect(jsonPath("$.subscriptions.length()").value(1))
+                .andExpect(jsonPath("$.member.pack.name").value("Karaté - Mensuel"))
+                .andExpect(jsonPath("$.member.situation").value(org.hamcrest.Matchers.not("NONE")));
+        // the new subscription starts today, not on the registration date: a form save keeps its start
+        send(admin, "PUT", "/api/members/" + m, member("Sans", "Abonnement", "0612000010", karate, karatePack, null, "2026-11-01"))
+                .andExpect(status().isOk());
+        get(admin, "/api/members/by-code/" + code).andExpect(jsonPath("$.subscriptions[0].startDate").value("2026-11-18"));
+
+        // a period holding a cancelled payment cannot be removed
+        long paid = id("/api/members", "$[?(@.id==" + m + ")].subscriptionId");
+        long payment = ((Number) read(get(admin, "/api/members/by-code/" + code), "$.subscriptions[0].payments[0].id")).longValue();
+        send(admin, "POST", "/api/payments/" + payment + "/cancel", Map.of("reason", "Erreur")).andExpect(status().isOk());
+        send(admin, "DELETE", "/api/subscriptions/" + paid, null).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("supprimez-les d'abord")));
+    }
+
+    @Test
     @DisplayName("Statistiques et tableau de bord sur les encaissements")
     void cashedRevenue() throws Exception {
         get(admin, "/api/stats").andExpect(jsonPath("$.kpis.revenue").value(18220.0))

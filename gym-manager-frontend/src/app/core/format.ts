@@ -70,6 +70,7 @@ export const SITUATION_LABELS: Record<string, string> = {
   SOON: '⏳ Expire bientôt',
   FOLLOW: 'À suivre',
   OK: 'À jour',
+  NONE: 'Sans abonnement',
 };
 
 export const WEEKDAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];

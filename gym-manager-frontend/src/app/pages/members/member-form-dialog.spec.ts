@@ -8,6 +8,7 @@ import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
 import { provideFrDates } from '../../core/date-adapter';
 import { APP_ICONS } from '../../core/icons';
+import { MemberView } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { MemberFormDialog } from './member-form-dialog';
 
@@ -67,5 +68,45 @@ describe('popup adhérent : message d’erreur', () => {
     expect(content.scrollTop).toBe(0);
     expect(content.firstElementChild!.classList).toContain('form-error');
     expect(content.firstElementChild!.textContent).toContain('Numéro de téléphone invalide');
+  });
+});
+
+describe('popup adhérent : adhérent sans abonnement', () => {
+  let api: Record<string, ReturnType<typeof vi.fn>>;
+  const member = {
+    id: 9, code: 'A009', lastName: 'Bennis', firstName: 'Lina', phone: '0740123456', birthDate: null, registrationDate: '2026-11-01',
+    sportIds: [1], packId: null, pack: null, discountId: null, discount: null, insurance: 'PAYE', notes: '', situation: 'NONE',
+  } as unknown as MemberView;
+
+  beforeEach(() => {
+    api = {
+      sports: vi.fn().mockResolvedValue([]), packs: vi.fn().mockResolvedValue([]), discounts: vi.fn().mockResolvedValue([]),
+      memberPreview: vi.fn().mockResolvedValue(null), save: vi.fn().mockResolvedValue(member),
+    };
+    TestBed.configureTestingModule({
+      imports: [MemberFormDialog],
+      providers: [
+        provideFrDates(),
+        importProvidersFrom(LucideAngularModule.pick(APP_ICONS)),
+        { provide: ApiService, useValue: api },
+        { provide: MatDialogRef, useValue: { close: vi.fn() } },
+        { provide: MAT_DIALOG_DATA, useValue: { member } },
+        { provide: NotifyService, useValue: { success: vi.fn(), error: vi.fn() } },
+        { provide: ConfigService, useValue: { config: signal({ today: '2026-11-22' }), phoneExample: signal('06 50 12 34 56'), currency: signal('DH') } },
+      ],
+    });
+  });
+
+  it('ne demande pas de pack et enregistre sans', async () => {
+    const f = TestBed.createComponent(MemberFormDialog);
+    f.detectChanges();
+    await f.whenStable();
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('mat-select[formControlName="packId"]')).toBeNull();
+    expect(el.querySelector('.computed-box')).toBeNull();
+    expect(el.textContent).toContain('Nouvel abonnement');
+    await f.componentInstance.save();
+    expect(api['save']).toHaveBeenCalledWith('members', 9, expect.objectContaining({ packId: null }));
   });
 });

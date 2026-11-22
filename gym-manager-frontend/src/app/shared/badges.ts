@@ -11,14 +11,14 @@ export class SportChip {
   inactive = input(false);
 }
 
-/** Payé (green) / Partiel (orange) / Impayé (red). Also used for the insurance (Payé / Impayé). */
+/** Payé (green) / Partiel (orange) / Impayé (red), "—" without status. Also used for the insurance (Payé / Impayé). */
 @Component({
   selector: 'app-paid-badge',
-  template: `<span class="badge" [class.ok]="value() === 'PAYE'" [class.warn]="value() === 'PARTIEL'" [class.ko]="value() === 'IMPAYE'">{{ label() }}</span>`,
+  template: `@if (value(); as v) {<span class="badge" [class.ok]="v === 'PAYE'" [class.warn]="v === 'PARTIEL'" [class.ko]="v === 'IMPAYE'">{{ label() }}</span>} @else {<span class="muted">—</span>}`,
 })
 export class PaidBadge {
-  value = input.required<string>();
-  label = computed(() => ({ PAYE: 'Payé', PARTIEL: 'Partiel', IMPAYE: 'Impayé' } as Record<string, string>)[this.value()] ?? this.value());
+  value = input.required<string | null>();
+  label = computed(() => ({ PAYE: 'Payé', PARTIEL: 'Partiel', IMPAYE: 'Impayé' } as Record<string, string>)[this.value() ?? ''] ?? this.value());
 }
 
 @Component({
@@ -28,7 +28,7 @@ export class PaidBadge {
 export class SituationBadge {
   value = input.required<string>();
   label = computed(() => SITUATION_LABELS[this.value()] ?? this.value());
-  cls = computed(() => 'badge ' + ({ EXPIRED: 'ko', SOON: 'warn', FOLLOW: 'info', OK: 'ok' } as Record<string, string>)[this.value()]);
+  cls = computed(() => 'badge ' + ({ EXPIRED: 'ko', SOON: 'warn', FOLLOW: 'info', OK: 'ok', NONE: 'neutral' } as Record<string, string>)[this.value()]);
 }
 
 @Component({
@@ -39,11 +39,12 @@ export class ActiveBadge {
   active = input.required<boolean>();
 }
 
-/** Remaining days: "Expiré depuis N j" in red when negative. */
+/** Remaining days: "Expiré depuis N j" in red when negative, "—" without subscription. */
 @Component({
   selector: 'app-days',
-  template: `@if (days() < 0) {<span class="red">Expiré depuis {{ -days() }} j</span>} @else {<span>{{ days() }} j</span>}`,
+  template: `@let d = days();
+    @if (d === null) {<span class="muted">—</span>} @else if (d < 0) {<span class="red">Expiré depuis {{ -d }} j</span>} @else {<span>{{ d }} j</span>}`,
 })
 export class DaysLeft {
-  days = input.required<number>();
+  days = input.required<number | null>();
 }

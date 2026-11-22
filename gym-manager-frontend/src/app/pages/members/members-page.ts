@@ -17,7 +17,7 @@ import { LucideAngularModule } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
 import { csvNumber, exportCsv } from '../../core/csv';
-import { FrDatePipe, MoneyPipe, PAYMENT_STATUS_LABELS, formatDate } from '../../core/format';
+import { FrDatePipe, MoneyPipe, PAYMENT_STATUS_LABELS, SITUATION_LABELS, formatDate } from '../../core/format';
 import { MemberView, Situation, SportView } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ConfirmService } from '../../shared/confirm.service';
@@ -36,7 +36,7 @@ const hasNote = (m: MemberView) => !!m.notes.trim();
 const DEFAULT_SORT = { key: 'code', dir: 'asc' } as const;
 
 /** Most urgent first when sorting the Situation column. */
-const SITUATION_RANK: Record<Situation, number> = { EXPIRED: 0, SOON: 1, FOLLOW: 2, OK: 3 };
+const SITUATION_RANK: Record<Situation, number> = { EXPIRED: 0, SOON: 1, FOLLOW: 2, OK: 3, NONE: 4 };
 
 /** Hover delay before the preview card opens, so sweeping the mouse across the ID column does not flicker. */
 export const PREVIEW_DELAY_MS = 300;
@@ -138,9 +138,9 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
                   @case ('birthDate') {<td>{{ m.birthDate | frDate }}</td>}
                   @case ('sports') {<td>@for (s of m.sports; track s.id) {<app-sport-chip [name]="s.name" [color]="s.color" [inactive]="!s.active" />}</td>}
                   @case ('registrationDate') {<td>{{ m.registrationDate | frDate }}</td>}
-                  @case ('pack') {<td>{{ m.pack.name }}</td>}
+                  @case ('pack') {<td>{{ m.pack?.name ?? '—' }}</td>}
                   @case ('price') {<td class="num">{{ m.price | money }}</td>}
-                  @case ('discount') {<td>{{ m.discount.name }}</td>}
+                  @case ('discount') {<td>{{ m.discount?.name ?? '—' }}</td>}
                   @case ('status') {<td><app-paid-badge [value]="m.paymentStatus" /></td>}
                   @case ('paid') {<td class="num">{{ m.paid | money }}</td>}
                   @case ('balance') {<td class="num" [class.red]="m.balance > 0">{{ m.balance > 0 ? (m.balance | money) : '—' }}</td>}
@@ -198,7 +198,7 @@ export class MembersPage {
     searchText: (m) => `${m.code} ${m.lastName} ${m.firstName} ${m.phone}`,
     sort: {
       code: (m) => m.code, lastName: (m) => m.lastName, firstName: (m) => m.firstName, birthDate: (m) => m.birthDate,
-      registrationDate: (m) => m.registrationDate, pack: (m) => m.pack.name, price: (m) => m.price,
+      registrationDate: (m) => m.registrationDate, pack: (m) => m.pack?.name, price: (m) => m.price,
       status: (m) => m.paymentStatus, paid: (m) => m.paid, balance: (m) => m.balance, days: (m) => m.remainingDays,
       situation: (m) => SITUATION_RANK[m.situation], insurance: (m) => m.insurance,
     },
@@ -344,9 +344,9 @@ export class MembersPage {
       { header: 'ID', value: (m) => m.code }, { header: 'Nom', value: (m) => m.lastName }, { header: 'Prénom', value: (m) => m.firstName },
       { header: 'Téléphone', value: (m) => m.phone }, { header: 'Date de naissance', value: (m) => formatDate(m.birthDate) },
       { header: 'Sport(s)', value: (m) => m.sports.map((s) => s.name).join(', ') },
-      { header: "Date d'inscription", value: (m) => formatDate(m.registrationDate) }, { header: 'Abonnement', value: (m) => m.pack.name },
-      { header: 'Prix', value: (m) => csvNumber(m.price) }, { header: 'Remise', value: (m) => m.discount.name },
-      { header: 'Statut', value: (m) => PAYMENT_STATUS_LABELS[m.paymentStatus] }, { header: 'Reste à payer', value: (m) => csvNumber(m.balance) },
+      { header: "Date d'inscription", value: (m) => formatDate(m.registrationDate) }, { header: 'Abonnement', value: (m) => m.pack?.name ?? SITUATION_LABELS['NONE'] },
+      { header: 'Prix', value: (m) => csvNumber(m.price) }, { header: 'Remise', value: (m) => m.discount?.name },
+      { header: 'Statut', value: (m) => (m.paymentStatus ? PAYMENT_STATUS_LABELS[m.paymentStatus] : '—') }, { header: 'Reste à payer', value: (m) => csvNumber(m.balance) },
       { header: 'Reste jours', value: (m) => m.remainingDays },
       { header: 'Assurance', value: (m) => (m.insurance === 'PAYE' ? 'Payé' : 'Impayé') },
     ], this.t.filtered());

@@ -109,15 +109,17 @@ export class PaymentDialog {
   }
 }
 
-/** Renewal: new subscription period, with an optional payment right away. */
+/** Renewal: new subscription period, with an optional payment right away. "Nouvel abonnement" when the member has none. */
 @Component({
   selector: 'app-renew-dialog',
   imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatCheckboxModule, MatFormFieldModule, MatInputModule, MatSelectModule, DateField, MoneyPipe, FrDatePipe],
   template: `
-    <h2 mat-dialog-title>Renouveler l'abonnement — {{ c.member.code }} {{ c.member.firstName }} {{ c.member.lastName }}</h2>
+    <h2 mat-dialog-title>{{ labels.title }} — {{ c.member.code }} {{ c.member.firstName }} {{ c.member.lastName }}</h2>
     <mat-dialog-content>
-      <p class="muted">Dernière période : {{ c.subscriptions[0].packName }}, jusqu'au {{ c.subscriptions[0].endDate | frDate }}.
-        @if (c.member.balance > 0) {<span class="red">Reste à payer sur les périodes précédentes : {{ c.member.balance | money }}.</span>}</p>
+      @if (!isNew) {
+        <p class="muted">Dernière période : {{ c.subscriptions[0].packName }}, jusqu'au {{ c.subscriptions[0].endDate | frDate }}.
+          @if (c.member.balance > 0) {<span class="red">Reste à payer sur les périodes précédentes : {{ c.member.balance | money }}.</span>}</p>
+      }
       <form id="renew-form" class="form-grid" (ngSubmit)="save()">
         <mat-form-field class="span-2"><mat-label>Type d'abonnement</mat-label>
           <mat-select name="pack" [(ngModel)]="packId" (ngModelChange)="refresh()" required>
@@ -129,7 +131,7 @@ export class PaymentDialog {
             @for (x of discountOptions(); track x.id) {<mat-option [value]="x.id">{{ x.name }}</mat-option>}
           </mat-select>
         </mat-form-field>
-        <app-date-field label="Début de la nouvelle période" name="start" [(ngModel)]="startDate" (ngModelChange)="refresh()" required
+        <app-date-field [label]="labels.start" name="start" [(ngModel)]="startDate" (ngModelChange)="refresh()" required
                         [hint]="'Proposé : ' + (c.renewalStart | frDate)" />
       </form>
       <div class="computed-box" aria-live="polite">
@@ -157,12 +159,16 @@ export class PaymentDialog {
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button mat-dialog-close type="button">Annuler</button>
-      <button mat-flat-button type="submit" form="renew-form" [disabled]="busy() || !packId">Renouveler</button>
+      <button mat-flat-button type="submit" form="renew-form" [disabled]="busy() || !packId">{{ labels.submit }}</button>
     </mat-dialog-actions>
   `,
 })
 export class RenewDialog {
   c = inject<MemberCard>(MAT_DIALOG_DATA);
+  readonly isNew = !this.c.subscriptions.length;
+  readonly labels = this.isNew
+    ? { title: 'Nouvel abonnement', start: "Début de l'abonnement", submit: "Créer l'abonnement" }
+    : { title: "Renouveler l'abonnement", start: 'Début de la nouvelle période', submit: 'Renouveler' };
   private api = inject(ApiService);
   private ref = inject(MatDialogRef<RenewDialog>);
   private config = inject(ConfigService);

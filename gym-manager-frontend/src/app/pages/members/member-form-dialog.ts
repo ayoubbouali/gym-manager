@@ -30,24 +30,28 @@ import { MultiSelect, SelectOption } from '../../shared/multi-select';
         <mat-form-field><mat-label>Téléphone</mat-label><input matInput formControlName="phone" required inputmode="tel" [placeholder]="config.phoneExample()" /></mat-form-field>
         <app-date-field label="Date de naissance" formControlName="birthDate" />
         <app-multi-select class="span-2" label="Sport(s) *" formControlName="sportIds" [options]="sportOptions()" />
-        <mat-form-field class="span-2">
-          <mat-label>Type d'abonnement</mat-label>
-          <mat-select formControlName="packId" required>
-            @for (p of packOptions(); track p.id) {
-              <mat-option [value]="p.id" [disabled]="!p.active">{{ p.name }} ({{ p.total | money }}){{ p.active ? '' : ' — inactif' }}</mat-option>
-            } @empty {
-              <mat-option disabled>Choisissez d'abord un sport</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Remise</mat-label>
-          <mat-select formControlName="discountId">
-            @for (d of discountOptions(); track d.id) {
-              <mat-option [value]="d.id" [disabled]="!d.active">{{ d.name }}{{ d.active ? '' : ' — inactive' }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
+        @if (withoutSubscription) {
+          <p class="span-2 muted">Sans abonnement : créez-en un avec « Nouvel abonnement » sur la fiche de l'adhérent.</p>
+        } @else {
+          <mat-form-field class="span-2">
+            <mat-label>Type d'abonnement</mat-label>
+            <mat-select formControlName="packId" required>
+              @for (p of packOptions(); track p.id) {
+                <mat-option [value]="p.id" [disabled]="!p.active">{{ p.name }} ({{ p.total | money }}){{ p.active ? '' : ' — inactif' }}</mat-option>
+              } @empty {
+                <mat-option disabled>Choisissez d'abord un sport</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field>
+            <mat-label>Remise</mat-label>
+            <mat-select formControlName="discountId">
+              @for (d of discountOptions(); track d.id) {
+                <mat-option [value]="d.id" [disabled]="!d.active">{{ d.name }}{{ d.active ? '' : ' — inactive' }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
         <app-date-field label="Date d'inscription" formControlName="registrationDate" required />
         <div class="field-block">
           <span class="field-label">Assurance</span>
@@ -58,14 +62,16 @@ import { MultiSelect, SelectOption } from '../../shared/multi-select';
         </div>
         <mat-form-field><mat-label>Notes</mat-label><textarea matInput formControlName="notes" rows="1"></textarea></mat-form-field>
       </form>
-      <div class="computed-box" aria-live="polite">
-        <span class="muted">Calculé</span>
-        @if (preview(); as p) {
-          <b>{{ p.price | money }}</b><span>· fin le {{ p.endDate | frDate }}</span>
-        } @else {
-          <span class="muted">choisissez un pack et une date d'inscription</span>
-        }
-      </div>
+      @if (!withoutSubscription) {
+        <div class="computed-box" aria-live="polite">
+          <span class="muted">Calculé</span>
+          @if (preview(); as p) {
+            <b>{{ p.price | money }}</b><span>· fin le {{ p.endDate | frDate }}</span>
+          } @else {
+            <span class="muted">choisissez un pack et une date d'inscription</span>
+          }
+        </div>
+      }
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button mat-dialog-close type="button">Annuler</button>
@@ -75,6 +81,8 @@ import { MultiSelect, SelectOption } from '../../shared/multi-select';
 })
 export class MemberFormDialog {
   member = inject<{ member?: MemberView }>(MAT_DIALOG_DATA).member;
+  /** An existing member without subscription: saving never creates one, so no pack is asked. */
+  readonly withoutSubscription = this.member?.situation === 'NONE';
   private api = inject(ApiService);
   private fb = inject(FormBuilder);
   private ref = inject(MatDialogRef<MemberFormDialog>);
@@ -95,7 +103,7 @@ export class MemberFormDialog {
     phone: [this.member?.phone ?? '', Validators.required],
     birthDate: [this.member?.birthDate ?? ''],
     sportIds: [this.member?.sportIds ?? ([] as number[])],
-    packId: [this.member?.packId ?? (null as number | null), Validators.required],
+    packId: [this.member?.packId ?? (null as number | null), this.withoutSubscription ? [] : [Validators.required]],
     discountId: [this.member?.discountId ?? (null as number | null)],
     registrationDate: [this.member?.registrationDate ?? this.config.config()?.today ?? '', Validators.required],
     insurance: [this.member?.insurance ?? 'IMPAYE'],
@@ -151,7 +159,9 @@ export class MemberFormDialog {
     this.error.set('');
     if (this.form.invalid || !(this.form.value.sportIds ?? []).length) {
       this.form.markAllAsTouched();
-      this.showError('Renseignez les champs obligatoires : nom, prénom, téléphone, au moins un sport, un abonnement et la date d\'inscription.');
+      this.showError(this.withoutSubscription
+        ? 'Renseignez les champs obligatoires : nom, prénom, téléphone, au moins un sport et la date d\'inscription.'
+        : 'Renseignez les champs obligatoires : nom, prénom, téléphone, au moins un sport, un abonnement et la date d\'inscription.');
       return;
     }
     const v = this.form.getRawValue();

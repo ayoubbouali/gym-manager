@@ -27,8 +27,8 @@ import { DaysLeft, PaidBadge, SituationBadge, SportChip } from '../../shared/bad
       </div>
     </div>
     <dl class="mp-grid">
-      <dt>Abonnement</dt><dd>{{ m.pack.name }}</dd>
-      <dt>Fin</dt><dd>{{ m.endDate | frDate }} <span class="mp-sep">·</span> <app-days [days]="m.remainingDays" /></dd>
+      <dt>Abonnement</dt><dd>{{ m.pack?.name ?? '—' }}</dd>
+      <dt>Fin</dt><dd>{{ m.endDate | frDate }} @if (m.remainingDays !== null) {<span class="mp-sep">·</span> <app-days [days]="m.remainingDays" />}</dd>
       <dt>Paiement</dt><dd><app-paid-badge [value]="m.paymentStatus" /></dd>
       @if (m.balance > 0) {<dt>Reste à payer</dt><dd class="red">{{ m.balance | money }}</dd>}
       <dt>Téléphone</dt><dd>{{ m.phone || '—' }}</dd>

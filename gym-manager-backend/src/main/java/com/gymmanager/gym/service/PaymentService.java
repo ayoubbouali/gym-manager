@@ -66,6 +66,7 @@ public class PaymentService {
         Long memberId = Check.required(r.memberId(), "memberId", "Adhérent");
         Member m = members.findById(memberId).orElseThrow(() -> ApiException.invalid("memberId", "Adhérent introuvable."));
         List<Subscription> periods = subscriptions.findByMemberIdOrderByStartDateAscIdAsc(m.getId());
+        if (periods.isEmpty()) throw ApiException.badRequest("Aucun abonnement : créez d'abord un nouvel abonnement pour cet adhérent.");
         Subscription sub;
         if (r.subscriptionId() != null) {
             sub = periods.stream().filter(s -> s.getId().equals(r.subscriptionId())).findFirst()
@@ -142,15 +143,19 @@ public class PaymentService {
         }
     }
 
-    /** Default start of a renewal (RG-RENOUV). */
+    /** Default start of a renewal (RG-RENOUV); today for a member without any subscription. */
     @Transactional(readOnly = true)
     public LocalDate renewalStart(Long memberId) {
         List<Subscription> periods = subscriptions.findByMemberIdOrderByStartDateAscIdAsc(memberId);
+        if (periods.isEmpty()) return settings.config().today();
         Subscription last = periods.getLast();
         return Rules.renewalStart(Rules.subscriptionEnd(last.getStartDate(), last.getMonths()), settings.config().today());
     }
 
-    /** Creates a new subscription period (renewal), with an optional first payment. Returns the new period. */
+    /**
+     * Creates a new subscription period (renewal, or new subscription for a member without any), with an optional
+     * first payment. Returns the new period.
+     */
     public Subscription renew(Long memberId, RenewRequest r, String username) {
         Member m = members.findById(memberId).orElseThrow(() -> ApiException.notFound("Adhérent introuvable."));
         ClubConfig cfg = settings.config();
@@ -164,9 +169,8 @@ public class PaymentService {
                 : discounts.findById(r.discountId()).orElseThrow(() -> ApiException.invalid("discountId", "Remise introuvable."));
         if (!disc.isActive()) throw ApiException.invalid("discountId", "Cette remise est inactive.");
         List<Subscription> periods = subscriptions.findByMemberIdOrderByStartDateAscIdAsc(memberId);
-        Subscription last = periods.getLast();
         LocalDate start = r.startDate() != null ? r.startDate() : renewalStart(memberId);
-        if (start.isBefore(last.getStartDate()) || start.equals(last.getStartDate())) {
+        if (!periods.isEmpty() && !start.isAfter(periods.getLast().getStartDate())) {
             throw ApiException.invalid("startDate", "Le renouvellement doit commencer après le début de la période en cours.");
         }
         Duration dur = durations.findById(pack.getDurationId()).orElseThrow();
@@ -186,14 +190,15 @@ public class PaymentService {
         return sub;
     }
 
-    /** ADMIN: removes a renewal created by mistake (latest period only, without payments). */
+    /**
+     * ADMIN: removes any period without any payment, even cancelled, the last remaining one included:
+     * the member is then left without subscription.
+     */
     public void cancelRenewal(Long subscriptionId) {
         Subscription sub = subscriptions.findById(subscriptionId).orElseThrow(() -> ApiException.notFound("Période introuvable."));
-        List<Subscription> periods = subscriptions.findByMemberIdOrderByStartDateAscIdAsc(sub.getMemberId());
-        if (periods.size() < 2) throw ApiException.badRequest("La première période d'un adhérent ne peut pas être supprimée.");
-        if (!periods.getLast().getId().equals(sub.getId())) throw ApiException.badRequest("Seul le dernier renouvellement peut être supprimé.");
         if (payments.existsBySubscriptionId(sub.getId())) {
-            throw ApiException.conflict("Des paiements (même annulés) sont liés à cette période : elle ne peut pas être supprimée.");
+            throw ApiException.conflict("Des paiements (même annulés) sont liés à cette période : supprimez-les d'abord "
+                    + "(un paiement doit être annulé avant d'être supprimé).");
         }
         subscriptions.delete(sub);
     }

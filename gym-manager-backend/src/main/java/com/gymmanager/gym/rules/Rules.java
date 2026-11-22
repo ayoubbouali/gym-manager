@@ -44,7 +44,8 @@ public final class Rules {
 
     public enum PaymentMethod { ESPECES, CARTE, VIREMENT }
 
-    public enum Situation { EXPIRED, SOON, FOLLOW, OK }
+    /** NONE: the member has no subscription period at all. */
+    public enum Situation { EXPIRED, SOON, FOLLOW, OK, NONE }
 
     public enum MultiCoach { FULL, SPLIT }
 

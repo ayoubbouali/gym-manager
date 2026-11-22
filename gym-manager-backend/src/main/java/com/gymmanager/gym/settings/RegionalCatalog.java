@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -46,6 +47,9 @@ public final class RegionalCatalog {
     private static final PhoneNumberUtil PHONES = PhoneNumberUtil.getInstance();
     private static final Set<PhoneNumberType> ACCEPTED_TYPES = Set.of(PhoneNumberType.FIXED_LINE, PhoneNumberType.MOBILE,
             PhoneNumberType.FIXED_LINE_OR_MOBILE);
+    /** Morocco: every 10-digit 05/06/07 number is accepted as is, since libphonenumber misses allocated ranges (074, 079…). */
+    private static final String MOROCCO = "212";
+    private static final Pattern MOROCCO_NATIONAL = Pattern.compile("0[5-7]\\d{8}");
 
     public static final Options OPTIONS = new Options(currencies(), timezones(), dialCodes());
     private static final Map<String, CurrencyOption> CURRENCIES = index(OPTIONS.currencies(), CurrencyOption::code);
@@ -75,7 +79,8 @@ public final class RegionalCatalog {
 
     /**
      * National format, digits only ("0612345678"), or null when the number is not a valid fixed or mobile number
-     * for this dial code. An international number (+33…, 0033…) is accepted only with the club's own dial code.
+     * for this dial code; for +212, any 05/06/07 number of 10 digits is accepted. An international number (+33…,
+     * 0033…) is accepted only with the club's own dial code.
      */
     public static String normalizePhone(String raw, String dialCode) {
         String region = region(dialCode);
@@ -84,7 +89,10 @@ public final class RegionalCatalog {
         if (region == null || !v.matches("\\+?\\d{1,20}")) return null;
         try {
             PhoneNumber n = PHONES.parse(v, region);
-            if (n.getCountryCode() != Integer.parseInt(dialCode) || !PHONES.isValidNumber(n)
+            if (n.getCountryCode() != Integer.parseInt(dialCode)) return null;
+            String moroccan = "0" + PHONES.getNationalSignificantNumber(n);
+            if (MOROCCO.equals(dialCode) && MOROCCO_NATIONAL.matcher(moroccan).matches()) return moroccan;
+            if (!PHONES.isValidNumber(n)
                     || !ACCEPTED_TYPES.contains(PHONES.getNumberType(n))) return null;
             return PHONES.format(n, PhoneNumberFormat.NATIONAL).replaceAll("\\D", "");
         } catch (NumberParseException e) {

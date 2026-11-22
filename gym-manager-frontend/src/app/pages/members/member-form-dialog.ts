@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -21,7 +21,8 @@ import { MultiSelect, SelectOption } from '../../shared/multi-select';
     MatButtonToggleModule, MultiSelect, MoneyPipe, FrDatePipe],
   template: `
     <h2 mat-dialog-title>{{ member ? 'Modifier ' + member.code + ' — ' + member.firstName + ' ' + member.lastName : 'Nouvel adhérent' }}</h2>
-    <mat-dialog-content>
+    <mat-dialog-content #content>
+      @if (error()) {<p class="form-error form-error-top" role="alert">{{ error() }}</p>}
       <form [formGroup]="form" class="form-grid" (ngSubmit)="save()" id="member-form">
         <mat-form-field><mat-label>Nom</mat-label><input matInput formControlName="lastName" required /></mat-form-field>
         <mat-form-field><mat-label>Prénom</mat-label><input matInput formControlName="firstName" required /></mat-form-field>
@@ -64,7 +65,6 @@ import { MultiSelect, SelectOption } from '../../shared/multi-select';
           <span class="muted">choisissez un pack et une date d'inscription</span>
         }
       </div>
-      @if (error()) {<p class="form-error" role="alert">{{ error() }}</p>}
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button mat-dialog-close type="button">Annuler</button>
@@ -86,6 +86,7 @@ export class MemberFormDialog {
   preview = signal<MemberPreview | null>(null);
   busy = signal(false);
   error = signal('');
+  private content = viewChild.required('content', { read: ElementRef });
 
   form = this.fb.group({
     lastName: [this.member?.lastName ?? '', Validators.required],
@@ -139,11 +140,17 @@ export class MemberFormDialog {
     }
   }
 
+  /** The message sits above the fields: scroll back to it, the user may be at the bottom of the form. */
+  private showError(message: string): void {
+    this.error.set(message);
+    this.content().nativeElement.scrollTop = 0;
+  }
+
   async save(): Promise<void> {
     this.error.set('');
     if (this.form.invalid || !(this.form.value.sportIds ?? []).length) {
       this.form.markAllAsTouched();
-      this.error.set('Renseignez les champs obligatoires : nom, prénom, téléphone, au moins un sport, un abonnement et la date d\'inscription.');
+      this.showError('Renseignez les champs obligatoires : nom, prénom, téléphone, au moins un sport, un abonnement et la date d\'inscription.');
       return;
     }
     const v = this.form.getRawValue();
@@ -155,7 +162,7 @@ export class MemberFormDialog {
     } catch (e) {
       const err = apiError(e);
       if (err?.field && this.form.get(err.field)) this.form.get(err.field)!.setErrors({ server: err.message });
-      this.error.set(errorMessage(e));
+      this.showError(errorMessage(e));
     } finally {
       this.busy.set(false);
     }

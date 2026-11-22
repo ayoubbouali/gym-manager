@@ -116,7 +116,7 @@ export class PaymentDialog {
   template: `
     <h2 mat-dialog-title>Renouveler l'abonnement — {{ c.member.code }} {{ c.member.firstName }} {{ c.member.lastName }}</h2>
     <mat-dialog-content>
-      <p class="muted">Période en cours : {{ c.member.pack.name }}, jusqu'au {{ c.member.endDate | frDate }}.
+      <p class="muted">Dernière période : {{ c.subscriptions[0].packName }}, jusqu'au {{ c.subscriptions[0].endDate | frDate }}.
         @if (c.member.balance > 0) {<span class="red">Reste à payer sur les périodes précédentes : {{ c.member.balance | money }}.</span>}</p>
       <form id="renew-form" class="form-grid" (ngSubmit)="save()">
         <mat-form-field class="span-2"><mat-label>Type d'abonnement</mat-label>

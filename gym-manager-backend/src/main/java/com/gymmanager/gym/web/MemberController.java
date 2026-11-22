@@ -51,7 +51,7 @@ public class MemberController {
                 .sorted((a, b) -> b.startDate().compareTo(a.startDate())).toList();
         return new MemberCard(m, st.activities().stream().filter(a -> m.activityIds().contains(a.id())).toList(),
                 showWhatsapp ? alert.message() : null, showWhatsapp ? alert.link() : null,
-                periods, com.gymmanager.gym.rules.Rules.renewalStart(m.endDate(), st.today()));
+                periods, com.gymmanager.gym.rules.Rules.renewalStart(periods.getFirst().endDate(), st.today()));
     }
 
     @PostMapping("/preview")

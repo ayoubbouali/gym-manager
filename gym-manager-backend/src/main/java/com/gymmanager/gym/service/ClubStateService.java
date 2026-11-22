@@ -146,7 +146,9 @@ public class ClubStateService {
             BigDecimal totalDue = periods.stream().map(Subscription::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal totalPaid = periods.stream().map(x -> paidBySub.getOrDefault(x.getId(), BigDecimal.ZERO)).reduce(BigDecimal.ZERO, BigDecimal::add);
             List<Long> sportIds = m.getSportIds().stream().sorted().toList();
-            Rules.MemberComputed c = Rules.computeMember(cur.getStartDate(), cur.getMonths(), cur.getAmount(), totalDue, totalPaid,
+            Subscription ref = periods.get(Rules.referencePeriod(periods.stream()
+                    .map(x -> new Rules.PeriodSpan(x.getStartDate(), x.getMonths(), x.getAmount())).toList(), totalPaid, today));
+            Rules.MemberComputed c = Rules.computeMember(ref.getStartDate(), ref.getMonths(), cur.getAmount(), totalDue, totalPaid,
                     m.isActive(), cfg.pricing(), today);
             return new MemberView(m.getId(), m.getCode(), m.getLastName(), m.getFirstName(), m.getPhone(),
                     m.getBirthDate(), m.getRegistrationDate(), sportIds,

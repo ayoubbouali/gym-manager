@@ -405,6 +405,14 @@ class AcceptanceTest {
                 .andExpect(jsonPath("$.member.balance").value(450.0))            // first month still unpaid
                 .andExpect(jsonPath("$.member.paymentStatus").value("PARTIEL"))
                 .andExpect(jsonPath("$.subscriptions.length()").value(2));
+        // an unpaid renewal does not extend the remaining days, but the next renewal starts after it
+        long monthly = id("/api/packs", "$[?(@.name=='Musculation - Mensuel')].id");
+        long unpaid = ((Number) read(send(admin, "POST", "/api/members/" + a001 + "/renew", Map.of("packId", monthly)), "$.id")).longValue();
+        get(admin, "/api/members/by-code/A001").andExpect(jsonPath("$.member.remainingDays").value(365))
+                .andExpect(jsonPath("$.member.endDate").value("2027-11-18"))
+                .andExpect(jsonPath("$.renewalStart").value("2027-12-18"));
+        send(admin, "DELETE", "/api/subscriptions/" + unpaid, null).andExpect(status().isNoContent());
+
         long current = id("/api/members", "$[?(@.code=='A001')].subscriptionId");
         send(admin, "DELETE", "/api/subscriptions/" + current, null).andExpect(status().isConflict());
 
@@ -432,6 +440,9 @@ class AcceptanceTest {
         long a002 = id("/api/members", "$[?(@.code=='A002')].id");
         long pack = id("/api/packs", "$[?(@.name=='Aérobic - Mensuel')].id");
         long sub = ((Number) read(send(admin, "POST", "/api/members/" + a002 + "/renew", Map.of("packId", pack)), "$.id")).longValue();
+        // A002 has no payment at all: the latest period already started (this renewal, from today) is the reference
+        get(admin, "/api/members/by-code/A002").andExpect(jsonPath("$.member.remainingDays").value(30))
+                .andExpect(jsonPath("$.member.situation").value("FOLLOW"));
         send(admin, "DELETE", "/api/subscriptions/" + sub, null).andExpect(status().isNoContent());
         get(admin, "/api/members/by-code/A002").andExpect(jsonPath("$.subscriptions.length()").value(1));
         // a pack of another sport is refused

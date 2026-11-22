@@ -1,17 +1,18 @@
 import { importProvidersFrom, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { CdkConnectedOverlay } from '@angular/cdk/overlay';
 import { provideRouter } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
 import { LucideAngularModule } from 'lucide-angular';
 import { of } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
 import { APP_ICONS } from '../../core/icons';
 import { MemberView } from '../../core/models';
-import { MembersPage } from './members-page';
+import { MembersPage, PREVIEW_DELAY_MS, PREVIEW_ID } from './members-page';
 
 function member(id: number, over: Partial<MemberView> = {}): MemberView {
   return {
@@ -145,5 +146,107 @@ describe('page Adhérents', () => {
     await f.whenStable();
     expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: rows[0] }));
     expect(api.members).toHaveBeenCalledTimes(1);
+  });
+  describe('carte d’aperçu au survol de l’ID', () => {
+    const card = () => document.getElementById(PREVIEW_ID);
+    const link = (f: Awaited<ReturnType<typeof render>>, code = 'A001') =>
+      [...f.nativeElement.querySelectorAll('a.code-link')].find((a) => (a as HTMLElement).textContent!.trim() === code) as HTMLAnchorElement;
+    const settle = (f: Awaited<ReturnType<typeof render>>, ms: number) => { vi.advanceTimersByTime(ms); f.detectChanges(); };
+
+    afterEach(() => vi.useRealTimers());
+
+    it('s’ouvre après le délai de survol, liée au lien, puis se ferme quand la souris quitte le lien', async () => {
+      const f = await render();
+      vi.useFakeTimers();
+      const a = link(f);
+      a.dispatchEvent(new MouseEvent('mouseenter'));
+      settle(f, PREVIEW_DELAY_MS - 1);
+      expect(card()).toBeNull();
+      settle(f, 1);
+      expect(card()).not.toBeNull();
+      expect(card()!.textContent).toContain('Nom1 Prenom1');
+      expect(a.getAttribute('aria-describedby')).toBe(PREVIEW_ID);
+      expect(link(f, 'A002').hasAttribute('aria-describedby')).toBe(false);
+      a.dispatchEvent(new MouseEvent('mouseleave'));
+      f.detectChanges();
+      expect(card()).toBeNull();
+      expect(a.hasAttribute('aria-describedby')).toBe(false);
+    });
+
+    it('ne s’ouvre pas quand la souris ne fait que traverser l’ID', async () => {
+      const f = await render();
+      vi.useFakeTimers();
+      const a = link(f);
+      a.dispatchEvent(new MouseEvent('mouseenter'));
+      settle(f, PREVIEW_DELAY_MS / 2);
+      a.dispatchEvent(new MouseEvent('mouseleave'));
+      settle(f, PREVIEW_DELAY_MS * 2);
+      expect(card()).toBeNull();
+    });
+
+    it('s’ouvre immédiatement au focus clavier et se ferme au blur', async () => {
+      const f = await render();
+      vi.useFakeTimers();
+      const a = link(f);
+      a.focus();
+      f.detectChanges();
+      expect(card()).not.toBeNull();
+      expect(a.getAttribute('aria-describedby')).toBe(PREVIEW_ID);
+      a.blur();
+      f.detectChanges();
+      expect(card()).toBeNull();
+    });
+
+    it('se ferme sur Échap', async () => {
+      const f = await render();
+      vi.useFakeTimers();
+      const a = link(f);
+      a.focus();
+      settle(f, PREVIEW_DELAY_MS);
+      expect(card()).not.toBeNull();
+      a.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true } as KeyboardEventInit));
+      f.detectChanges();
+      expect(card()).toBeNull();
+      expect(f.componentInstance.preview()).toBeNull();
+      expect(a.hasAttribute('aria-describedby')).toBe(false);
+      expect(document.activeElement).toBe(a);
+    });
+
+    it('Échap avant la fin du délai annule l’ouverture', async () => {
+      const f = await render();
+      vi.useFakeTimers();
+      const a = link(f);
+      a.dispatchEvent(new MouseEvent('mouseenter'));
+      settle(f, PREVIEW_DELAY_MS / 2);
+      a.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      settle(f, PREVIEW_DELAY_MS * 2);
+      expect(card()).toBeNull();
+      expect(f.componentInstance.preview()).toBeNull();
+    });
+
+    it('configure le repositionnement de la carte (droite, gauche, dessous, dessus, push, marge 8 px)', async () => {
+      const f = await render();
+      vi.useFakeTimers();
+      link(f).dispatchEvent(new MouseEvent('mouseenter'));
+      settle(f, PREVIEW_DELAY_MS);
+      // mat-select also renders a cdkConnectedOverlay: pick the one anchored to the ID link.
+      const overlay = f.debugElement.queryAllNodes(By.directive(CdkConnectedOverlay))
+        .map((n) => n.injector.get(CdkConnectedOverlay)).find((o) => o.origin === link(f))!;
+      expect(overlay.positions.map((p) => [p.overlayX, p.overlayY])).toEqual([['start', 'center'], ['end', 'center'], ['start', 'top'], ['start', 'bottom']]);
+      expect(overlay.push).toBe(true);
+      expect(overlay.viewportMargin).toBe(8);
+    });
+
+    it('passe d’un adhérent à l’autre sans garder l’ancienne carte', async () => {
+      const f = await render();
+      vi.useFakeTimers();
+      link(f).dispatchEvent(new MouseEvent('mouseenter'));
+      settle(f, PREVIEW_DELAY_MS);
+      link(f).dispatchEvent(new MouseEvent('mouseleave'));
+      link(f, 'A002').dispatchEvent(new MouseEvent('mouseenter'));
+      settle(f, PREVIEW_DELAY_MS);
+      expect(document.querySelectorAll('app-member-preview').length).toBe(1);
+      expect(card()!.textContent).toContain('Nom2 Prenom2');
+    });
   });
 });

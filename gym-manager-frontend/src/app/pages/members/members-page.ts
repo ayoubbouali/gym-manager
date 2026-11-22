@@ -325,7 +325,7 @@ export class MembersPage {
   async remove(m: MemberView): Promise<void> {
     const ok = await this.confirm.confirm({
       title: `Supprimer l'adhérent ${m.code} — ${m.firstName} ${m.lastName} ?`,
-      message: 'Ses inscriptions aux activités et sa photo seront supprimées. Cette action est irréversible.',
+      message: 'Ses inscriptions aux activités, ses paiements annulés et sa photo seront supprimés. Cette action est irréversible.',
       confirmLabel: 'Supprimer',
       danger: true,
     });

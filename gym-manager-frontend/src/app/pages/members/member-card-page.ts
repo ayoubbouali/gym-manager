@@ -140,6 +140,9 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
                           <button class="icon-btn" (click)="editPayment(c, p)" matTooltip="Modifier" [attr.aria-label]="'Modifier ' + p.receiptNumber"><lucide-icon name="pencil" [size]="16" /></button>
                           <button class="icon-btn danger" (click)="cancelPayment(p)" matTooltip="Annuler le paiement" [attr.aria-label]="'Annuler ' + p.receiptNumber"><lucide-icon name="ban" [size]="16" /></button>
                         }
+                        @if (admin() && p.cancelled) {
+                          <button class="icon-btn danger" (click)="deletePayment(p)" matTooltip="Supprimer de l'historique" [attr.aria-label]="'Supprimer ' + p.receiptNumber"><lucide-icon name="trash-2" [size]="16" /></button>
+                        }
                       </td>
                     </tr>
                   }
@@ -266,7 +269,7 @@ export class MemberCardPage {
   async remove(m: MemberView): Promise<void> {
     const ok = await this.confirm.confirm({
       title: `Supprimer l'adhérent ${m.code} — ${m.firstName} ${m.lastName} ?`,
-      message: 'Ses inscriptions aux activités et sa photo seront supprimées. Cette action est irréversible.',
+      message: 'Ses inscriptions aux activités, ses paiements annulés et sa photo seront supprimés. Cette action est irréversible.',
       confirmLabel: 'Supprimer', danger: true,
     });
     if (!ok) return;
@@ -331,6 +334,22 @@ export class MemberCardPage {
     if (ok) {
       this.notify.success(`Paiement ${p.receiptNumber} annulé.`);
       this.reload();
+    }
+  }
+
+  async deletePayment(p: PaymentView): Promise<void> {
+    const ok = await this.confirm.confirm({
+      title: `Supprimer le paiement annulé ${p.receiptNumber} ?`,
+      message: 'La ligne disparaît de l\'historique et son reçu ne pourra plus être consulté. Le numéro de reçu ne sera pas réutilisé.',
+      confirmLabel: 'Supprimer', danger: true,
+    });
+    if (!ok) return;
+    try {
+      await this.api.delete(`/payments/${p.id}`);
+      this.notify.success(`Paiement ${p.receiptNumber} supprimé.`);
+      this.reload();
+    } catch (e) {
+      this.notify.error(e);
     }
   }
 

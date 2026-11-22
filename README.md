@@ -71,7 +71,7 @@ Variables utiles : `PORT`, `DATA_DIR` (dossier des fichiers téléversés), `DB_
 | Identifiant | Mot de passe | Rôle |
 | --- | --- | --- |
 | `admin` | `admin123` | ADMIN (gérant) : tout, y compris Personnel, Statistiques et Paramètres |
-| `accueil` | `accueil123` | ACCUEIL : lecture de tout sauf Personnel, Paie, Statistiques et Paramètres ; écriture sur les adhérents, les **renouvellements**, les **encaissements** et les inscriptions aux activités ; alertes. La **modification et l'annulation d'un paiement** sont réservées à l'ADMIN. |
+| `accueil` | `accueil123` | ACCUEIL : lecture de tout sauf Personnel, Paie, Statistiques et Paramètres ; écriture sur les adhérents, les **renouvellements**, les **encaissements** et les inscriptions aux activités ; alertes. La **modification, l'annulation et la suppression d'un paiement** sont réservées à l'ADMIN. |
 
 Un nouveau mot de passe est demandé à la **première connexion** : 8 caractères minimum, avec au moins une lettre et un chiffre. Les comptes se gèrent ensuite dans Paramètres › Utilisateurs.
 
@@ -121,7 +121,7 @@ Avec Docker, mettre ces variables dans `docker/.env` (fichier à ne pas versionn
 - **Statut de paiement** : *Payé* quand tout est réglé, *Partiel* quand une partie est payée, *Impayé* quand rien n'a été payé. Il porte sur l'ensemble des périodes de l'adhérent, arriérés compris. Le **reste à payer** apparaît sur la fiche, dans la liste des adhérents et dans les alertes.
 - **Renouveler** : crée une nouvelle période, sans effacer la précédente. Elle commence à la fin de la période en cours, ou aujourd'hui si celle-ci est terminée (RG-RENOUV). Le premier paiement peut être encaissé dans la même fenêtre.
 - **Historique** : la fiche liste chaque période avec ses paiements et ses reçus. La page **Paiements** sert de journal de caisse : filtres par période et par mode, totaux par mode, export CSV.
-- **Correction** (ADMIN) : un paiement se *modifie* (même numéro, reçu régénéré, traçabilité de qui et quand) ou s'*annule* avec un motif obligatoire. Le numéro reste alors utilisé et le reçu affiche « ANNULÉ ». Un paiement ne se supprime jamais.
+- **Correction** (ADMIN) : un paiement se *modifie* (même numéro, reçu régénéré, traçabilité de qui et quand) ou s'*annule* avec un motif obligatoire. Le numéro reste alors utilisé et le reçu affiche « ANNULÉ ». Seul un paiement **annulé** peut ensuite être supprimé de l'historique depuis la fiche adhérent ; son numéro n'est jamais réutilisé.
 - **Paie du personnel** (ADMIN, menu Club › Paie du personnel) : pour chaque mois, le salaire dû (RG-SALAIRE pour ce mois), le montant déjà versé et le reste. Un salaire peut être versé en une ou plusieurs fois (acomptes), avec un **reçu de salaire** `SAL-AAAA-NNNN` en PDF, un historique par personne et un export CSV.
 - Les préfixes `REC` et `SAL` et la mention en pied de reçu se règlent dans Paramètres › Reçus.
 - **Envoi WhatsApp des reçus** : prévu pour une étape ultérieure. Pour l'instant, le PDF s'ouvre, se télécharge et se joint manuellement.
@@ -184,7 +184,7 @@ Pour chaque point que le cahier des charges ne tranche pas, la règle la plus si
    - en mode « partage égal », un adhérent qui pratique plusieurs sports du même coach compte une fois, avec la part la plus favorable ;
    - la part se saisit en fraction (`1/3`, exacte, c'est la valeur par défaut) ou en pourcentage (`33,33`, `40 %`).
 6. Tout membre du personnel peut être rattaché comme coach à un sport, quelle que soit sa fonction. Le téléphone du personnel est facultatif, mais validé s'il est saisi.
-7. **Suppression** : un adhérent sans paiement se supprime (avec ses périodes, ses inscriptions et sa photo). Un adhérent qui a des paiements enregistrés est conservé pour la comptabilité : il faut le désactiver. De même, un membre du personnel avec des versements ne se supprime pas. Un renouvellement créé par erreur (dernière période, sans paiement) peut être supprimé par l'ADMIN. Les autres éléments se suppriment uniquement s'ils ne sont référencés nulle part ; sinon le serveur refuse et invite à les **désactiver**. La remise « Aucune » ne peut être ni supprimée ni désactivée.
+7. **Suppression** : un adhérent sans paiement actif se supprime (avec ses périodes, ses paiements annulés, ses inscriptions et sa photo). Un adhérent qui a des paiements non annulés est conservé pour la comptabilité : il faut les annuler ou le désactiver. De même, un membre du personnel avec des versements ne se supprime pas. Un renouvellement créé par erreur (dernière période, sans paiement) peut être supprimé par l'ADMIN. Les autres éléments se suppriment uniquement s'ils ne sont référencés nulle part ; sinon le serveur refuse et invite à les **désactiver**. La remise « Aucune » ne peut être ni supprimée ni désactivée.
 8. **Codes** : chaque entité a un compteur qui ne recule jamais. Changer le préfixe ou le nombre de chiffres ne touche que les codes futurs.
 9. **Unicité d'un adhérent** (nom, prénom, téléphone) : la comparaison ignore la casse et les accents. Les numéros sont enregistrés sans espaces.
 10. L'arrondi `P(arrondi)` s'applique au prix total des packs et au prix adhérent.

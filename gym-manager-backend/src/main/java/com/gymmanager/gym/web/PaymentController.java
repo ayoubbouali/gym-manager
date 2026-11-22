@@ -20,7 +20,7 @@ import java.util.Map;
 
 /**
  * Member payments and renewals. Recording a payment / renewing: ADMIN and ACCUEIL.
- * Correcting or cancelling a payment, removing a renewal: ADMIN (see SecurityConfig).
+ * Correcting, cancelling or deleting a cancelled payment, removing a renewal: ADMIN (see SecurityConfig).
  */
 @RestController
 @RequestMapping("/api")
@@ -56,6 +56,12 @@ public class PaymentController {
     public PaymentView cancel(@PathVariable Long id, @RequestBody CancelRequest r, Principal user) {
         service.cancel(id, r.reason(), user.getName());
         return find(id);
+    }
+
+    @DeleteMapping("/payments/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/payments/{id}/receipt.pdf")

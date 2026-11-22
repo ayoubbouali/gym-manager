@@ -326,12 +326,13 @@ class AcceptanceTest {
         send(accueil, "POST", "/api/members", member("Accueil", "Ajout", "0612000007", karate, pack, null, "2026-11-18"))
                 .andExpect(status().isOk());
         assertThat(body(get(accueil, "/api/sports"))).doesNotContain("salary");
-        // ACCUEIL records payments but cannot correct or cancel them
+        // ACCUEIL records payments but cannot correct, cancel or delete them
         long a001 = id("/api/members", "$[?(@.code=='A001')].id");
         long pay = ((Number) read(send(accueil, "POST", "/api/payments", Map.of("memberId", a001, "amount", 100, "method", "ESPECES")), "$.id")).longValue();
         get(accueil, "/api/payments/" + pay + "/receipt.pdf").andExpect(status().isOk());
         send(accueil, "PUT", "/api/payments/" + pay, Map.of("amount", 50, "method", "ESPECES", "paidOn", "2026-11-18")).andExpect(status().isForbidden());
         send(accueil, "POST", "/api/payments/" + pay + "/cancel", Map.of("reason", "x")).andExpect(status().isForbidden());
+        send(accueil, "DELETE", "/api/payments/" + pay, null).andExpect(status().isForbidden());
         send(accueil, "POST", "/api/payroll/payments", Map.of("staffId", 1, "period", "2026-11", "amount", 10, "method", "ESPECES")).andExpect(status().isForbidden());
     }
 
@@ -341,7 +342,9 @@ class AcceptanceTest {
         String a001 = "$[?(@.code=='A001')]";
         long id = id("/api/members", a001 + ".id");
         assertThat((List<Object>) read(get(admin, "/api/members"), a001 + ".paymentStatus")).containsExactly("IMPAYE");
-        String receipt = read(send(admin, "POST", "/api/payments", Map.of("memberId", id, "amount", 200, "method", "ESPECES", "paidOn", "2026-11-15")), "$.receiptNumber");
+        String firstJson = body(send(admin, "POST", "/api/payments", Map.of("memberId", id, "amount", 200, "method", "ESPECES", "paidOn", "2026-11-15")));
+        String receipt = JsonPath.read(firstJson, "$.receiptNumber");
+        long first = ((Number) JsonPath.read(firstJson, "$.id")).longValue();
         assertThat(receipt).isEqualTo("REC-2026-0017"); // the seed used 0001 → 0016
         assertThat((List<Object>) read(get(admin, "/api/members"), a001 + ".paymentStatus")).containsExactly("PARTIEL");
         assertThat((List<Object>) read(get(admin, "/api/members"), a001 + ".balance")).containsExactly(250.0);
@@ -366,8 +369,23 @@ class AcceptanceTest {
         assertThat((List<Object>) read(get(admin, "/api/members"), a001 + ".balance")).containsExactly(250.0);
         get(admin, "/api/payments/" + second + "/receipt.pdf").andExpect(status().isOk());
 
-        // a member with payments is kept for accounting
-        send(admin, "DELETE", "/api/members/" + id, null).andExpect(status().isConflict());
+        // only a cancelled payment can be deleted
+        send(admin, "DELETE", "/api/payments/" + first, null).andExpect(status().isBadRequest());
+        send(admin, "DELETE", "/api/payments/" + second, null).andExpect(status().isNoContent());
+        get(admin, "/api/payments/" + second + "/receipt.pdf").andExpect(status().isNotFound());
+
+        // a member with a non-cancelled payment is kept for accounting
+        send(admin, "DELETE", "/api/members/" + id, null).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("IN_USE"));
+        send(admin, "POST", "/api/payments/" + first + "/cancel", Map.of("reason", "Erreur")).andExpect(status().isOk());
+        send(admin, "DELETE", "/api/members/" + id, null).andExpect(status().isNoContent());
+        assertThat((List<Object>) read(get(admin, "/api/members"), a001 + ".id")).isEmpty();
+
+        // deleted receipt numbers are never reused
+        long karate = id("/api/sports", "$[?(@.name=='Karaté')].id");
+        long pack = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
+        long other = ((Number) read(send(admin, "POST", "/api/members", member("Recu", "Suivant", "0612000008", karate, pack, null, "2026-11-18")), "$.id")).longValue();
+        String next = read(send(admin, "POST", "/api/payments", Map.of("memberId", other, "amount", 10, "method", "ESPECES")), "$.receiptNumber");
+        assertThat(next).isEqualTo("REC-2026-0019");
     }
 
     @Test

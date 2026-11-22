@@ -56,20 +56,34 @@ describe('page Adhérents', () => {
     TestBed.overrideProvider(MatDialog, { useValue: dialog });
   });
 
-  it('le total suit les filtres et s’accorde au singulier', async () => {
+  it('la pastille du total suit les filtres, avec « sur » quand la liste est restreinte', async () => {
     const f = await render();
     const page = f.componentInstance;
+    const pill = () => f.nativeElement.querySelector('.toolbar .count-pill');
     expect(page.count()).toBe('2 adhérents');
+    f.detectChanges();
+    expect(pill().querySelector('.count-pill-num').textContent.trim()).toBe('2');
+    expect(pill().querySelector('.count-pill-of')).toBeNull();
     page.fStatus.set('IMPAYE');
-    expect(page.count()).toBe('1 adhérent');
+    expect(page.count()).toBe('1 sur 2 adhérents');
+    f.detectChanges();
+    expect([...pill().querySelectorAll('[aria-hidden="true"]:not(lucide-icon)')].map((e: Element) => e.textContent!.trim())).toEqual(['1', 'sur 2', 'adhérents']);
+    expect(pill().querySelector('.sr-only').textContent.trim()).toBe('1 sur 2 adhérents');
     page.t.setSearch('introuvable');
-    expect(page.count()).toBe('0 adhérent');
+    expect(page.count()).toBe('0 sur 2 adhérents');
     page.t.setSearch('');
     page.fStatus.set(null);
     page.t.showInactive.set(true);
     expect(page.count()).toBe('3 adhérents');
-    f.detectChanges();
-    expect(f.nativeElement.querySelector('.filters-count').textContent.trim()).toBe('3 adhérents');
+    expect(f.nativeElement.querySelector('.toolbar').firstElementChild).toBe(pill());
+    expect(f.nativeElement.querySelector('.filters-count')).toBeNull();
+  });
+
+  it('le total s’accorde au singulier', async () => {
+    api.members.mockResolvedValue([rows[0]]);
+    const f = await render();
+    expect(f.componentInstance.count()).toBe('1 adhérent');
+    expect(f.nativeElement.querySelector('.count-pill-unit').textContent.trim()).toBe('adhérent');
   });
 
   it('Réinitialiser remet tous les filtres à l’état initial sans toucher au tri', async () => {
@@ -92,13 +106,26 @@ describe('page Adhérents', () => {
     expect(page.count()).toBe('2 adhérents');
   });
 
-  it('le bouton Réinitialiser est grisé à l’état initial', async () => {
+  it('l’icône Réinitialiser n’apparaît qu’avec un filtre actif, au bout de la ligne des filtres, avec le nombre de filtres', async () => {
     const f = await render();
-    const button = () => [...f.nativeElement.querySelectorAll('.filters button')].find((b: HTMLButtonElement) => b.textContent!.includes('Réinitialiser')) as HTMLButtonElement;
-    expect(button().disabled).toBe(true);
-    f.componentInstance.fPack.set(1);
+    const page = f.componentInstance;
+    const reset = () => f.nativeElement.querySelector('.filters .reset-fab') as HTMLButtonElement | null;
+    expect(reset()).toBeNull();
+    page.fPack.set(1);
     f.detectChanges();
-    expect(button().disabled).toBe(false);
+    expect(reset()).not.toBeNull();
+    expect(reset()!.querySelector('.reset-badge')!.textContent!.trim()).toBe('1');
+    expect(reset()!.getAttribute('aria-label')).toBe('Réinitialiser les filtres');
+    expect(f.nativeElement.querySelector('.filters').lastElementChild).toBe(reset());
+    page.t.setSearch('nom'); page.t.showInactive.set(true);
+    f.detectChanges();
+    expect(reset()!.querySelector('.reset-badge')!.textContent!.trim()).toBe('3');
+    reset()!.click();
+    f.detectChanges();
+    await f.whenStable();
+    expect(page.filtersAtDefault()).toBe(true);
+    expect(reset()).toBeNull();
+    expect(document.activeElement).toBe(f.nativeElement.querySelector('.search input'));
   });
 
   it('l’icône Note n’apparaît que si la note existe, avec la note en infobulle', async () => {

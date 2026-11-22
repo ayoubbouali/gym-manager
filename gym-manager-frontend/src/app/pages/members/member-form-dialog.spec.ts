@@ -1,10 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { signal } from '@angular/core';
+import { importProvidersFrom, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { LucideAngularModule } from 'lucide-angular';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
+import { provideFrDates } from '../../core/date-adapter';
+import { APP_ICONS } from '../../core/icons';
 import { NotifyService } from '../../core/notify.service';
 import { MemberFormDialog } from './member-form-dialog';
 
@@ -27,6 +30,8 @@ describe('popup adhérent : message d’erreur', () => {
     TestBed.configureTestingModule({
       imports: [MemberFormDialog],
       providers: [
+        provideFrDates(),
+        importProvidersFrom(LucideAngularModule.pick(APP_ICONS)),
         { provide: ApiService, useValue: api },
         { provide: MatDialogRef, useValue: { close: vi.fn() } },
         { provide: MAT_DIALOG_DATA, useValue: {} },

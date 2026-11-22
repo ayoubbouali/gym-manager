@@ -18,6 +18,16 @@ html {
   @include mat.dialog-overrides((container-shape: 18px, container-color: var(--card)));
   @include mat.form-field-overrides((outlined-container-shape: 10px));
   @include mat.snack-bar-overrides((container-shape: 12px));
+  @include mat.datepicker-overrides((
+    calendar-container-shape: var(--radius), calendar-container-background-color: var(--card), calendar-container-text-color: var(--ink),
+    calendar-container-elevation-shadow: var(--shadow-lg), calendar-header-divider-color: var(--line),
+    calendar-date-text-color: var(--ink), calendar-body-label-text-color: var(--muted), calendar-header-text-color: var(--muted),
+    calendar-period-button-text-color: var(--ink), calendar-period-button-icon-color: var(--muted), calendar-navigation-button-icon-color: var(--muted),
+    calendar-date-selected-state-background-color: var(--brand), calendar-date-selected-state-text-color: var(--on-brand),
+    calendar-date-today-outline-color: var(--brand), calendar-date-today-selected-state-outline-color: var(--on-brand),
+    calendar-date-today-disabled-state-outline-color: var(--line-strong), calendar-date-disabled-state-text-color: var(--faint),
+    calendar-date-hover-state-background-color: var(--hover), calendar-date-focus-state-background-color: var(--brand-soft),
+  ));
 }
 html.dark { color-scheme: dark; }
 
@@ -190,6 +200,15 @@ a.kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 .reset-out { animation: reset-pop .14s ease-in reverse forwards; }
 @keyframes reset-pop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .reset-in, .reset-out { animation: none; } .reset-fab:hover { transform: none; } }
+/* ---------- date field (app-date-field) ---------- */
+.date-field { display: block; min-width: 0; }
+.toolbar > .date-field, .filters > .date-field { width: 180px; }
+.mat-datepicker-toggle lucide-icon { color: var(--muted); }
+.mat-datepicker-toggle-active lucide-icon, .date-field .mat-focused .mat-datepicker-toggle lucide-icon { color: var(--brand); }
+.app-datepicker.mat-datepicker-content { border: 1px solid var(--line); }
+.app-datepicker .mat-calendar-header { padding-top: 10px; }
+.app-datepicker .mat-calendar-body-today:not(.mat-calendar-body-selected) { font-weight: 700; color: var(--brand); }
+.app-datepicker .mat-calendar-body-selected { font-weight: 700; }
 /* compact form fields in toolbars */
 .toolbar, .filters, .card-head, .add-row, .table { @include mat.theme((density: -4)); }
 .search {

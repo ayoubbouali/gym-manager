@@ -13,12 +13,13 @@ import { ConfigService } from '../../core/config.service';
 import { FrDatePipe, MoneyPipe } from '../../core/format';
 import { DiscountView, MemberPreview, MemberView, PackView, SportView } from '../../core/models';
 import { NotifyService, apiError, errorMessage } from '../../core/notify.service';
+import { DateField } from '../../shared/date-field';
 import { MultiSelect, SelectOption } from '../../shared/multi-select';
 
 @Component({
   selector: 'app-member-form',
   imports: [ReactiveFormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatButtonToggleModule, MultiSelect, MoneyPipe, FrDatePipe],
+    MatButtonToggleModule, MultiSelect, DateField, MoneyPipe, FrDatePipe],
   template: `
     <h2 mat-dialog-title>{{ member ? 'Modifier ' + member.code + ' — ' + member.firstName + ' ' + member.lastName : 'Nouvel adhérent' }}</h2>
     <mat-dialog-content #content>
@@ -27,7 +28,7 @@ import { MultiSelect, SelectOption } from '../../shared/multi-select';
         <mat-form-field><mat-label>Nom</mat-label><input matInput formControlName="lastName" required /></mat-form-field>
         <mat-form-field><mat-label>Prénom</mat-label><input matInput formControlName="firstName" required /></mat-form-field>
         <mat-form-field><mat-label>Téléphone</mat-label><input matInput formControlName="phone" required inputmode="tel" [placeholder]="config.phoneExample()" /></mat-form-field>
-        <mat-form-field><mat-label>Date de naissance</mat-label><input matInput type="date" formControlName="birthDate" /></mat-form-field>
+        <app-date-field label="Date de naissance" formControlName="birthDate" />
         <app-multi-select class="span-2" label="Sport(s) *" formControlName="sportIds" [options]="sportOptions()" />
         <mat-form-field class="span-2">
           <mat-label>Type d'abonnement</mat-label>
@@ -47,7 +48,7 @@ import { MultiSelect, SelectOption } from '../../shared/multi-select';
             }
           </mat-select>
         </mat-form-field>
-        <mat-form-field><mat-label>Date d'inscription</mat-label><input matInput type="date" formControlName="registrationDate" required /></mat-form-field>
+        <app-date-field label="Date d'inscription" formControlName="registrationDate" required />
         <div class="field-block">
           <span class="field-label">Assurance</span>
           <mat-button-toggle-group formControlName="insurance" aria-label="Assurance">

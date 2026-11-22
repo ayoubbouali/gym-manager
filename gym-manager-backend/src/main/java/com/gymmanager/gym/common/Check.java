@@ -1,6 +1,7 @@
 package com.gymmanager.gym.common;
 
 import com.gymmanager.gym.rules.Rules;
+import com.gymmanager.gym.settings.RegionalCatalog;
 
 import java.math.BigDecimal;
 import java.util.Collection;
@@ -40,14 +41,25 @@ public final class Check {
         return value;
     }
 
-    public static String phone(String value, String regex, String field, boolean required) {
-        String v = value == null ? "" : value.replaceAll("[\\s.-]", "");
-        if (v.isEmpty()) {
+    /** Like {@link #phone(String, String, String, boolean)}, but an unchanged stored number is kept as is, never revalidated. */
+    public static String phone(String value, String current, String dialCode, String field, boolean required) {
+        if (current != null && !current.isEmpty() && value != null && value.replaceAll("[\\s.-]", "").equals(current)) return current;
+        return phone(value, dialCode, field, required);
+    }
+
+    /** Valid fixed or mobile number for the club's dial code, stored in national format, digits only. */
+    public static String phone(String value, String dialCode, String field, boolean required) {
+        if (value == null || value.replaceAll("[\\s.-]", "").isEmpty()) {
             if (required) throw ApiException.invalid(field, "Le champ « Téléphone » est obligatoire.");
             return "";
         }
-        if (!v.matches(regex)) throw ApiException.invalid(field, "Numéro de téléphone invalide (format attendu : " + regex + ").");
-        return v;
+        String national = RegionalCatalog.normalizePhone(value, dialCode);
+        if (national == null) {
+            String example = RegionalCatalog.phoneExample(dialCode);
+            throw ApiException.invalid(field, "Numéro de téléphone invalide pour l'indicatif +" + dialCode
+                    + (example.isEmpty() ? "" : " (ex. : " + example + ")") + ".");
+        }
+        return national;
     }
 
     /** Case- and accent-insensitive uniqueness of a name among other rows. */

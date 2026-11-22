@@ -44,7 +44,7 @@ public class SettingsService {
         Rules.Share share = Rules.parseShare(s.get("salary.share"));
         return new ClubConfig(
                 s.get("club.name"), s.get("club.address"), s.get("club.phone"),
-                s.get("regional.currency"), ZoneId.of(s.get("regional.timezone")), s.get("regional.dialCode"), s.get("regional.phoneRegex"),
+                s.get("regional.currency"), s.get("regional.currencyCode"), ZoneId.of(s.get("regional.timezone")), s.get("regional.dialCode"),
                 codes,
                 Boolean.parseBoolean(s.get("subscription.cumulative")), Rules.Rounding.fromSetting(s.get("subscription.rounding")),
                 Integer.parseInt(s.get("alerts.soonDays")), Integer.parseInt(s.get("alerts.followDays")),

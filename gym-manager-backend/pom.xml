@@ -46,6 +46,12 @@
 			<artifactId>openpdf</artifactId>
 			<version>2.2.2</version>
 		</dependency>
+		<!-- phone number validation for the club's dial code -->
+		<dependency>
+			<groupId>com.googlecode.libphonenumber</groupId>
+			<artifactId>libphonenumber</artifactId>
+			<version>9.0.44</version>
+		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>

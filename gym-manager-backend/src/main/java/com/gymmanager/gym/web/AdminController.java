@@ -6,6 +6,7 @@ import com.gymmanager.gym.repository.SettingRepository;
 import com.gymmanager.gym.security.UserService;
 import com.gymmanager.gym.security.UserService.UserView;
 import com.gymmanager.gym.service.InsightService;
+import com.gymmanager.gym.settings.RegionalCatalog;
 import com.gymmanager.gym.settings.SettingDef;
 import com.gymmanager.gym.settings.SettingsCatalog;
 import com.gymmanager.gym.settings.SettingsService;
@@ -53,16 +54,19 @@ public class AdminController {
 
     // ---------------------------------------------------------------- settings
 
-    /** Secret values (Brevo API key) are always "" in {@code values}; {@code secretsSet} tells whether one is stored. */
+    /**
+     * Secret values (Brevo API key) are always "" in {@code values}; {@code secretsSet} tells whether one is stored.
+     * {@code regional} holds the lists offered by the Régional tab.
+     */
     public record SettingsPayload(Map<String, String> groups, List<SettingDef> definitions, Map<String, String> values,
-                                  Map<String, Boolean> secretsSet, Map<String, String> nextCodes) {
+                                  Map<String, Boolean> secretsSet, Map<String, String> nextCodes, RegionalCatalog.Options regional) {
     }
 
     @GetMapping("/settings")
     public SettingsPayload getSettings() {
         Map<String, String> next = new LinkedHashMap<>();
         SettingsCatalog.CODE_ENTITIES.forEach(e -> next.put(e, codes.peek(e)));
-        return new SettingsPayload(SettingsCatalog.GROUPS, SettingsCatalog.ALL, settings.masked(), settings.secretsSet(), next);
+        return new SettingsPayload(SettingsCatalog.GROUPS, SettingsCatalog.ALL, settings.masked(), settings.secretsSet(), next, RegionalCatalog.OPTIONS);
     }
 
     @PutMapping("/settings")

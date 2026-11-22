@@ -85,4 +85,29 @@ class SettingsCatalogTest {
         assertThat(error("mail.brevo.apiKey", "xkeysib-abc")).isNull();
         assertThat(error("mail.brevo.apiKey", "xkeysib abc")).isNotNull().doesNotContain("xkeysib");
     }
+
+    @Test
+    @DisplayName("Onglet Régional : code devise MAD, symbole DH, plus de format de téléphone par expression régulière")
+    void regionalGroup() {
+        assertThat(SettingsCatalog.ALL.stream().filter(d -> d.group().equals("regional")).map(SettingDef::key))
+                .containsExactly("regional.currencyCode", "regional.currency", "regional.timezone", "regional.dialCode");
+        assertThat(def("regional.currencyCode").defaultValue()).isEqualTo("MAD");
+        assertThat(def("regional.currency").defaultValue()).isEqualTo("DH");
+        assertThat(def("regional.currency").label()).isEqualTo("Symbole affiché");
+        assertThat(SettingsCatalog.find("regional.phoneRegex")).isEmpty();
+        assertThat(SettingsCatalog.ALL).extracting(SettingDef::type).doesNotContain("regex", "digits");
+    }
+
+    @Test
+    @DisplayName("Onglet Régional : devise, fuseau et indicatif limités aux listes officielles, message nommant le champ")
+    void regionalLists() {
+        assertThat(error("regional.currencyCode", "EUR")).isNull();
+        assertThat(error("regional.timezone", "Europe/Paris")).isNull();
+        assertThat(error("regional.timezone", "UTC")).isNull();
+        assertThat(error("regional.dialCode", "33")).isNull();
+        assertThat(error("regional.currencyCode", "XYZ")).startsWith("« Devise »").contains("XYZ");
+        assertThat(error("regional.timezone", "Mars/Base")).startsWith("« Fuseau horaire »").contains("Mars/Base");
+        assertThat(error("regional.dialCode", "999")).startsWith("« Indicatif téléphonique international »").contains("+999");
+        assertThat(error("regional.dialCode", "")).contains("obligatoire");
+    }
 }

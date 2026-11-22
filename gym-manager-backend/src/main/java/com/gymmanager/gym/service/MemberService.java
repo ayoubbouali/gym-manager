@@ -48,7 +48,7 @@ public class MemberService {
         ClubConfig cfg = settings.config();
         String last = Check.text(r.lastName(), "lastName", "Nom", 80, true);
         String first = Check.text(r.firstName(), "firstName", "Prénom", 80, true);
-        String phone = Check.phone(r.phone(), cfg.phoneRegex(), "phone", true);
+        String phone = Check.phone(r.phone(), m.getPhone(), cfg.dialCode(), "phone", true);
         LocalDate reg = Check.required(r.registrationDate(), "registrationDate", "Date d'inscription");
         if (r.birthDate() != null && r.birthDate().isAfter(cfg.today())) {
             throw ApiException.invalid("birthDate", "La date de naissance ne peut pas être dans le futur.");

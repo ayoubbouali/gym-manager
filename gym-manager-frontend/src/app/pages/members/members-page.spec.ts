@@ -87,18 +87,35 @@ describe('page Adhérents', () => {
     expect(f.nativeElement.querySelector('.count-pill-unit').textContent.trim()).toBe('adhérent');
   });
 
+  it('les filtres sont Sport, Statut, Assurance puis « Avec une note », sans Pack', async () => {
+    const f = await render();
+    const labels = [...f.nativeElement.querySelectorAll('.filters mat-label, .filters mat-slide-toggle')]
+      .map((e) => (e as HTMLElement).textContent!.trim());
+    expect(labels).toEqual(['Sport', 'Statut', 'Assurance', 'Avec une note', 'Afficher les inactifs']);
+    expect(api.packs).not.toHaveBeenCalled();
+  });
+
+  it('« Avec une note » ne garde que les adhérents dont la note n’est pas vide, et compte comme un filtre', async () => {
+    const f = await render();
+    const page = f.componentInstance;
+    page.t.showInactive.set(true);
+    page.fNote.set(true);
+    expect(page.t.filtered().map((m) => m.code)).toEqual(['A001']);
+    expect(page.activeFilters()).toBe(2);
+  });
+
   it('Réinitialiser remet tous les filtres à l’état initial sans toucher au tri', async () => {
     const f = await render();
     const page = f.componentInstance;
     expect(page.filtersAtDefault()).toBe(true);
     page.t.toggleSort('price');
-    page.fSport.set(1); page.fPack.set(1); page.fStatus.set('PAYE'); page.fInsurance.set('IMPAYE');
+    page.fSport.set(1); page.fStatus.set('PAYE'); page.fInsurance.set('IMPAYE'); page.fNote.set(true);
     page.t.showInactive.set(true); page.t.setSearch('nom'); page.t.pageIndex.set(2);
     expect(page.filtersAtDefault()).toBe(false);
 
     page.resetFilters();
 
-    expect([page.fSport(), page.fPack(), page.fStatus(), page.fInsurance()]).toEqual([null, null, null, null]);
+    expect([page.fSport(), page.fStatus(), page.fInsurance(), page.fNote()]).toEqual([null, null, null, false]);
     expect(page.t.showInactive()).toBe(false);
     expect(page.t.search()).toBe('');
     expect(page.t.pageIndex()).toBe(0);
@@ -112,7 +129,7 @@ describe('page Adhérents', () => {
     const page = f.componentInstance;
     const reset = () => f.nativeElement.querySelector('.filters .reset-fab') as HTMLButtonElement | null;
     expect(reset()).toBeNull();
-    page.fPack.set(1);
+    page.fStatus.set('PAYE');
     f.detectChanges();
     expect(reset()).not.toBeNull();
     expect(reset()!.querySelector('.reset-badge')!.textContent!.trim()).toBe('1');

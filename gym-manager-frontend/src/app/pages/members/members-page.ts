@@ -14,7 +14,7 @@ import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
 import { csvNumber, exportCsv } from '../../core/csv';
 import { FrDatePipe, MoneyPipe, PAYMENT_STATUS_LABELS, formatDate } from '../../core/format';
-import { MemberView, PackView, SportView } from '../../core/models';
+import { MemberView, SportView } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ConfirmService } from '../../shared/confirm.service';
 import { DaysLeft, PaidBadge, SportChip } from '../../shared/badges';
@@ -25,6 +25,8 @@ import { MemberPreview } from './member-preview';
 
 /** Shared by the table and the count pill, so the filtered count can never exceed the base. */
 const isActive = (m: MemberView) => m.active;
+/** Same rule as the Note column: a blank note does not count. */
+const hasNote = (m: MemberView) => !!m.notes.trim();
 
 /** Hover delay before the preview card opens, so sweeping the mouse across the ID column does not flicker. */
 export const PREVIEW_DELAY_MS = 300;
@@ -65,12 +67,6 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
           @for (s of sports(); track s.id) {<mat-option [value]="s.id">{{ s.name }}</mat-option>}
         </mat-select>
       </mat-form-field>
-      <mat-form-field subscriptSizing="dynamic"><mat-label>Pack</mat-label>
-        <mat-select [ngModel]="fPack()" (ngModelChange)="fPack.set($event); t.resetPage()">
-          <mat-option [value]="null">Tous</mat-option>
-          @for (p of packs(); track p.id) {<mat-option [value]="p.id">{{ p.name }}</mat-option>}
-        </mat-select>
-      </mat-form-field>
       <mat-form-field subscriptSizing="dynamic"><mat-label>Statut</mat-label>
         <mat-select [ngModel]="fStatus()" (ngModelChange)="fStatus.set($event); t.resetPage()">
           <mat-option [value]="null">Tous</mat-option><mat-option value="PAYE">Payé</mat-option><mat-option value="PARTIEL">Partiel</mat-option><mat-option value="IMPAYE">Impayé</mat-option>
@@ -81,6 +77,7 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
           <mat-option [value]="null">Toutes</mat-option><mat-option value="PAYE">Payé</mat-option><mat-option value="IMPAYE">Impayé</mat-option>
         </mat-select>
       </mat-form-field>
+      <mat-slide-toggle [ngModel]="fNote()" (ngModelChange)="fNote.set($event); t.resetPage()">Avec une note</mat-slide-toggle>
       <mat-slide-toggle [ngModel]="t.showInactive()" (ngModelChange)="t.showInactive.set($event)">Afficher les inactifs</mat-slide-toggle>
       @if (!filtersAtDefault()) {
         <button type="button" class="reset-fab" animate.enter="reset-in" animate.leave="reset-out" (click)="resetFilters(); searchInput.focus()"
@@ -132,7 +129,7 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
               <td><app-days [days]="m.remainingDays" /></td>
               <td><app-paid-badge [value]="m.insurance" /></td>
               <td>
-                @if (m.notes.trim()) {
+                @if (hasNote(m)) {
                   <button class="icon-btn" (click)="note(m)" [matTooltip]="m.notes" matTooltipClass="note-tooltip" aria-label="Note de {{ m.code }}"><lucide-icon name="sticky-note" [size]="16" /></button>
                 }
               </td>
@@ -159,6 +156,7 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
   `,
 })
 export class MembersPage {
+  readonly hasNote = hasNote;
   private api = inject(ApiService);
   private dialog = inject(MatDialog);
   private confirm = inject(ConfirmService);
@@ -166,12 +164,11 @@ export class MembersPage {
   private config = inject(ConfigService);
 
   sports = signal<SportView[]>([]);
-  packs = signal<PackView[]>([]);
   loaded = signal(false);
   fSport = signal<number | null>(null);
-  fPack = signal<number | null>(null);
   fStatus = signal<string | null>(null);
   fInsurance = signal<string | null>(null);
+  fNote = signal(false);
 
   t = new TableState<MemberView>({
     searchText: (m) => `${m.code} ${m.lastName} ${m.firstName} ${m.phone}`,
@@ -183,15 +180,15 @@ export class MembersPage {
     defaultSort: { key: 'code', dir: 'asc' },
     isActive,
     filter: () => {
-      const [s, p, st, ins] = [this.fSport(), this.fPack(), this.fStatus(), this.fInsurance()];
-      return (m) => (!s || m.sportIds.includes(s)) && (!p || m.packId === p) && (!st || m.paymentStatus === st) && (!ins || m.insurance === ins);
+      const [s, st, ins, note] = [this.fSport(), this.fStatus(), this.fInsurance(), this.fNote()];
+      return (m) => (!s || m.sportIds.includes(s)) && (!st || m.paymentStatus === st) && (!ins || m.insurance === ins) && (!note || hasNote(m));
     },
     pageSize: computed(() => this.config.pageSize()),
   });
 
-  /** Search, each select and the inactive toggle count as one active filter each. */
-  activeFilters = computed(() => [!!this.t.search(), this.t.showInactive(), this.fSport() !== null, this.fPack() !== null,
-    this.fStatus() !== null, this.fInsurance() !== null].filter(Boolean).length);
+  /** Search, each select and each toggle (note, inactive) count as one active filter each. */
+  activeFilters = computed(() => [!!this.t.search(), this.t.showInactive(), this.fSport() !== null,
+    this.fStatus() !== null, this.fInsurance() !== null, this.fNote()].filter(Boolean).length);
   filtersAtDefault = computed(() => this.activeFilters() === 0);
 
   /** Rows under the current inactive toggle, before search and selects: the filtered count never exceeds it. */
@@ -216,10 +213,7 @@ export class MembersPage {
     });
     inject(DestroyRef).onDestroy(() => clearTimeout(this.previewTimer));
     this.load();
-    Promise.all([this.api.sports(), this.api.packs()]).then(([s, p]) => {
-      this.sports.set(s);
-      this.packs.set(p);
-    });
+    this.api.sports().then((s) => this.sports.set(s));
   }
 
   async load(): Promise<void> {
@@ -253,12 +247,12 @@ export class MembersPage {
     if (await openMemberForm(this.dialog, m)) this.load();
   }
 
-  /** Clears the search, the selects and the inactive toggle; the sort is kept. */
+  /** Clears the search, the selects and the toggles; the sort is kept. */
   resetFilters(): void {
     this.fSport.set(null);
-    this.fPack.set(null);
     this.fStatus.set(null);
     this.fInsurance.set(null);
+    this.fNote.set(false);
     this.t.showInactive.set(false);
     this.t.setSearch('');
   }

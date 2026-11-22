@@ -1,10 +1,14 @@
 import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CdkConnectedOverlay, ConnectedPosition } from '@angular/cdk/overlay';
 import { CdkScrollable } from '@angular/cdk/scrolling';
+import { CdkDrag, CdkDropList } from '@angular/cdk/drag-drop';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
+import { MatPseudoCheckbox } from '@angular/material/core';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
@@ -14,17 +18,25 @@ import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
 import { csvNumber, exportCsv } from '../../core/csv';
 import { FrDatePipe, MoneyPipe, PAYMENT_STATUS_LABELS, formatDate } from '../../core/format';
-import { MemberView, PackView, SportView } from '../../core/models';
+import { MemberView, Situation, SportView } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ConfirmService } from '../../shared/confirm.service';
-import { DaysLeft, PaidBadge, SportChip } from '../../shared/badges';
+import { DaysLeft, PaidBadge, SituationBadge, SportChip } from '../../shared/badges';
 import { Pager, SortHeader, TableState } from '../../shared/table';
 import { openMemberForm } from './member-form-dialog';
 import { openMemberNote } from './member-note-dialog';
+import { MemberColumnId, MemberColumns } from './member-columns';
 import { MemberPreview } from './member-preview';
 
 /** Shared by the table and the count pill, so the filtered count can never exceed the base. */
 const isActive = (m: MemberView) => m.active;
+/** Same rule as the Note column: a blank note does not count. */
+const hasNote = (m: MemberView) => !!m.notes.trim();
+
+const DEFAULT_SORT = { key: 'code', dir: 'asc' } as const;
+
+/** Most urgent first when sorting the Situation column. */
+const SITUATION_RANK: Record<Situation, number> = { EXPIRED: 0, SOON: 1, FOLLOW: 2, OK: 3 };
 
 /** Hover delay before the preview card opens, so sweeping the mouse across the ID column does not flicker. */
 export const PREVIEW_DELAY_MS = 300;
@@ -41,7 +53,8 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
 @Component({
   selector: 'app-members',
   imports: [RouterLink, FormsModule, MatButtonModule, MatSelectModule, MatFormFieldModule, MatSlideToggleModule, MatTooltipModule,
-    LucideAngularModule, SortHeader, Pager, SportChip, PaidBadge, DaysLeft, MoneyPipe, FrDatePipe, CdkConnectedOverlay, CdkScrollable, MemberPreview],
+    MatMenuModule, MatPseudoCheckbox, MatDividerModule, LucideAngularModule, SortHeader, Pager, SportChip, PaidBadge, SituationBadge, DaysLeft, MoneyPipe,
+    FrDatePipe, CdkConnectedOverlay, CdkScrollable, CdkDropList, CdkDrag, MemberPreview],
   template: `
     <div class="toolbar">
       <div class="count-pill" role="status">
@@ -55,6 +68,17 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
         <lucide-icon name="search" [size]="18" />
         <input #searchInput type="search" placeholder="Rechercher par ID, nom, prénom, téléphone…" [ngModel]="t.search()" (ngModelChange)="t.setSearch($event)" aria-label="Rechercher un adhérent" />
       </label>
+      <button mat-stroked-button [matMenuTriggerFor]="columnsMenu"><lucide-icon name="columns-3" [size]="16" /> Colonnes</button>
+      <mat-menu #columnsMenu="matMenu" xPosition="before" class="columns-menu">
+        @for (c of cols.all(); track c.id) {
+          <button mat-menu-item role="menuitemcheckbox" [attr.aria-checked]="cols.isVisible(c.id)" [disabled]="!c.hideable"
+                  (click)="$event.stopPropagation(); toggleColumn(c.id)">
+            <mat-pseudo-checkbox [state]="cols.isVisible(c.id) ? 'checked' : 'unchecked'" [disabled]="!c.hideable" />{{ c.label }}
+          </button>
+        }
+        <mat-divider />
+        <button mat-menu-item (click)="resetColumns()"><lucide-icon name="rotate-ccw" [size]="16" /> Affichage par défaut</button>
+      </mat-menu>
       <button mat-stroked-button (click)="csv()"><lucide-icon name="download" [size]="16" /> CSV</button>
       <button mat-flat-button (click)="add()"><lucide-icon name="user-plus" [size]="16" /> Ajouter un adhérent</button>
     </div>
@@ -63,12 +87,6 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
         <mat-select [ngModel]="fSport()" (ngModelChange)="fSport.set($event); t.resetPage()">
           <mat-option [value]="null">Tous</mat-option>
           @for (s of sports(); track s.id) {<mat-option [value]="s.id">{{ s.name }}</mat-option>}
-        </mat-select>
-      </mat-form-field>
-      <mat-form-field subscriptSizing="dynamic"><mat-label>Pack</mat-label>
-        <mat-select [ngModel]="fPack()" (ngModelChange)="fPack.set($event); t.resetPage()">
-          <mat-option [value]="null">Tous</mat-option>
-          @for (p of packs(); track p.id) {<mat-option [value]="p.id">{{ p.name }}</mat-option>}
         </mat-select>
       </mat-form-field>
       <mat-form-field subscriptSizing="dynamic"><mat-label>Statut</mat-label>
@@ -81,6 +99,7 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
           <mat-option [value]="null">Toutes</mat-option><mat-option value="PAYE">Payé</mat-option><mat-option value="IMPAYE">Impayé</mat-option>
         </mat-select>
       </mat-form-field>
+      <mat-slide-toggle [ngModel]="fNote()" (ngModelChange)="fNote.set($event); t.resetPage()">Avec une note</mat-slide-toggle>
       <mat-slide-toggle [ngModel]="t.showInactive()" (ngModelChange)="t.showInactive.set($event)">Afficher les inactifs</mat-slide-toggle>
       @if (!filtersAtDefault()) {
         <button type="button" class="reset-fab" animate.enter="reset-in" animate.leave="reset-out" (click)="resetFilters(); searchInput.focus()"
@@ -94,48 +113,49 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
     <div class="table-wrap" cdkScrollable>
       <table class="table">
         <thead>
-          <tr>
-            <th [attr.aria-sort]="t.ariaSort('code')"><app-sort [table]="t" key="code">ID</app-sort></th>
-            <th [attr.aria-sort]="t.ariaSort('lastName')"><app-sort [table]="t" key="lastName">Nom</app-sort></th>
-            <th [attr.aria-sort]="t.ariaSort('firstName')"><app-sort [table]="t" key="firstName">Prénom</app-sort></th>
-            <th>Téléphone</th>
-            <th [attr.aria-sort]="t.ariaSort('birthDate')"><app-sort [table]="t" key="birthDate">Naissance</app-sort></th>
-            <th>Sport(s)</th>
-            <th [attr.aria-sort]="t.ariaSort('registrationDate')"><app-sort [table]="t" key="registrationDate">Inscription</app-sort></th>
-            <th [attr.aria-sort]="t.ariaSort('pack')"><app-sort [table]="t" key="pack">Abonnement</app-sort></th>
-            <th class="num" [attr.aria-sort]="t.ariaSort('price')"><app-sort [table]="t" key="price">Prix</app-sort></th>
-            <th>Remise</th>
-            <th [attr.aria-sort]="t.ariaSort('status')"><app-sort [table]="t" key="status">Statut</app-sort></th>
-            <th class="num" [attr.aria-sort]="t.ariaSort('balance')"><app-sort [table]="t" key="balance">Reste à payer</app-sort></th>
-            <th [attr.aria-sort]="t.ariaSort('days')"><app-sort [table]="t" key="days">Reste jours</app-sort></th>
-            <th [attr.aria-sort]="t.ariaSort('insurance')"><app-sort [table]="t" key="insurance">Assurance</app-sort></th>
-            <th>Note</th>
+          <tr cdkDropList cdkDropListOrientation="horizontal" (cdkDropListDropped)="cols.move($event.previousIndex, $event.currentIndex)">
+            @for (c of cols.visible(); track c.id) {
+              <th cdkDrag cdkDragLockAxis="x" cdkDragPreviewClass="col-drag-preview" [class.num]="c.num" [attr.data-col]="c.id"
+                  [attr.aria-sort]="c.sort ? t.ariaSort(c.sort) : null">
+                @if (c.sort) {<app-sort [table]="t" [key]="c.sort">{{ c.label }}</app-sort>} @else { {{ c.label }} }
+              </th>
+            }
             <th><span class="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>
           @for (m of t.page(); track m.id) {
             <tr [class.inactive]="!m.active">
-              <td><a class="code-link" [routerLink]="['/fiche', m.code]" [attr.aria-describedby]="preview()?.member?.id === m.id ? previewId : null"
-                     (mouseenter)="openPreview(m, $event)" (focus)="openPreview(m, $event)" (mouseleave)="closePreview()" (blur)="closePreview()" (keydown.escape)="closePreview()">{{ m.code }}</a></td>
-              <td class="strong">{{ m.lastName }}</td>
-              <td>{{ m.firstName }}</td>
-              <td>{{ m.phone }}</td>
-              <td>{{ m.birthDate | frDate }}</td>
-              <td>@for (s of m.sports; track s.id) {<app-sport-chip [name]="s.name" [color]="s.color" [inactive]="!s.active" />}</td>
-              <td>{{ m.registrationDate | frDate }}</td>
-              <td>{{ m.pack.name }}</td>
-              <td class="num">{{ m.price | money }}</td>
-              <td>{{ m.discount.name }}</td>
-              <td><app-paid-badge [value]="m.paymentStatus" /></td>
-              <td class="num" [class.red]="m.balance > 0">{{ m.balance > 0 ? (m.balance | money) : '—' }}</td>
-              <td><app-days [days]="m.remainingDays" /></td>
-              <td><app-paid-badge [value]="m.insurance" /></td>
-              <td>
-                @if (m.notes.trim()) {
-                  <button class="icon-btn" (click)="note(m)" [matTooltip]="m.notes" matTooltipClass="note-tooltip" aria-label="Note de {{ m.code }}"><lucide-icon name="sticky-note" [size]="16" /></button>
+              @for (c of cols.visible(); track c.id) {
+                @switch (c.id) {
+                  @case ('code') {
+                    <td><a class="code-link" [routerLink]="['/fiche', m.code]" [attr.aria-describedby]="preview()?.member?.id === m.id ? previewId : null"
+                           (mouseenter)="openPreview(m, $event)" (focus)="openPreview(m, $event)" (mouseleave)="closePreview()" (blur)="closePreview()" (keydown.escape)="closePreview()">{{ m.code }}</a></td>
+                  }
+                  @case ('lastName') {<td class="strong">{{ m.lastName }}</td>}
+                  @case ('firstName') {<td>{{ m.firstName }}</td>}
+                  @case ('phone') {<td>{{ m.phone }}</td>}
+                  @case ('birthDate') {<td>{{ m.birthDate | frDate }}</td>}
+                  @case ('sports') {<td>@for (s of m.sports; track s.id) {<app-sport-chip [name]="s.name" [color]="s.color" [inactive]="!s.active" />}</td>}
+                  @case ('registrationDate') {<td>{{ m.registrationDate | frDate }}</td>}
+                  @case ('pack') {<td>{{ m.pack.name }}</td>}
+                  @case ('price') {<td class="num">{{ m.price | money }}</td>}
+                  @case ('discount') {<td>{{ m.discount.name }}</td>}
+                  @case ('status') {<td><app-paid-badge [value]="m.paymentStatus" /></td>}
+                  @case ('paid') {<td class="num">{{ m.paid | money }}</td>}
+                  @case ('balance') {<td class="num" [class.red]="m.balance > 0">{{ m.balance > 0 ? (m.balance | money) : '—' }}</td>}
+                  @case ('days') {<td><app-days [days]="m.remainingDays" /></td>}
+                  @case ('situation') {<td><app-situation-badge [value]="m.situation" /></td>}
+                  @case ('insurance') {<td><app-paid-badge [value]="m.insurance" /></td>}
+                  @case ('note') {
+                    <td>
+                      @if (hasNote(m)) {
+                        <button class="icon-btn" (click)="note(m)" [matTooltip]="m.notes" matTooltipClass="note-tooltip" aria-label="Note de {{ m.code }}"><lucide-icon name="sticky-note" [size]="16" /></button>
+                      }
+                    </td>
+                  }
                 }
-              </td>
+              }
               <td class="actions">
                 <button class="icon-btn" (click)="edit(m)" matTooltip="Modifier" aria-label="Modifier {{ m.code }}"><lucide-icon name="pencil" [size]="16" /></button>
                 <button class="icon-btn" (click)="toggle(m)" [matTooltip]="m.active ? 'Désactiver' : 'Réactiver'" [attr.aria-label]="(m.active ? 'Désactiver ' : 'Réactiver ') + m.code"><lucide-icon name="power" [size]="16" /></button>
@@ -143,7 +163,7 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="16" class="empty">{{ loaded() ? 'Aucun adhérent ne correspond à la recherche.' : 'Chargement…' }}</td></tr>
+            <tr><td [attr.colspan]="cols.visible().length + 1" class="empty">{{ loaded() ? 'Aucun adhérent ne correspond à la recherche.' : 'Chargement…' }}</td></tr>
           }
         </tbody>
       </table>
@@ -159,6 +179,7 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
   `,
 })
 export class MembersPage {
+  readonly hasNote = hasNote;
   private api = inject(ApiService);
   private dialog = inject(MatDialog);
   private confirm = inject(ConfirmService);
@@ -166,32 +187,33 @@ export class MembersPage {
   private config = inject(ConfigService);
 
   sports = signal<SportView[]>([]);
-  packs = signal<PackView[]>([]);
   loaded = signal(false);
   fSport = signal<number | null>(null);
-  fPack = signal<number | null>(null);
   fStatus = signal<string | null>(null);
   fInsurance = signal<string | null>(null);
+  fNote = signal(false);
+  readonly cols = new MemberColumns();
 
   t = new TableState<MemberView>({
     searchText: (m) => `${m.code} ${m.lastName} ${m.firstName} ${m.phone}`,
     sort: {
       code: (m) => m.code, lastName: (m) => m.lastName, firstName: (m) => m.firstName, birthDate: (m) => m.birthDate,
       registrationDate: (m) => m.registrationDate, pack: (m) => m.pack.name, price: (m) => m.price,
-      status: (m) => m.paymentStatus, balance: (m) => m.balance, days: (m) => m.remainingDays, insurance: (m) => m.insurance,
+      status: (m) => m.paymentStatus, paid: (m) => m.paid, balance: (m) => m.balance, days: (m) => m.remainingDays,
+      situation: (m) => SITUATION_RANK[m.situation], insurance: (m) => m.insurance,
     },
-    defaultSort: { key: 'code', dir: 'asc' },
+    defaultSort: DEFAULT_SORT,
     isActive,
     filter: () => {
-      const [s, p, st, ins] = [this.fSport(), this.fPack(), this.fStatus(), this.fInsurance()];
-      return (m) => (!s || m.sportIds.includes(s)) && (!p || m.packId === p) && (!st || m.paymentStatus === st) && (!ins || m.insurance === ins);
+      const [s, st, ins, note] = [this.fSport(), this.fStatus(), this.fInsurance(), this.fNote()];
+      return (m) => (!s || m.sportIds.includes(s)) && (!st || m.paymentStatus === st) && (!ins || m.insurance === ins) && (!note || hasNote(m));
     },
     pageSize: computed(() => this.config.pageSize()),
   });
 
-  /** Search, each select and the inactive toggle count as one active filter each. */
-  activeFilters = computed(() => [!!this.t.search(), this.t.showInactive(), this.fSport() !== null, this.fPack() !== null,
-    this.fStatus() !== null, this.fInsurance() !== null].filter(Boolean).length);
+  /** Search, each select and each toggle (note, inactive) count as one active filter each. */
+  activeFilters = computed(() => [!!this.t.search(), this.t.showInactive(), this.fSport() !== null,
+    this.fStatus() !== null, this.fInsurance() !== null, this.fNote()].filter(Boolean).length);
   filtersAtDefault = computed(() => this.activeFilters() === 0);
 
   /** Rows under the current inactive toggle, before search and selects: the filtered count never exceeds it. */
@@ -216,10 +238,7 @@ export class MembersPage {
     });
     inject(DestroyRef).onDestroy(() => clearTimeout(this.previewTimer));
     this.load();
-    Promise.all([this.api.sports(), this.api.packs()]).then(([s, p]) => {
-      this.sports.set(s);
-      this.packs.set(p);
-    });
+    this.api.sports().then((s) => this.sports.set(s));
   }
 
   async load(): Promise<void> {
@@ -245,6 +264,25 @@ export class MembersPage {
     this.preview.set(null);
   }
 
+  toggleColumn(id: MemberColumnId): void {
+    this.cols.toggle(id);
+    this.keepSortVisible();
+  }
+
+  resetColumns(): void {
+    this.cols.reset();
+    this.keepSortVisible();
+  }
+
+  /** Rows must never stay ordered by a column the user can no longer see. */
+  private keepSortVisible(): void {
+    const key = this.t.sortKey();
+    if (key && !this.cols.visible().some((c) => c.sort === key)) {
+      this.t.sortKey.set(DEFAULT_SORT.key);
+      this.t.sortDir.set(DEFAULT_SORT.dir);
+    }
+  }
+
   async add(): Promise<void> {
     if (await openMemberForm(this.dialog)) this.load();
   }
@@ -253,12 +291,12 @@ export class MembersPage {
     if (await openMemberForm(this.dialog, m)) this.load();
   }
 
-  /** Clears the search, the selects and the inactive toggle; the sort is kept. */
+  /** Clears the search, the selects and the toggles; the sort is kept. */
   resetFilters(): void {
     this.fSport.set(null);
-    this.fPack.set(null);
     this.fStatus.set(null);
     this.fInsurance.set(null);
+    this.fNote.set(false);
     this.t.showInactive.set(false);
     this.t.setSearch('');
   }

@@ -1,6 +1,7 @@
 import { importProvidersFrom, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { CdkConnectedOverlay } from '@angular/cdk/overlay';
+import { CdkDropList } from '@angular/cdk/drag-drop';
 import { provideRouter } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTooltip } from '@angular/material/tooltip';
@@ -12,6 +13,7 @@ import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
 import { APP_ICONS } from '../../core/icons';
 import { MemberView } from '../../core/models';
+import { MEMBER_COLUMNS_KEY } from './member-columns';
 import { MembersPage, PREVIEW_DELAY_MS, PREVIEW_ID } from './members-page';
 
 function member(id: number, over: Partial<MemberView> = {}): MemberView {
@@ -43,6 +45,7 @@ describe('page Adhérents', () => {
   }
 
   beforeEach(() => {
+    localStorage.removeItem(MEMBER_COLUMNS_KEY);
     api = { members: vi.fn().mockResolvedValue(rows), sports: vi.fn().mockResolvedValue([]), packs: vi.fn().mockResolvedValue([]) };
     dialog = { open: vi.fn() };
     TestBed.configureTestingModule({
@@ -87,18 +90,35 @@ describe('page Adhérents', () => {
     expect(f.nativeElement.querySelector('.count-pill-unit').textContent.trim()).toBe('adhérent');
   });
 
+  it('les filtres sont Sport, Statut, Assurance puis « Avec une note », sans Pack', async () => {
+    const f = await render();
+    const labels = [...f.nativeElement.querySelectorAll('.filters mat-label, .filters mat-slide-toggle')]
+      .map((e) => (e as HTMLElement).textContent!.trim());
+    expect(labels).toEqual(['Sport', 'Statut', 'Assurance', 'Avec une note', 'Afficher les inactifs']);
+    expect(api.packs).not.toHaveBeenCalled();
+  });
+
+  it('« Avec une note » ne garde que les adhérents dont la note n’est pas vide, et compte comme un filtre', async () => {
+    const f = await render();
+    const page = f.componentInstance;
+    page.t.showInactive.set(true);
+    page.fNote.set(true);
+    expect(page.t.filtered().map((m) => m.code)).toEqual(['A001']);
+    expect(page.activeFilters()).toBe(2);
+  });
+
   it('Réinitialiser remet tous les filtres à l’état initial sans toucher au tri', async () => {
     const f = await render();
     const page = f.componentInstance;
     expect(page.filtersAtDefault()).toBe(true);
     page.t.toggleSort('price');
-    page.fSport.set(1); page.fPack.set(1); page.fStatus.set('PAYE'); page.fInsurance.set('IMPAYE');
+    page.fSport.set(1); page.fStatus.set('PAYE'); page.fInsurance.set('IMPAYE'); page.fNote.set(true);
     page.t.showInactive.set(true); page.t.setSearch('nom'); page.t.pageIndex.set(2);
     expect(page.filtersAtDefault()).toBe(false);
 
     page.resetFilters();
 
-    expect([page.fSport(), page.fPack(), page.fStatus(), page.fInsurance()]).toEqual([null, null, null, null]);
+    expect([page.fSport(), page.fStatus(), page.fInsurance(), page.fNote()]).toEqual([null, null, null, false]);
     expect(page.t.showInactive()).toBe(false);
     expect(page.t.search()).toBe('');
     expect(page.t.pageIndex()).toBe(0);
@@ -112,7 +132,7 @@ describe('page Adhérents', () => {
     const page = f.componentInstance;
     const reset = () => f.nativeElement.querySelector('.filters .reset-fab') as HTMLButtonElement | null;
     expect(reset()).toBeNull();
-    page.fPack.set(1);
+    page.fStatus.set('PAYE');
     f.detectChanges();
     expect(reset()).not.toBeNull();
     expect(reset()!.querySelector('.reset-badge')!.textContent!.trim()).toBe('1');
@@ -147,6 +167,168 @@ describe('page Adhérents', () => {
     expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: rows[0] }));
     expect(api.members).toHaveBeenCalledTimes(1);
   });
+  describe('colonnes personnalisables', () => {
+    type Fixture = Awaited<ReturnType<typeof render>>;
+    const headers = (f: Fixture) => [...f.nativeElement.querySelectorAll('thead th')].map((th) => (th as HTMLElement).textContent!.trim());
+    const firstRow = (f: Fixture) => [...f.nativeElement.querySelectorAll('tbody tr:first-child td')].map((td) => (td as HTMLElement).textContent!.trim());
+    const drop = (f: Fixture, previousIndex: number, currentIndex: number) => {
+      const list = f.debugElement.query(By.directive(CdkDropList)).injector.get(CdkDropList);
+      list.dropped.emit({ previousIndex, currentIndex } as never);
+      f.detectChanges();
+    };
+    const trigger = (f: Fixture) => f.nativeElement.querySelector('button[aria-haspopup="menu"]') as HTMLButtonElement;
+    const openMenu = (f: Fixture) => {
+      if (trigger(f).getAttribute('aria-expanded') !== 'true') trigger(f).click();
+      f.detectChanges();
+      return [...document.querySelectorAll('.columns-menu [role="menuitemcheckbox"]')] as HTMLButtonElement[];
+    };
+    const TODAY = ['ID', 'Nom', 'Prénom', 'Téléphone', 'Naissance', 'Sport(s)', 'Inscription', 'Abonnement', 'Prix', 'Remise', 'Statut',
+      'Reste à payer', 'Reste jours', 'Assurance', 'Note', 'Actions'];
+
+    it('par défaut, les colonnes et leur ordre sont ceux du tableau actuel', async () => {
+      const f = await render();
+      expect(headers(f)).toEqual(TODAY);
+      expect(f.nativeElement.querySelectorAll('thead th[cdkdrag], thead th.cdk-drag').length).toBe(15);
+    });
+
+    it('déposer Téléphone avant Nom déplace l’en-tête et les cellules de toutes les lignes, et sauvegarde', async () => {
+      const f = await render();
+      drop(f, 3, 1);
+      expect(headers(f).slice(0, 4)).toEqual(['ID', 'Téléphone', 'Nom', 'Prénom']);
+      expect(firstRow(f).slice(0, 4)).toEqual(['A001', '0600000000', 'Nom1', 'Prenom1']);
+      for (const tr of f.nativeElement.querySelectorAll('tbody tr')) {
+        expect((tr as HTMLElement).children[1].textContent!.trim()).toBe('0600000000');
+      }
+      expect(JSON.parse(localStorage.getItem(MEMBER_COLUMNS_KEY)!).order.slice(0, 3)).toEqual(['code', 'phone', 'lastName']);
+    });
+
+    it('un simple clic sur un en-tête trie sans déplacer la colonne', async () => {
+      const f = await render();
+      const price = [...f.nativeElement.querySelectorAll('thead th')].find((th) => (th as HTMLElement).textContent!.trim() === 'Prix') as HTMLElement;
+      price.querySelector('button')!.click();
+      f.detectChanges();
+      expect(f.componentInstance.t.sortKey()).toBe('price');
+      expect(price.getAttribute('aria-sort')).toBe('ascending');
+      expect(headers(f)).toEqual(TODAY);
+      expect(localStorage.getItem(MEMBER_COLUMNS_KEY)).toBeNull();
+    });
+
+    it('le menu « Colonnes » masque Remise, affiche Déjà payé, et ne permet pas de masquer l’ID', async () => {
+      const f = await render();
+      const items = openMenu(f);
+      expect(items.map((b) => b.textContent!.trim())).toEqual(f.componentInstance.cols.all().map((c) => c.label));
+      const item = (label: string) => openMenu(f).find((b) => b.textContent!.trim() === label)!;
+      expect(item('ID').disabled).toBe(true);
+      expect(item('Remise').getAttribute('aria-checked')).toBe('true');
+      item('Remise').click();
+      f.detectChanges();
+      // Ticking a box keeps the menu open so several columns can be changed in a row.
+      expect(trigger(f).getAttribute('aria-expanded')).toBe('true');
+      item('Déjà payé').click();
+      f.detectChanges();
+      expect(headers(f)).not.toContain('Remise');
+      expect(headers(f)).toContain('Déjà payé');
+      expect(item('Remise').getAttribute('aria-checked')).toBe('false');
+      expect(firstRow(f)[headers(f).indexOf('Déjà payé')]).toContain('100');
+      item('ID').click();
+      f.detectChanges();
+      expect(headers(f)[0]).toBe('ID');
+      expect(JSON.parse(localStorage.getItem(MEMBER_COLUMNS_KEY)!).hidden.sort()).toEqual(['discount', 'situation']);
+    });
+
+    it('la colonne Situation affiche le badge et se trie par urgence, Déjà payé par montant', async () => {
+      // Alphabetical order of the codes (EXPIRED, FOLLOW, OK, SOON) differs from the urgency order.
+      api.members.mockResolvedValue([
+        member(1, { situation: 'OK', paid: 50 }), member(2, { situation: 'FOLLOW', paid: 300 }),
+        member(3, { situation: 'SOON', paid: 0 }), member(4, { situation: 'EXPIRED', paid: 120 }),
+      ]);
+      const f = await render();
+      const page = f.componentInstance;
+      page.toggleColumn('situation');
+      f.detectChanges();
+      expect(f.nativeElement.querySelector('tbody app-situation-badge')).not.toBeNull();
+      page.t.toggleSort('situation');
+      expect(page.t.filtered().map((m) => m.situation)).toEqual(['EXPIRED', 'SOON', 'FOLLOW', 'OK']);
+      page.t.toggleSort('paid');
+      expect(page.t.filtered().map((m) => m.paid)).toEqual([0, 50, 120, 300]);
+    });
+
+    it('masquer la colonne triée remet le tri par défaut (ID croissant)', async () => {
+      const f = await render();
+      const page = f.componentInstance;
+      page.t.toggleSort('price');
+      page.t.toggleSort('price');
+      openMenu(f).find((b) => b.textContent!.trim() === 'Prix')!.click();
+      f.detectChanges();
+      expect([page.t.sortKey(), page.t.sortDir()]).toEqual(['code', 'asc']);
+      expect(f.nativeElement.querySelector('thead th[aria-sort="ascending"]').textContent.trim()).toBe('ID');
+    });
+
+    it('« Affichage par défaut » remet le tri par défaut si la colonne triée est masquée', async () => {
+      const f = await render();
+      const page = f.componentInstance;
+      page.toggleColumn('paid');
+      page.t.toggleSort('paid');
+      page.resetColumns();
+      expect([page.t.sortKey(), page.t.sortDir()]).toEqual(['code', 'asc']);
+    });
+
+    it('les préférences sauvegardées sont restaurées au rechargement', async () => {
+      const a = await render();
+      drop(a, 3, 1);
+      a.componentInstance.cols.toggle('discount');
+      a.destroy();
+      const b = await render();
+      expect(headers(b).slice(0, 3)).toEqual(['ID', 'Téléphone', 'Nom']);
+      expect(headers(b)).not.toContain('Remise');
+    });
+
+    it('un stockage corrompu donne l’affichage par défaut sans erreur', async () => {
+      localStorage.setItem(MEMBER_COLUMNS_KEY, '{pas du json');
+      const f = await render();
+      expect(headers(f)).toEqual(TODAY);
+    });
+
+    it('« Affichage par défaut » remet les colonnes et efface la sauvegarde', async () => {
+      const f = await render();
+      drop(f, 0, 4);
+      f.componentInstance.toggleColumn('paid');
+      openMenu(f);
+      const reset = [...document.querySelectorAll('.columns-menu [mat-menu-item]')].find((b) => b.textContent!.includes('Affichage par défaut')) as HTMLButtonElement;
+      reset.click();
+      f.detectChanges();
+      expect(headers(f)).toEqual(TODAY);
+      expect(localStorage.getItem(MEMBER_COLUMNS_KEY)).toBeNull();
+    });
+
+    it('la ligne vide couvre les colonnes visibles plus Actions', async () => {
+      api.members.mockResolvedValue([]);
+      const f = await render();
+      const colspan = () => f.nativeElement.querySelector('td.empty').getAttribute('colspan');
+      expect(colspan()).toBe('16');
+      f.componentInstance.cols.toggle('discount');
+      f.componentInstance.cols.toggle('note');
+      f.detectChanges();
+      expect(colspan()).toBe('14');
+    });
+
+    it('la carte d’aperçu fonctionne toujours quand l’ID est déplacé', async () => {
+      const f = await render();
+      drop(f, 0, 5);
+      vi.useFakeTimers();
+      try {
+        const a = f.nativeElement.querySelector('a.code-link') as HTMLAnchorElement;
+        expect(a.closest('td')!.cellIndex).toBe(5);
+        a.dispatchEvent(new MouseEvent('mouseenter'));
+        vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+        f.detectChanges();
+        expect(document.getElementById(PREVIEW_ID)).not.toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('carte d’aperçu au survol de l’ID', () => {
     const card = () => document.getElementById(PREVIEW_ID);
     const link = (f: Awaited<ReturnType<typeof render>>, code = 'A001') =>

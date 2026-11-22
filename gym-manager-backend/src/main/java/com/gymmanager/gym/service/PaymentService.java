@@ -126,11 +126,20 @@ public class PaymentService {
         return p;
     }
 
-    /** ADMIN: removes a cancelled payment from the history. Its receipt number is never reused (the counter never goes back). */
+    /**
+     * ADMIN: removes a cancelled payment from the history. Its receipt number is never reused (the counter never goes back).
+     * A renewal left without any payment goes with it; the member's first period is always kept.
+     */
     public void delete(Long id) {
         Payment p = payments.findById(id).orElseThrow(() -> ApiException.notFound("Paiement introuvable."));
         if (!p.isCancelled()) throw ApiException.badRequest("Seul un paiement annulé peut être supprimé : annulez-le d'abord.");
         payments.delete(p);
+        payments.flush();
+        if (payments.existsBySubscriptionId(p.getSubscriptionId())) return;
+        List<Subscription> periods = subscriptions.findByMemberIdOrderByStartDateAscIdAsc(p.getMemberId());
+        if (!periods.getFirst().getId().equals(p.getSubscriptionId())) {
+            subscriptions.deleteById(p.getSubscriptionId());
+        }
     }
 
     /** Default start of a renewal (RG-RENOUV). */

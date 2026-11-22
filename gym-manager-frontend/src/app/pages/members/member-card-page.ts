@@ -338,15 +338,19 @@ export class MemberCardPage {
   }
 
   async deletePayment(p: PaymentView): Promise<void> {
+    const subs = this.card()!.subscriptions;
+    const period = subs.find((s) => s.id === p.subscriptionId);
+    const removesPeriod = !!period && period.payments.length === 1 && period.id !== subs.reduce((a, b) => (b.startDate < a.startDate ? b : a)).id;
     const ok = await this.confirm.confirm({
       title: `Supprimer le paiement annulé ${p.receiptNumber} ?`,
-      message: 'La ligne disparaît de l\'historique et son reçu ne pourra plus être consulté. Le numéro de reçu ne sera pas réutilisé.',
+      message: 'La ligne disparaît de l\'historique et son reçu ne pourra plus être consulté. Le numéro de reçu ne sera pas réutilisé.'
+        + (removesPeriod ? ` C'est le dernier paiement du renouvellement « ${period!.packName} » : cette période sera supprimée aussi.` : ''),
       confirmLabel: 'Supprimer', danger: true,
     });
     if (!ok) return;
     try {
       await this.api.delete(`/payments/${p.id}`);
-      this.notify.success(`Paiement ${p.receiptNumber} supprimé.`);
+      this.notify.success(removesPeriod ? `Paiement ${p.receiptNumber} et renouvellement « ${period!.packName} » supprimés.` : `Paiement ${p.receiptNumber} supprimé.`);
       this.reload();
     } catch (e) {
       this.notify.error(e);

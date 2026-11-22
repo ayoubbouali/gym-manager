@@ -66,6 +66,7 @@ export class ApiService {
 
   members = () => this.get<M.MemberView[]>('/members');
   memberCard = (code: string) => this.get<M.MemberCard>(`/members/by-code/${encodeURIComponent(code)}`);
+  memberNotes = (id: Id, notes: string) => this.patch<M.MemberView>(`/members/${id}/notes`, { notes });
   memberPreview = (body: { packId: Id | null; discountId: Id | null; registrationDate: string | null }) =>
     this.post<M.MemberPreview | null>('/members/preview', body);
   packs = () => this.get<M.PackView[]>('/packs');

@@ -18,6 +18,7 @@ import { ConfirmService } from '../../shared/confirm.service';
 import { DaysLeft, PaidBadge, SportChip } from '../../shared/badges';
 import { Pager, SortHeader, TableState } from '../../shared/table';
 import { openMemberForm } from './member-form-dialog';
+import { openMemberNote } from './member-note-dialog';
 
 @Component({
   selector: 'app-members',
@@ -56,6 +57,8 @@ import { openMemberForm } from './member-form-dialog';
         </mat-select>
       </mat-form-field>
       <mat-slide-toggle [ngModel]="t.showInactive()" (ngModelChange)="t.showInactive.set($event)">Afficher les inactifs</mat-slide-toggle>
+      <button mat-stroked-button (click)="resetFilters()" [disabled]="filtersAtDefault()"><lucide-icon name="rotate-ccw" [size]="16" /> Réinitialiser</button>
+      <span class="filters-count" role="status">{{ count() }}</span>
     </div>
 
     <div class="table-wrap">
@@ -76,6 +79,7 @@ import { openMemberForm } from './member-form-dialog';
             <th class="num" [attr.aria-sort]="t.ariaSort('balance')"><app-sort [table]="t" key="balance">Reste à payer</app-sort></th>
             <th [attr.aria-sort]="t.ariaSort('days')"><app-sort [table]="t" key="days">Reste jours</app-sort></th>
             <th [attr.aria-sort]="t.ariaSort('insurance')"><app-sort [table]="t" key="insurance">Assurance</app-sort></th>
+            <th>Note</th>
             <th><span class="sr-only">Actions</span></th>
           </tr>
         </thead>
@@ -96,6 +100,11 @@ import { openMemberForm } from './member-form-dialog';
               <td class="num" [class.red]="m.balance > 0">{{ m.balance > 0 ? (m.balance | money) : '—' }}</td>
               <td><app-days [days]="m.remainingDays" /></td>
               <td><app-paid-badge [value]="m.insurance" /></td>
+              <td>
+                @if (m.notes.trim()) {
+                  <button class="icon-btn" (click)="note(m)" [matTooltip]="m.notes" matTooltipClass="note-tooltip" aria-label="Note de {{ m.code }}"><lucide-icon name="sticky-note" [size]="16" /></button>
+                }
+              </td>
               <td class="actions">
                 <button class="icon-btn" (click)="edit(m)" matTooltip="Modifier" aria-label="Modifier {{ m.code }}"><lucide-icon name="pencil" [size]="16" /></button>
                 <button class="icon-btn" (click)="toggle(m)" [matTooltip]="m.active ? 'Désactiver' : 'Réactiver'" [attr.aria-label]="(m.active ? 'Désactiver ' : 'Réactiver ') + m.code"><lucide-icon name="power" [size]="16" /></button>
@@ -103,7 +112,7 @@ import { openMemberForm } from './member-form-dialog';
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="15" class="empty">{{ loaded() ? 'Aucun adhérent ne correspond à la recherche.' : 'Chargement…' }}</td></tr>
+            <tr><td colspan="16" class="empty">{{ loaded() ? 'Aucun adhérent ne correspond à la recherche.' : 'Chargement…' }}</td></tr>
           }
         </tbody>
       </table>
@@ -142,6 +151,14 @@ export class MembersPage {
     pageSize: computed(() => this.config.pageSize()),
   });
 
+  filtersAtDefault = computed(() => !this.t.search() && !this.t.showInactive()
+    && this.fSport() === null && this.fPack() === null && this.fStatus() === null && this.fInsurance() === null);
+
+  count = computed(() => {
+    const n = this.t.filtered().length;
+    return `${n} ${n > 1 ? 'adhérents' : 'adhérent'}`;
+  });
+
   constructor() {
     this.load();
     Promise.all([this.api.sports(), this.api.packs()]).then(([s, p]) => {
@@ -166,6 +183,20 @@ export class MembersPage {
 
   async edit(m: MemberView): Promise<void> {
     if (await openMemberForm(this.dialog, m)) this.load();
+  }
+
+  /** Clears the search, the selects and the inactive toggle; the sort is kept. */
+  resetFilters(): void {
+    this.fSport.set(null);
+    this.fPack.set(null);
+    this.fStatus.set(null);
+    this.fInsurance.set(null);
+    this.t.showInactive.set(false);
+    this.t.setSearch('');
+  }
+
+  async note(m: MemberView): Promise<void> {
+    if (await openMemberNote(this.dialog, m)) this.load();
   }
 
   async toggle(m: MemberView): Promise<void> {

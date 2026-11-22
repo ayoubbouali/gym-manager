@@ -10,6 +10,7 @@ import com.gymmanager.gym.service.Views.MemberView;
 import com.gymmanager.gym.web.dto.Requests.ActiveRequest;
 import com.gymmanager.gym.web.dto.Requests.MemberPreviewRequest;
 import com.gymmanager.gym.web.dto.Requests.MemberRequest;
+import com.gymmanager.gym.web.dto.Requests.NotesRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -74,6 +75,12 @@ public class MemberController {
     public ResponseEntity<Void> active(@PathVariable Long id, @RequestBody ActiveRequest r) {
         service.setActive(id, Boolean.TRUE.equals(r.active()));
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{id}/notes")
+    public MemberView notes(@PathVariable Long id, @RequestBody NotesRequest r) {
+        service.setNotes(id, r.notes());
+        return state.load().member(id).orElseThrow();
     }
 
     @DeleteMapping("/{id}")

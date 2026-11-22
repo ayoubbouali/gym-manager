@@ -11,6 +11,7 @@ import { csvNumber, exportCsv } from '../../core/csv';
 import { FrDatePipe, MoneyPipe, formatAmount, formatMonth } from '../../core/format';
 import { Stats } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
+import { DateField } from '../../shared/date-field';
 import { SportChip } from '../../shared/badges';
 import { ChartComponent, barChart, cssColor } from '../../shared/chart';
 
@@ -18,7 +19,7 @@ type Period = 'LAST12' | 'YEAR' | 'CUSTOM';
 
 @Component({
   selector: 'app-stats',
-  imports: [FormsModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, LucideAngularModule,
+  imports: [FormsModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, LucideAngularModule, DateField,
     ChartComponent, SportChip, MoneyPipe, FrDatePipe],
   template: `
     <div class="toolbar">
@@ -28,9 +29,9 @@ type Period = 'LAST12' | 'YEAR' | 'CUSTOM';
         <mat-button-toggle value="CUSTOM">Période personnalisée</mat-button-toggle>
       </mat-button-toggle-group>
       @if (period() === 'CUSTOM') {
-        <mat-form-field subscriptSizing="dynamic"><mat-label>Du</mat-label><input matInput type="date" [(ngModel)]="from" /></mat-form-field>
-        <mat-form-field subscriptSizing="dynamic"><mat-label>Au</mat-label><input matInput type="date" [(ngModel)]="to" /></mat-form-field>
-        <button mat-flat-button (click)="load()">Appliquer</button>
+        <app-date-field label="Du" subscriptSizing="dynamic" [(ngModel)]="from" #fromField="ngModel" />
+        <app-date-field label="Au" subscriptSizing="dynamic" [(ngModel)]="to" #toField="ngModel" />
+        <button mat-flat-button (click)="load()" [disabled]="fromField.invalid || toField.invalid">Appliquer</button>
       }
       <span class="grow"></span>
       @if (s(); as d) {<span class="muted">Du {{ d.from | frDate }} au {{ d.to | frDate }}</span>}

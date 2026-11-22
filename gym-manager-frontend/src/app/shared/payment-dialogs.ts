@@ -1,5 +1,5 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { Component, computed, inject, signal, viewChildren } from '@angular/core';
+import { FormsModule, NgModel } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -13,6 +13,7 @@ import { ConfigService } from '../core/config.service';
 import { FrDatePipe, MoneyPipe, PAYMENT_METHODS, openPdf } from '../core/format';
 import { DiscountView, MemberCard, MemberPreview, PackView, PaymentMethod, PaymentView, SubscriptionView } from '../core/models';
 import { NotifyService, errorMessage } from '../core/notify.service';
+import { DateField } from './date-field';
 import { openSimpleForm } from './simple-form-dialog';
 
 export interface PaymentDialogData {
@@ -27,7 +28,7 @@ export interface PaymentDialogData {
 /** Record ("Encaisser") or correct a member payment. */
 @Component({
   selector: 'app-payment-dialog',
-  imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, MatSelectModule, MoneyPipe, FrDatePipe],
+  imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, MatSelectModule, DateField, MoneyPipe, FrDatePipe],
   template: `
     <h2 mat-dialog-title>{{ d.payment ? 'Modifier le paiement ' + d.payment.receiptNumber : 'Encaisser un paiement' }}</h2>
     <mat-dialog-content>
@@ -47,7 +48,7 @@ export interface PaymentDialogData {
           <span matTextSuffix>&nbsp;{{ currency() }}</span>
           @if (maxAmount() !== null) {<mat-hint>Reste à payer : {{ maxAmount() | money }}</mat-hint>}
         </mat-form-field>
-        <mat-form-field><mat-label>Date du paiement</mat-label><input matInput type="date" name="paidOn" [(ngModel)]="paidOn" [max]="today" required /></mat-form-field>
+        <app-date-field label="Date du paiement" name="paidOn" [(ngModel)]="paidOn" [max]="today" required />
         <div class="field-block span-2">
           <span class="field-label">Mode de paiement</span>
           <mat-button-toggle-group name="method" [(ngModel)]="method" aria-label="Mode de paiement">
@@ -82,6 +83,7 @@ export class PaymentDialog {
   maxAmount = signal<number | null>(this.d.payment ? null : this.payable()[0]?.balance ?? null);
   busy = signal(false);
   error = signal('');
+  private controls = viewChildren(NgModel);
 
   onPeriod(): void {
     const s = this.payable().find((x) => x.id === this.subscriptionId);
@@ -90,6 +92,7 @@ export class PaymentDialog {
   }
 
   async save(): Promise<void> {
+    if (hasInvalid(this.controls())) return;
     this.busy.set(true);
     this.error.set('');
     try {
@@ -109,7 +112,7 @@ export class PaymentDialog {
 /** Renewal: new subscription period, with an optional payment right away. */
 @Component({
   selector: 'app-renew-dialog',
-  imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatCheckboxModule, MatFormFieldModule, MatInputModule, MatSelectModule, MoneyPipe, FrDatePipe],
+  imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatCheckboxModule, MatFormFieldModule, MatInputModule, MatSelectModule, DateField, MoneyPipe, FrDatePipe],
   template: `
     <h2 mat-dialog-title>Renouveler l'abonnement — {{ c.member.code }} {{ c.member.firstName }} {{ c.member.lastName }}</h2>
     <mat-dialog-content>
@@ -126,10 +129,8 @@ export class PaymentDialog {
             @for (x of discountOptions(); track x.id) {<mat-option [value]="x.id">{{ x.name }}</mat-option>}
           </mat-select>
         </mat-form-field>
-        <mat-form-field><mat-label>Début de la nouvelle période</mat-label>
-          <input matInput type="date" name="start" [(ngModel)]="startDate" (ngModelChange)="refresh()" required />
-          <mat-hint>Proposé : {{ c.renewalStart | frDate }}</mat-hint>
-        </mat-form-field>
+        <app-date-field label="Début de la nouvelle période" name="start" [(ngModel)]="startDate" (ngModelChange)="refresh()" required
+                        [hint]="'Proposé : ' + (c.renewalStart | frDate)" />
       </form>
       <div class="computed-box" aria-live="polite">
         <span class="muted">Nouvelle période</span>
@@ -142,7 +143,7 @@ export class PaymentDialog {
           <div class="form-grid">
             <mat-form-field><mat-label>Montant</mat-label><input matInput type="number" min="0.01" step="0.01" [(ngModel)]="amount" name="amount" />
               <span matTextSuffix>&nbsp;{{ currency() }}</span></mat-form-field>
-            <mat-form-field><mat-label>Date du paiement</mat-label><input matInput type="date" [(ngModel)]="paidOn" name="paidOn" [max]="today" /></mat-form-field>
+            <app-date-field label="Date du paiement" [(ngModel)]="paidOn" name="paidOn" [max]="today" />
             <div class="field-block span-2">
               <span class="field-label">Mode de paiement</span>
               <mat-button-toggle-group [(ngModel)]="method" name="method" aria-label="Mode de paiement">
@@ -183,6 +184,7 @@ export class RenewDialog {
   method: PaymentMethod = 'ESPECES';
   busy = signal(false);
   error = signal('');
+  private controls = viewChildren(NgModel);
 
   constructor() {
     Promise.all([this.api.packs(), this.api.discounts()]).then(([p, d]) => {
@@ -202,6 +204,7 @@ export class RenewDialog {
   }
 
   async save(): Promise<void> {
+    if (hasInvalid(this.controls())) return;
     this.busy.set(true);
     this.error.set('');
     try {
@@ -214,6 +217,13 @@ export class RenewDialog {
       this.busy.set(false);
     }
   }
+}
+
+/** Blocks a save while a field is in error (e.g. mistyped date) and shows its message. */
+export function hasInvalid(controls: readonly NgModel[]): boolean {
+  const invalid = controls.filter((c) => c.invalid);
+  invalid.forEach((c) => c.control.markAsTouched());
+  return invalid.length > 0;
 }
 
 export function openPaymentDialog(dialog: MatDialog, data: PaymentDialogData): Promise<PaymentView | undefined> {

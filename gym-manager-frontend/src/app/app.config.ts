@@ -8,6 +8,7 @@ import { LucideAngularModule } from 'lucide-angular';
 import { routes } from './app.routes';
 import { authInterceptor } from './core/http.interceptor';
 import { APP_ICONS } from './core/icons';
+import { provideFrDates } from './core/date-adapter';
 
 registerLocaleData(localeFr);
 
@@ -18,6 +19,7 @@ export const appConfig: ApplicationConfig = {
     provideHttpClient(withInterceptors([authInterceptor])),
     importProvidersFrom(LucideAngularModule.pick(APP_ICONS)),
     { provide: LOCALE_ID, useValue: 'fr-FR' },
+    provideFrDates(),
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
   ],
 };

@@ -17,6 +17,7 @@ import { csvNumber, exportCsv } from '../../core/csv';
 import { FrDatePipe, MoneyPipe, PAYMENT_METHODS, formatDate, openPdf } from '../../core/format';
 import { PaymentView } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
+import { DateField } from '../../shared/date-field';
 import { cancelWithReason, openPaymentDialog, receiptUrl } from '../../shared/payment-dialogs';
 import { Pager, SortHeader, TableState } from '../../shared/table';
 
@@ -26,7 +27,7 @@ type Period = 'MONTH' | 'LAST_MONTH' | 'YEAR' | 'CUSTOM';
 @Component({
   selector: 'app-payments',
   imports: [RouterLink, FormsModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatSlideToggleModule, MatTooltipModule, LucideAngularModule, SortHeader, Pager, MoneyPipe, FrDatePipe],
+    MatSlideToggleModule, MatTooltipModule, LucideAngularModule, DateField, SortHeader, Pager, MoneyPipe, FrDatePipe],
   template: `
     <div class="toolbar">
       <mat-button-toggle-group [ngModel]="period()" (ngModelChange)="setPeriod($event)" aria-label="Période">
@@ -36,9 +37,9 @@ type Period = 'MONTH' | 'LAST_MONTH' | 'YEAR' | 'CUSTOM';
         <mat-button-toggle value="CUSTOM">Personnalisée</mat-button-toggle>
       </mat-button-toggle-group>
       @if (period() === 'CUSTOM') {
-        <mat-form-field subscriptSizing="dynamic"><mat-label>Du</mat-label><input matInput type="date" [(ngModel)]="from" /></mat-form-field>
-        <mat-form-field subscriptSizing="dynamic"><mat-label>Au</mat-label><input matInput type="date" [(ngModel)]="to" /></mat-form-field>
-        <button mat-flat-button (click)="load()">Appliquer</button>
+        <app-date-field label="Du" subscriptSizing="dynamic" [(ngModel)]="from" #fromField="ngModel" />
+        <app-date-field label="Au" subscriptSizing="dynamic" [(ngModel)]="to" #toField="ngModel" />
+        <button mat-flat-button (click)="load()" [disabled]="fromField.invalid || toField.invalid">Appliquer</button>
       }
       <span class="grow"></span>
       <span class="muted">Du {{ from | frDate }} au {{ to | frDate }}</span>

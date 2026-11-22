@@ -681,10 +681,10 @@ class AcceptanceTest {
         Map<String, Object> staff = new java.util.HashMap<>(Map.of("lastName", "Ancien", "firstName", "Numéro",
                 "phone", "0661112299", "functionId", coachFn, "payMode", "COMMISSION"));
         long staffId = ((Number) read(send(admin, "POST", "/api/staff", staff), "$.id")).longValue();
-        jdbc.update("UPDATE staff SET phone = '0500000000' WHERE id = ?", staffId);
-        staff.put("phone", "0500000000");
+        jdbc.update("UPDATE staff SET phone = '0800000000' WHERE id = ?", staffId);
+        staff.put("phone", "0800000000");
         send(admin, "PUT", "/api/staff/" + staffId, staff).andExpect(status().isOk());
-        staff.put("phone", "0500000001");
+        staff.put("phone", "0800000001");
         send(admin, "PUT", "/api/staff/" + staffId, staff).andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("phone"));
 
         // another country: French example, French numbers accepted

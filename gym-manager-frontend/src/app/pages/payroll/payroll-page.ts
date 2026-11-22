@@ -1,5 +1,5 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { Component, computed, inject, signal, viewChildren } from '@angular/core';
+import { FormsModule, NgModel } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -15,13 +15,14 @@ import { FrDatePipe, MoneyPipe, PAYMENT_METHODS, PAYMENT_STATUS_LABELS, monthNam
 import { PaymentMethod, PayrollMonth, PayrollRow, SalaryPaymentView } from '../../core/models';
 import { NotifyService, errorMessage } from '../../core/notify.service';
 import { ActiveBadge, PaidBadge } from '../../shared/badges';
-import { cancelWithReason, salaryReceiptUrl } from '../../shared/payment-dialogs';
+import { DateField } from '../../shared/date-field';
+import { cancelWithReason, hasInvalid, salaryReceiptUrl } from '../../shared/payment-dialogs';
 import { SalaryDetailDialog } from '../staff/staff-dialogs';
 
 /** Pay a salary or an advance for a month. */
 @Component({
   selector: 'app-salary-pay-dialog',
-  imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, MoneyPipe],
+  imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, DateField, MoneyPipe],
   template: `
     <h2 mat-dialog-title>Verser le salaire — {{ d.row.staff.name }} · {{ month }}</h2>
     <mat-dialog-content>
@@ -29,7 +30,7 @@ import { SalaryDetailDialog } from '../staff/staff-dialogs';
       <form id="salary-form" class="form-grid" (ngSubmit)="save()">
         <mat-form-field><mat-label>Montant</mat-label><input matInput type="number" min="0.01" step="0.01" name="amount" [(ngModel)]="amount" required />
           <span matTextSuffix>&nbsp;{{ currency() }}</span><mat-hint>Moins que le reste = acompte</mat-hint></mat-form-field>
-        <mat-form-field><mat-label>Date du versement</mat-label><input matInput type="date" name="paidOn" [(ngModel)]="paidOn" [max]="today" required /></mat-form-field>
+        <app-date-field label="Date du versement" name="paidOn" [(ngModel)]="paidOn" [max]="today" required />
         <div class="field-block span-2">
           <span class="field-label">Mode de paiement</span>
           <mat-button-toggle-group name="method" [(ngModel)]="method" aria-label="Mode de paiement">
@@ -61,8 +62,10 @@ export class SalaryPayDialog {
   note = '';
   busy = signal(false);
   error = signal('');
+  private controls = viewChildren(NgModel);
 
   async save(): Promise<void> {
+    if (hasInvalid(this.controls())) return;
     this.busy.set(true);
     this.error.set('');
     try {
@@ -108,13 +111,11 @@ export class SalaryHistoryDialog {
 
 @Component({
   selector: 'app-payroll',
-  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatTooltipModule, LucideAngularModule, MoneyPipe, FrDatePipe, PaidBadge, ActiveBadge],
+  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatTooltipModule, LucideAngularModule, DateField, MoneyPipe, FrDatePipe, PaidBadge, ActiveBadge],
   template: `
     <div class="toolbar">
       <button class="icon-btn" (click)="shift(-1)" aria-label="Mois précédent"><lucide-icon name="chevron-left" /></button>
-      <mat-form-field subscriptSizing="dynamic" class="w-200"><mat-label>Mois</mat-label>
-        <input matInput type="month" [ngModel]="month()" (ngModelChange)="month.set($event); load()" [max]="currentMonth" />
-      </mat-form-field>
+      <app-date-field mode="month" label="Mois" subscriptSizing="dynamic" [ngModel]="month()" (ngModelChange)="pickMonth($event)" [max]="currentMonth" />
       <button class="icon-btn" (click)="shift(1)" [disabled]="month() >= currentMonth" aria-label="Mois suivant"><lucide-icon name="chevron-right" /></button>
       <h2 class="month-title">{{ title() }}</h2>
       <span class="grow"></span>
@@ -195,6 +196,13 @@ export class PayrollPage {
     } catch (e) {
       this.notify.error(e);
     }
+  }
+
+  /** Typed or picked month; an incomplete or invalid entry (null) keeps the current month. */
+  pickMonth(value: string | null): void {
+    if (!value || value === this.month() || value > this.currentMonth) return;
+    this.month.set(value);
+    this.load();
   }
 
   shift(delta: number): void {

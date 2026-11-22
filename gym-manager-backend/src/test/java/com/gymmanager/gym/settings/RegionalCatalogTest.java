@@ -77,6 +77,16 @@ class RegionalCatalogTest {
         assertThat(RegionalCatalog.normalizePhone("00212612345678", "212")).isEqualTo("0612345678");
         assertThat(RegionalCatalog.normalizePhone("0522123456", "212")).isEqualTo("0522123456");
         assertThat(RegionalCatalog.normalizePhone("0812", "212")).isNull();
+        // ranges missing from libphonenumber's metadata are still Moroccan mobiles
+        assertThat(RegionalCatalog.normalizePhone("07 40 12 34 56", "212")).isEqualTo("0740123456");
+        assertThat(RegionalCatalog.normalizePhone("+212 790123456", "212")).isEqualTo("0790123456");
+        assertThat(RegionalCatalog.normalizePhone("00212799999999", "212")).isEqualTo("0799999999");
+        assertThat(RegionalCatalog.normalizePhone("0712345678", "212")).isEqualTo("0712345678");
+        assertThat(RegionalCatalog.normalizePhone("074012345", "212")).isNull();
+        assertThat(RegionalCatalog.normalizePhone("+21274012345678", "212")).isNull();
+        assertThat(RegionalCatalog.normalizePhone("07401234567", "212")).isNull();
+        assertThat(RegionalCatalog.normalizePhone("0840123456", "212")).isNull();
+        assertThat(RegionalCatalog.normalizePhone("0700000000", "33")).isNull();
         assertThat(RegionalCatalog.normalizePhone("+33612345678", "212")).isNull();
         assertThat(RegionalCatalog.normalizePhone("06CALLME", "212")).isNull();
         assertThat(RegionalCatalog.normalizePhone("0612345678", "33")).isEqualTo("0612345678");

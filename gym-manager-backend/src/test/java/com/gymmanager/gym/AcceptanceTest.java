@@ -599,6 +599,34 @@ class AcceptanceTest {
         get(admin, "/api/dashboard").andExpect(jsonPath("$.upcomingActivityCount").value(1));
     }
 
+    @Test
+    @DisplayName("Note d'un adhérent : modifiée et effacée seule, sans recalcul du prix ni de la période")
+    void memberNotes() throws Exception {
+        MockHttpSession accueil = login("accueil", "accueil123", "Accueil2026");
+        long a003 = id("/api/members", "$[?(@.code=='A003')].id");
+        // A003's period is paid, so its price is frozen; with cumulation off, a full save (PUT) would re-price it.
+        setting("subscription.cumulative", "false");
+        long sub = ((Number) read(get(admin, "/api/members/by-code/A003"), "$.member.subscriptionId")).longValue();
+        java.math.BigDecimal amount = jdbc.queryForObject("SELECT amount FROM subscriptions WHERE id = ?", java.math.BigDecimal.class, sub);
+
+        send(accueil, "PATCH", "/api/members/" + a003 + "/notes", Map.of("notes", "  Allergie\nau pollen  ")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.notes").value("Allergie\nau pollen")).andExpect(jsonPath("$.price").value(3213.0));
+        get(admin, "/api/members/by-code/A003").andExpect(jsonPath("$.member.notes").value("Allergie\nau pollen"));
+        assertThat(jdbc.queryForObject("SELECT amount FROM subscriptions WHERE id = ?", java.math.BigDecimal.class, sub))
+                .as("montant de la période").isEqualByComparingTo(amount);
+
+        send(admin, "PATCH", "/api/members/" + a003 + "/notes", Map.of("notes", "   ")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.notes").value("")).andExpect(jsonPath("$.price").value(3213.0));
+        send(admin, "PATCH", "/api/members/" + a003 + "/notes", Map.of("notes", "x".repeat(2001))).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("notes"))
+                .andExpect(jsonPath("$.message").value("Le champ « Notes » ne doit pas dépasser 2000 caractères."));
+        get(admin, "/api/members/by-code/A003").andExpect(jsonPath("$.member.notes").value(""));
+        send(admin, "PATCH", "/api/members/999999/notes", Map.of("notes", "x")).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Adhérent introuvable."));
+        assertThat(jdbc.queryForObject("SELECT amount FROM subscriptions WHERE id = ?", java.math.BigDecimal.class, sub))
+                .as("montant de la période").isEqualByComparingTo(amount);
+    }
+
     // ------------------------------------------------------------------ regional settings
 
     @Test

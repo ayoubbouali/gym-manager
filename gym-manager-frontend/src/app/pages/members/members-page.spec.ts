@@ -1,0 +1,149 @@
+import { importProvidersFrom, signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
+import { MatTooltip } from '@angular/material/tooltip';
+import { By } from '@angular/platform-browser';
+import { LucideAngularModule } from 'lucide-angular';
+import { of } from 'rxjs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiService } from '../../core/api.service';
+import { ConfigService } from '../../core/config.service';
+import { APP_ICONS } from '../../core/icons';
+import { MemberView } from '../../core/models';
+import { MembersPage } from './members-page';
+
+function member(id: number, over: Partial<MemberView> = {}): MemberView {
+  return {
+    id, code: `A00${id}`, lastName: `Nom${id}`, firstName: `Prenom${id}`, phone: '0600000000', birthDate: null,
+    registrationDate: '2026-11-01', sportIds: [1], sports: [], subscriptionId: id, periodStart: '2026-11-01', periodCount: 1,
+    packId: 1, pack: { id: 1, name: 'Pack' }, discountId: 1, discount: { name: 'Aucune' }, insurance: 'PAYE', hasPhoto: false,
+    notes: '', active: true, activityIds: [], price: 100, endDate: '2026-12-01', remainingDays: 9, paid: 100, balance: 0,
+    paymentStatus: 'PAYE', activeMember: true, situation: 'OK',
+    ...over,
+  } as unknown as MemberView;
+}
+
+const rows = [
+  member(1, { notes: 'Allergie\nau pollen' }),
+  member(2, { notes: '   ', paymentStatus: 'IMPAYE' } as Partial<MemberView>),
+  member(3, { active: false }),
+];
+
+describe('page Adhérents', () => {
+  let api: { members: ReturnType<typeof vi.fn>; sports: ReturnType<typeof vi.fn>; packs: ReturnType<typeof vi.fn> };
+  let dialog: { open: ReturnType<typeof vi.fn> };
+
+  async function render() {
+    const fixture = TestBed.createComponent(MembersPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  beforeEach(() => {
+    api = { members: vi.fn().mockResolvedValue(rows), sports: vi.fn().mockResolvedValue([]), packs: vi.fn().mockResolvedValue([]) };
+    dialog = { open: vi.fn() };
+    TestBed.configureTestingModule({
+      imports: [MembersPage],
+      providers: [
+        provideRouter([]),
+        importProvidersFrom(LucideAngularModule.pick(APP_ICONS)),
+        { provide: ApiService, useValue: api },
+        { provide: ConfigService, useValue: { pageSize: signal(20), currency: signal('DH'), config: signal(null) } },
+      ],
+    });
+    TestBed.overrideProvider(MatDialog, { useValue: dialog });
+  });
+
+  it('la pastille du total suit les filtres, avec « sur » quand la liste est restreinte', async () => {
+    const f = await render();
+    const page = f.componentInstance;
+    const pill = () => f.nativeElement.querySelector('.toolbar .count-pill');
+    expect(page.count()).toBe('2 adhérents');
+    f.detectChanges();
+    expect(pill().querySelector('.count-pill-num').textContent.trim()).toBe('2');
+    expect(pill().querySelector('.count-pill-of')).toBeNull();
+    page.fStatus.set('IMPAYE');
+    expect(page.count()).toBe('1 sur 2 adhérents');
+    f.detectChanges();
+    expect([...pill().querySelectorAll('[aria-hidden="true"]:not(lucide-icon)')].map((e: Element) => e.textContent!.trim())).toEqual(['1', 'sur 2', 'adhérents']);
+    expect(pill().querySelector('.sr-only').textContent.trim()).toBe('1 sur 2 adhérents');
+    page.t.setSearch('introuvable');
+    expect(page.count()).toBe('0 sur 2 adhérents');
+    page.t.setSearch('');
+    page.fStatus.set(null);
+    page.t.showInactive.set(true);
+    expect(page.count()).toBe('3 adhérents');
+    expect(f.nativeElement.querySelector('.toolbar').firstElementChild).toBe(pill());
+    expect(f.nativeElement.querySelector('.filters-count')).toBeNull();
+  });
+
+  it('le total s’accorde au singulier', async () => {
+    api.members.mockResolvedValue([rows[0]]);
+    const f = await render();
+    expect(f.componentInstance.count()).toBe('1 adhérent');
+    expect(f.nativeElement.querySelector('.count-pill-unit').textContent.trim()).toBe('adhérent');
+  });
+
+  it('Réinitialiser remet tous les filtres à l’état initial sans toucher au tri', async () => {
+    const f = await render();
+    const page = f.componentInstance;
+    expect(page.filtersAtDefault()).toBe(true);
+    page.t.toggleSort('price');
+    page.fSport.set(1); page.fPack.set(1); page.fStatus.set('PAYE'); page.fInsurance.set('IMPAYE');
+    page.t.showInactive.set(true); page.t.setSearch('nom'); page.t.pageIndex.set(2);
+    expect(page.filtersAtDefault()).toBe(false);
+
+    page.resetFilters();
+
+    expect([page.fSport(), page.fPack(), page.fStatus(), page.fInsurance()]).toEqual([null, null, null, null]);
+    expect(page.t.showInactive()).toBe(false);
+    expect(page.t.search()).toBe('');
+    expect(page.t.pageIndex()).toBe(0);
+    expect(page.t.sortKey()).toBe('price');
+    expect(page.filtersAtDefault()).toBe(true);
+    expect(page.count()).toBe('2 adhérents');
+  });
+
+  it('l’icône Réinitialiser n’apparaît qu’avec un filtre actif, au bout de la ligne des filtres, avec le nombre de filtres', async () => {
+    const f = await render();
+    const page = f.componentInstance;
+    const reset = () => f.nativeElement.querySelector('.filters .reset-fab') as HTMLButtonElement | null;
+    expect(reset()).toBeNull();
+    page.fPack.set(1);
+    f.detectChanges();
+    expect(reset()).not.toBeNull();
+    expect(reset()!.querySelector('.reset-badge')!.textContent!.trim()).toBe('1');
+    expect(reset()!.getAttribute('aria-label')).toBe('Réinitialiser les filtres');
+    expect(f.nativeElement.querySelector('.filters').lastElementChild).toBe(reset());
+    page.t.setSearch('nom'); page.t.showInactive.set(true);
+    f.detectChanges();
+    expect(reset()!.querySelector('.reset-badge')!.textContent!.trim()).toBe('3');
+    reset()!.click();
+    f.detectChanges();
+    await f.whenStable();
+    expect(page.filtersAtDefault()).toBe(true);
+    expect(reset()).toBeNull();
+    expect(document.activeElement).toBe(f.nativeElement.querySelector('.search input'));
+  });
+
+  it('l’icône Note n’apparaît que si la note existe, avec la note en infobulle', async () => {
+    const f = await render();
+    const icons = f.debugElement.queryAll(By.css('button[aria-label^="Note de"]'));
+    expect(icons.map((b) => b.nativeElement.getAttribute('aria-label'))).toEqual(['Note de A001']);
+    const tooltip = icons[0].injector.get(MatTooltip);
+    expect(tooltip.message).toBe('Allergie\nau pollen');
+    expect(tooltip.tooltipClass).toBe('note-tooltip');
+  });
+
+  it('le clic sur l’icône ouvre la popup et recharge la liste après enregistrement', async () => {
+    const f = await render();
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) });
+    api.members.mockClear();
+    f.nativeElement.querySelector('button[aria-label="Note de A001"]').click();
+    await f.whenStable();
+    expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: rows[0] }));
+    expect(api.members).toHaveBeenCalledTimes(1);
+  });
+});

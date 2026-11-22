@@ -132,6 +132,12 @@ public class MemberService {
         return new Preview(price, end, remaining, Rules.situation(remaining, cfg.soonThreshold(), cfg.followThreshold()));
     }
 
+    /** Edits the note alone: unlike {@link #save}, the current period is neither re-priced nor re-validated. */
+    public void setNotes(Long id, String notes) {
+        Member m = members.findById(id).orElseThrow(() -> ApiException.notFound("Adhérent introuvable."));
+        m.setNotes(Check.text(notes, "notes", "Notes", 2000, false));
+    }
+
     public void setActive(Long id, boolean active) {
         members.findById(id).orElseThrow(() -> ApiException.notFound("Adhérent introuvable.")).setActive(active);
     }

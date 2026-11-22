@@ -20,6 +20,9 @@ public final class Requests {
     public record ActiveRequest(Boolean active) {
     }
 
+    public record NotesRequest(String notes) {
+    }
+
     public record FunctionRequest(String label) {
     }
 

@@ -18,6 +18,10 @@ import { ConfirmService } from '../../shared/confirm.service';
 import { DaysLeft, PaidBadge, SportChip } from '../../shared/badges';
 import { Pager, SortHeader, TableState } from '../../shared/table';
 import { openMemberForm } from './member-form-dialog';
+import { openMemberNote } from './member-note-dialog';
+
+/** Shared by the table and the count pill, so the filtered count can never exceed the base. */
+const isActive = (m: MemberView) => m.active;
 
 @Component({
   selector: 'app-members',
@@ -25,9 +29,16 @@ import { openMemberForm } from './member-form-dialog';
     LucideAngularModule, SortHeader, Pager, SportChip, PaidBadge, DaysLeft, MoneyPipe, FrDatePipe],
   template: `
     <div class="toolbar">
+      <div class="count-pill" role="status">
+        <lucide-icon name="users" [size]="18" aria-hidden="true" />
+        <strong class="count-pill-num" aria-hidden="true">{{ t.filtered().length }}</strong>
+        @if (narrowed()) {<span class="count-pill-of" aria-hidden="true">sur {{ base() }}</span>}
+        <span class="count-pill-unit" aria-hidden="true">{{ unit() }}</span>
+        <span class="sr-only">{{ count() }}</span>
+      </div>
       <label class="search grow">
         <lucide-icon name="search" [size]="18" />
-        <input type="search" placeholder="Rechercher par ID, nom, prénom, téléphone…" [ngModel]="t.search()" (ngModelChange)="t.setSearch($event)" aria-label="Rechercher un adhérent" />
+        <input #searchInput type="search" placeholder="Rechercher par ID, nom, prénom, téléphone…" [ngModel]="t.search()" (ngModelChange)="t.setSearch($event)" aria-label="Rechercher un adhérent" />
       </label>
       <button mat-stroked-button (click)="csv()"><lucide-icon name="download" [size]="16" /> CSV</button>
       <button mat-flat-button (click)="add()"><lucide-icon name="user-plus" [size]="16" /> Ajouter un adhérent</button>
@@ -56,6 +67,13 @@ import { openMemberForm } from './member-form-dialog';
         </mat-select>
       </mat-form-field>
       <mat-slide-toggle [ngModel]="t.showInactive()" (ngModelChange)="t.showInactive.set($event)">Afficher les inactifs</mat-slide-toggle>
+      @if (!filtersAtDefault()) {
+        <button type="button" class="reset-fab" animate.enter="reset-in" animate.leave="reset-out" (click)="resetFilters(); searchInput.focus()"
+                matTooltip="Réinitialiser les filtres" aria-label="Réinitialiser les filtres">
+          <lucide-icon name="funnel-x" [size]="18" />
+          <span class="reset-badge" aria-hidden="true">{{ activeFilters() }}</span>
+        </button>
+      }
     </div>
 
     <div class="table-wrap">
@@ -76,6 +94,7 @@ import { openMemberForm } from './member-form-dialog';
             <th class="num" [attr.aria-sort]="t.ariaSort('balance')"><app-sort [table]="t" key="balance">Reste à payer</app-sort></th>
             <th [attr.aria-sort]="t.ariaSort('days')"><app-sort [table]="t" key="days">Reste jours</app-sort></th>
             <th [attr.aria-sort]="t.ariaSort('insurance')"><app-sort [table]="t" key="insurance">Assurance</app-sort></th>
+            <th>Note</th>
             <th><span class="sr-only">Actions</span></th>
           </tr>
         </thead>
@@ -96,6 +115,11 @@ import { openMemberForm } from './member-form-dialog';
               <td class="num" [class.red]="m.balance > 0">{{ m.balance > 0 ? (m.balance | money) : '—' }}</td>
               <td><app-days [days]="m.remainingDays" /></td>
               <td><app-paid-badge [value]="m.insurance" /></td>
+              <td>
+                @if (m.notes.trim()) {
+                  <button class="icon-btn" (click)="note(m)" [matTooltip]="m.notes" matTooltipClass="note-tooltip" aria-label="Note de {{ m.code }}"><lucide-icon name="sticky-note" [size]="16" /></button>
+                }
+              </td>
               <td class="actions">
                 <button class="icon-btn" (click)="edit(m)" matTooltip="Modifier" aria-label="Modifier {{ m.code }}"><lucide-icon name="pencil" [size]="16" /></button>
                 <button class="icon-btn" (click)="toggle(m)" [matTooltip]="m.active ? 'Désactiver' : 'Réactiver'" [attr.aria-label]="(m.active ? 'Désactiver ' : 'Réactiver ') + m.code"><lucide-icon name="power" [size]="16" /></button>
@@ -103,7 +127,7 @@ import { openMemberForm } from './member-form-dialog';
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="15" class="empty">{{ loaded() ? 'Aucun adhérent ne correspond à la recherche.' : 'Chargement…' }}</td></tr>
+            <tr><td colspan="16" class="empty">{{ loaded() ? 'Aucun adhérent ne correspond à la recherche.' : 'Chargement…' }}</td></tr>
           }
         </tbody>
       </table>
@@ -134,13 +158,27 @@ export class MembersPage {
       status: (m) => m.paymentStatus, balance: (m) => m.balance, days: (m) => m.remainingDays, insurance: (m) => m.insurance,
     },
     defaultSort: { key: 'code', dir: 'asc' },
-    isActive: (m) => m.active,
+    isActive,
     filter: () => {
       const [s, p, st, ins] = [this.fSport(), this.fPack(), this.fStatus(), this.fInsurance()];
       return (m) => (!s || m.sportIds.includes(s)) && (!p || m.packId === p) && (!st || m.paymentStatus === st) && (!ins || m.insurance === ins);
     },
     pageSize: computed(() => this.config.pageSize()),
   });
+
+  /** Search, each select and the inactive toggle count as one active filter each. */
+  activeFilters = computed(() => [!!this.t.search(), this.t.showInactive(), this.fSport() !== null, this.fPack() !== null,
+    this.fStatus() !== null, this.fInsurance() !== null].filter(Boolean).length);
+  filtersAtDefault = computed(() => this.activeFilters() === 0);
+
+  /** Rows under the current inactive toggle, before search and selects: the filtered count never exceeds it. */
+  base = computed(() => {
+    const all = this.t.showInactive();
+    return this.t.rows().filter((m) => all || isActive(m)).length;
+  });
+  narrowed = computed(() => this.t.filtered().length < this.base());
+  unit = computed(() => ((this.narrowed() ? this.base() : this.t.filtered().length) > 1 ? 'adhérents' : 'adhérent'));
+  count = computed(() => `${this.t.filtered().length} ${this.narrowed() ? `sur ${this.base()} ` : ''}${this.unit()}`);
 
   constructor() {
     this.load();
@@ -166,6 +204,20 @@ export class MembersPage {
 
   async edit(m: MemberView): Promise<void> {
     if (await openMemberForm(this.dialog, m)) this.load();
+  }
+
+  /** Clears the search, the selects and the inactive toggle; the sort is kept. */
+  resetFilters(): void {
+    this.fSport.set(null);
+    this.fPack.set(null);
+    this.fStatus.set(null);
+    this.fInsurance.set(null);
+    this.t.showInactive.set(false);
+    this.t.setSearch('');
+  }
+
+  async note(m: MemberView): Promise<void> {
+    if (await openMemberNote(this.dialog, m)) this.load();
   }
 
   async toggle(m: MemberView): Promise<void> {

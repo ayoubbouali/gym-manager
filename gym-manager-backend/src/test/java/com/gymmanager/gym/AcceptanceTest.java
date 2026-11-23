@@ -719,7 +719,17 @@ class AcceptanceTest {
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("packId"));
         long karatePack = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
         send(admin, "POST", "/api/members", member("idrissi", "OMAR", "0623756669", karate, karatePack, null, "2026-11-18"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("Un adhérent avec ce nom, ce prénom et ce téléphone existe déjà."));
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("phone"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("Ce numéro de téléphone est déjà utilisé par l'adhérent A")));
+        // the same number under another name is refused as well, also when editing
+        send(admin, "POST", "/api/members", member("Autre", "Personne", "06 23 75 66 69", karate, karatePack, null, "2026-11-18"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("phone"));
+        long other = ((Number) read(send(admin, "POST", "/api/members", member("Autre", "Personne", "0612000099", karate, karatePack, null, "2026-11-18"))
+                .andExpect(status().isOk()), "$.id")).longValue();
+        send(admin, "PUT", "/api/members/" + other, member("Autre", "Personne", "0623756669", karate, karatePack, null, "2026-11-18"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("phone"));
+        send(admin, "PUT", "/api/members/" + other, member("Autre", "Renommée", "0612000099", karate, karatePack, null, "2026-11-18"))
+                .andExpect(status().isOk());
 
         long hamza = id("/api/staff-options", "$[?(@.code=='E001')].id");
         long act = ((Number) read(send(admin, "POST", "/api/activities", Map.of("name", "Atelier", "price", 50,
@@ -887,8 +897,8 @@ class AcceptanceTest {
         // another club country: French example, French numbers national
         setting("regional.country", "FR");
         get(admin, "/api/config").andExpect(jsonPath("$.phoneExample").value(org.hamcrest.Matchers.startsWith("06")));
-        send(admin, "POST", "/api/members", member("Tel", "Paris", "0612345678", karate, pack, null, "2026-11-18"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.phone").value("0612345678"));
+        send(admin, "POST", "/api/members", member("Tel", "Paris", "06 98 76 54 32", karate, pack, null, "2026-11-18"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.phone").value("0698765432"));
     }
 
     @Test

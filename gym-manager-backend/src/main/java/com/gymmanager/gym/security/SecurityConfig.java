@@ -25,7 +25,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * Roles are enforced on the server for every API route:
  * - ADMIN: everything;
- * - ACCUEIL: read everything except staff (salaries), payroll, statistics, settings and users;
+ * - ACCUEIL: read everything except staff (salaries), payroll, statistics, settings, users and roles;
  *   write members (list + card, renewals), payments and activity registrations; correcting or
  *   cancelling or deleting a payment is ADMIN only.
  * CSRF: the session cookie is SameSite=Strict and HttpOnly, and the API only accepts JSON/multipart.
@@ -50,7 +50,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/public/**", "/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/**").authenticated()
                         // ADMIN only, including reads
-                        .requestMatchers("/api/staff/**", "/api/stats/**", "/api/settings/**", "/api/users/**", "/api/functions/**", "/api/data/**", "/api/admin/**").hasRole(ADMIN)
+                        .requestMatchers("/api/staff/**", "/api/stats/**", "/api/settings/**", "/api/users/**", "/api/roles/**", "/api/functions/**", "/api/data/**", "/api/admin/**").hasRole(ADMIN)
                         // payments: ACCUEIL records them; correcting / cancelling / deleting is ADMIN only
                         .requestMatchers(HttpMethod.PUT, "/api/payments/**").hasRole(ADMIN)
                         .requestMatchers(HttpMethod.DELETE, "/api/payments/**").hasRole(ADMIN)

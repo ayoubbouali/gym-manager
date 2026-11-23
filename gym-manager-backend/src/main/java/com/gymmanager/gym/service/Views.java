@@ -43,13 +43,13 @@ public final class Views {
      * A member with their current (latest) subscription period. {@code price} is the price of that period;
      * {@code paid}, {@code balance} and {@code paymentStatus} cover all periods (arrears included).
      * Without any period, the subscription fields (period, pack, discount, price, end, remaining days)
-     * and the payment status are null: situation and state NONE.
+     * and the payment status are null: situation and state NONE. {@code customAmount}: price typed by hand for the current period.
      */
     public record MemberView(Long id, String code, String lastName, String firstName, String phone,
                              LocalDate birthDate, LocalDate registrationDate,
                              List<Long> sportIds, List<SportRef> sports,
                              Long subscriptionId, LocalDate periodStart, int periodCount,
-                             Long packId, PackRef pack, Long discountId, DiscountView discount,
+                             Long packId, PackRef pack, Long discountId, DiscountView discount, BigDecimal customAmount,
                              Insurance insurance, boolean hasPhoto, String notes, boolean active, List<Long> activityIds,
                              BigDecimal price, LocalDate endDate, Long remainingDays,
                              BigDecimal paid, BigDecimal balance,
@@ -87,12 +87,17 @@ public final class Views {
                             int memberCount, int fillPercent) {
     }
 
+    /** {@code price}: monthly price counted this month ({@code periodAmount} ÷ {@code months}). */
     public record SalaryLineView(Long memberId, String code, String name, String pack, LocalDate registrationDate,
-                                 BigDecimal price, BigDecimal factor, List<String> sports) {
+                                 int months, BigDecimal periodAmount, BigDecimal price, BigDecimal factor, List<String> sports) {
     }
 
-    public record SalaryDetail(LocalDate from, LocalDate to, String shareRaw, BigDecimal sharePercent, BigDecimal base,
-                               Rules.MultiCoach multiCoach, List<SalaryLineView> lines) {
+    /**
+     * Salary of {@code month} ("2026-11"). {@code from}/{@code to}: start dates of the new registrations that count
+     * from this month on (from the previous month's cut-off day to the day before this one's).
+     */
+    public record SalaryDetail(String month, LocalDate from, LocalDate to, int cutoffDay, String shareRaw, BigDecimal sharePercent,
+                               BigDecimal base, Rules.MultiCoach multiCoach, List<SalaryLineView> lines) {
     }
 
     public record StaffView(Long id, String code, String lastName, String firstName, String name, String phone,

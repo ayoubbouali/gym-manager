@@ -101,6 +101,13 @@ public final class Rules {
         return rounding.apply(raw);
     }
 
+    /** Discount (%, 2 decimals) that turns {@code reference} into {@code amount}: 150 → 100 gives 33.33. */
+    public static BigDecimal discountPercent(BigDecimal reference, BigDecimal amount) {
+        if (reference == null || reference.signum() <= 0) return BigDecimal.ZERO;
+        return clampPercent(HUNDRED.subtract(amount.multiply(HUNDRED).divide(reference, MC)))
+                .setScale(2, RoundingMode.HALF_UP).stripTrailingZeros();
+    }
+
     // ------------------------------------------------------------------ subscription
 
     /** RG-FIN: calendar month addition (31/01 + 1 month = 28/02 or 29/02). */
@@ -304,24 +311,40 @@ public final class Rules {
         }
     }
 
-    /** Window [start day, end day] of the month of `today`, clamped to the month length. */
-    public static DateWindow salaryWindow(LocalDate today, int startDay, int endDay) {
-        YearMonth ym = YearMonth.from(today);
-        int last = ym.lengthOfMonth();
-        int s = Math.min(Math.max(1, startDay), last);
-        int e = Math.min(Math.max(s, endDay), last);
-        return new DateWindow(ym.atDay(s), ym.atDay(e));
+    /** First month paid to the coach for a period: the start month, or the next one from the cut-off day on. */
+    public static YearMonth firstSalaryMonth(LocalDate start, int cutoffDay) {
+        YearMonth ym = YearMonth.from(start);
+        return start.getDayOfMonth() >= cutoffDay ? ym.plusMonths(1) : ym;
+    }
+
+    /** A period of {@code months} months counts in exactly {@code months} salary months, from {@link #firstSalaryMonth}. */
+    public static boolean coversSalaryMonth(LocalDate start, int months, int cutoffDay, YearMonth month) {
+        YearMonth first = firstSalaryMonth(start, cutoffDay);
+        return !month.isBefore(first) && month.isBefore(first.plusMonths(months));
+    }
+
+    /** Start dates whose first salary month is {@code month}: from the previous month's cut-off day to the day before this one's. */
+    public static DateWindow newRegistrationWindow(YearMonth month, int cutoffDay) {
+        YearMonth prev = month.minusMonths(1);
+        LocalDate from = cutoffDay <= prev.lengthOfMonth() ? prev.atDay(cutoffDay) : month.atDay(1);
+        LocalDate to = cutoffDay > 1 ? month.atDay(Math.min(cutoffDay - 1, month.lengthOfMonth())) : prev.atEndOfMonth();
+        return new DateWindow(from, to);
     }
 
     public enum PayMode { COMMISSION, FIXED }
 
-    public record MemberFacts(long id, Set<Long> sportIds, LocalDate registrationDate, BigDecimal price, boolean enabled) {
+    /** One subscription period of a member: {@code amount} for {@code months} months from {@code start}. */
+    public record MemberFacts(long id, Set<Long> sportIds, LocalDate start, int months, BigDecimal amount, boolean enabled) {
+        public BigDecimal monthlyPrice() {
+            return amount.divide(BigDecimal.valueOf(months), MC);
+        }
     }
 
-    public record SalaryParams(Share share, int startDay, int endDay, MultiCoach multiCoach, Rounding rounding) {
+    public record SalaryParams(Share share, int cutoffDay, MultiCoach multiCoach, Rounding rounding) {
     }
 
-    public record SalaryLine(long memberId, List<Long> sportIds, BigDecimal price, BigDecimal factor) {
+    /** {@code price}: monthly price of {@code period}, the member's period counted this month. */
+    public record SalaryLine(long memberId, List<Long> sportIds, BigDecimal price, BigDecimal factor, MemberFacts period) {
     }
 
     public record SalaryResult(BigDecimal amount, DateWindow window, List<SalaryLine> lines, BigDecimal base) {
@@ -329,24 +352,31 @@ public final class Rules {
 
     /**
      * RG-SALAIRE.
-     * FIXED: the fixed amount. COMMISSION: share × Σ member prices of members practising at least one sport
-     * coached by this staff member, registered within the window of the current month (bounds included).
-     * A member counts once per staff member. With several coaches on one sport, SPLIT divides that sport's
-     * part equally; if the member has several sports coached by this staff member, the most favourable
+     * FIXED: the fixed amount. COMMISSION: share × Σ monthly prices (period price ÷ months) of the members practising
+     * at least one sport coached by this staff member whose subscription covers the month ({@link #coversSalaryMonth}):
+     * a period starting on or after the cut-off day only counts from the next month.
+     * A member counts once per staff member (latest covering period). With several coaches on one sport, SPLIT divides
+     * that sport's part equally; if the member has several sports coached by this staff member, the most favourable
      * factor is used.
      */
     public static SalaryResult computeSalary(long staffId, PayMode payMode, BigDecimal fixedSalary,
-                                             Collection<MemberFacts> members, Map<Long, ? extends Collection<Long>> coachesBySport,
-                                             SalaryParams p, LocalDate today) {
-        DateWindow window = salaryWindow(today, p.startDay(), p.endDay());
+                                             Collection<MemberFacts> periods, Map<Long, ? extends Collection<Long>> coachesBySport,
+                                             SalaryParams p, LocalDate day) {
+        YearMonth month = YearMonth.from(day);
+        DateWindow window = newRegistrationWindow(month, p.cutoffDay());
         if (payMode == PayMode.FIXED) {
             BigDecimal amount = p.rounding().apply(fixedSalary == null ? BigDecimal.ZERO : fixedSalary);
             return new SalaryResult(amount, window, List.of(), BigDecimal.ZERO);
         }
+        Map<Long, MemberFacts> covering = new LinkedHashMap<>();
+        for (MemberFacts f : periods) {
+            if (!coversSalaryMonth(f.start(), f.months(), p.cutoffDay(), month)) continue;
+            covering.merge(f.id(), f, (a, b) -> b.start().isAfter(a.start()) ? b : a);
+        }
         List<SalaryLine> lines = new ArrayList<>();
         BigDecimal base = BigDecimal.ZERO;
-        for (MemberFacts m : members) {
-            if (!m.enabled() || !window.contains(m.registrationDate())) continue;
+        for (MemberFacts m : covering.values()) {
+            if (!m.enabled()) continue;
             List<Long> coached = m.sportIds().stream().sorted()
                     .filter(sid -> coachesBySport.containsKey(sid) && coachesBySport.get(sid).contains(staffId)).toList();
             if (coached.isEmpty()) continue;
@@ -355,8 +385,8 @@ public final class Rules {
                 int fewest = coached.stream().mapToInt(sid -> coachesBySport.get(sid).size()).min().orElse(1);
                 factor = BigDecimal.ONE.divide(BigDecimal.valueOf(fewest), MC);
             }
-            lines.add(new SalaryLine(m.id(), coached, m.price(), factor));
-            base = base.add(m.price().multiply(factor, MC));
+            lines.add(new SalaryLine(m.id(), coached, m.monthlyPrice(), factor, m));
+            base = base.add(m.monthlyPrice().multiply(factor, MC));
         }
         return new SalaryResult(p.rounding().apply(p.share().of(base)), window, lines, base.setScale(2, RoundingMode.HALF_UP));
     }

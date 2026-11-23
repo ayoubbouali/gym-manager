@@ -97,7 +97,7 @@ public class PaymentService {
         Duration dur = durations.findById(pack.getDurationId()).orElseThrow();
         Discount disc = discounts.findById(sub.getDiscountId()).orElseThrow();
         sub.setMonths(dur.getMonths());
-        sub.setAmount(memberService.price(pack, dur, disc, cfg));
+        sub.setAmount(memberService.price(pack, dur, disc, sub.getCustomAmount(), cfg));
     }
 
     /** ADMIN: corrects a payment (same receipt number, regenerated). */
@@ -180,7 +180,7 @@ public class PaymentService {
         sub.setDiscountId(disc.getId());
         sub.setStartDate(start);
         sub.setMonths(dur.getMonths());
-        sub.setAmount(memberService.price(pack, dur, disc, cfg));
+        sub.setAmount(memberService.price(pack, dur, disc, null, cfg));
         sub.setCreatedAt(cfg.now());
         sub.setCreatedBy(username);
         sub = subscriptions.saveAndFlush(sub);

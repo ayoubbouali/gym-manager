@@ -17,16 +17,26 @@ public class AppUser {
     private String username;
     private String passwordHash;
 
-    @Enumerated(EnumType.STRING)
-    private Role role;
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "role_id")
+    private UserRole userRole;
 
     private boolean active = true;
     private boolean mustChangePassword = true;
     private String email;
+    private String phone;
+
+    /** File name of the profile photo in the uploads directory (never the image itself). */
+    private String photo;
 
     /** Pending emailed temporary password (BCrypt hash, UTC expiry); valid alongside passwordHash. */
     private String tempPasswordHash;
     private LocalDateTime tempPasswordExpiresAt;
+
+    /** Access level enforced by SecurityConfig. */
+    public Role getRole() {
+        return userRole.getAccessLevel();
+    }
 
     public void clearTempPassword() {
         tempPasswordHash = null;

@@ -15,7 +15,7 @@ public record ClubConfig(
         Map<String, CodeFormat> codes,
         boolean cumulative, Rules.Rounding rounding,
         int soonThreshold, int followThreshold, String expiredTemplate, String soonTemplate,
-        String salaryShareRaw, Rules.Share salaryShare, int salaryStartDay, int salaryEndDay, Rules.MultiCoach multiCoach,
+        String salaryShareRaw, Rules.Share salaryShare, int salaryCutoffDay, Rules.MultiCoach multiCoach,
         String receiptPrefix, String payslipPrefix, String documentFooter,
         int pageSize, Clock clock) {
 
@@ -27,7 +27,7 @@ public record ClubConfig(
     }
 
     public Rules.SalaryParams salaryParams() {
-        return new Rules.SalaryParams(salaryShare, salaryStartDay, salaryEndDay, multiCoach, rounding);
+        return new Rules.SalaryParams(salaryShare, salaryCutoffDay, multiCoach, rounding);
     }
 
     public LocalDate today() {

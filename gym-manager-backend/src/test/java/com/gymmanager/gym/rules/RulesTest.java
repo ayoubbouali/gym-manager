@@ -22,6 +22,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -78,6 +79,13 @@ class RulesTest {
             assertThat(Rules.memberPrice(bd("300"), 3, bd("10"), bd("10"), false, R2)).isEqualByComparingTo("810.00");
             assertThat(Rules.memberPrice(bd("300"), 3, bd("10"), bd("25"), false, R2)).isEqualByComparingTo("675.00");
             assertThat(Rules.memberPrice(bd("300"), 3, bd("15"), bd("5"), false, R2)).isEqualByComparingTo("765.00");
+        }
+
+        @Test
+        void discountPercentOfATypedPrice() {
+            assertThat(Rules.discountPercent(bd("150"), bd("100"))).isEqualByComparingTo("33.33");
+            assertThat(Rules.discountPercent(bd("150"), bd("150"))).isEqualByComparingTo("0");
+            assertThat(Rules.discountPercent(BigDecimal.ZERO, bd("0"))).isEqualByComparingTo("0");
         }
 
         @Test
@@ -243,10 +251,15 @@ class RulesTest {
         static final long HAMZA = 1L, OTHER = 2L;
         static final long KARATE = 10L, BOXE = 20L;
         static final LocalDate TODAY = d("2026-09-18");
-        static final SalaryParams THIRD = new SalaryParams(Rules.parseShare("1/3"), 1, 23, MultiCoach.FULL, R2);
+        static final SalaryParams THIRD = new SalaryParams(Rules.parseShare("1/3"), 25, MultiCoach.FULL, R2);
 
+        /** A monthly period. */
         static MemberFacts member(long id, String date, String price, Long... sports) {
-            return new MemberFacts(id, Set.of(sports), d(date), bd(price), true);
+            return period(id, date, 1, price, sports);
+        }
+
+        static MemberFacts period(long id, String date, int months, String price, Long... sports) {
+            return new MemberFacts(id, Set.of(sports), d(date), months, bd(price), true);
         }
 
         @Test
@@ -257,31 +270,65 @@ class RulesTest {
         }
 
         @Test
-        void commissionIsAThirdOfThePricesInTheWindow() {
+        void commissionIsAThirdOfTheMonthlyPricesInProgress() {
             var members = List.of(member(16, "2026-09-05", "300", KARATE));
             SalaryResult r = Rules.computeSalary(HAMZA, PayMode.COMMISSION, null, members, Map.of(KARATE, List.of(HAMZA)), THIRD, TODAY);
             assertThat(r.amount()).isEqualByComparingTo("100.00");
-            assertThat(r.window().from()).isEqualTo(d("2026-09-01"));
-            assertThat(r.window().to()).isEqualTo(d("2026-09-23"));
+            // new registrations counted from September: 25/08 → 24/09
+            assertThat(r.window().from()).isEqualTo(d("2026-08-25"));
+            assertThat(r.window().to()).isEqualTo(d("2026-09-24"));
         }
 
         @Test
-        void windowBoundsAreIncludedAndTheNextDayExcluded() {
+        void registrationsFromTheCutoffDayCountFromTheNextMonth() {
+            // 10 members already in progress, one new on the 10th, one new on the 25th
+            var members = new ArrayList<MemberFacts>();
+            for (long i = 1; i <= 10; i++) members.add(period(i, "2026-08-10", 3, "450", KARATE));
+            members.add(member(11, "2026-09-10", "150", KARATE));
+            members.add(member(12, "2026-09-25", "150", KARATE));
+            var coaches = Map.of(KARATE, List.of(HAMZA));
+            SalaryResult sept = Rules.computeSalary(HAMZA, PayMode.COMMISSION, null, members, coaches, THIRD, TODAY);
+            assertThat(sept.lines()).hasSize(11).extracting(Rules.SalaryLine::memberId).doesNotContain(12L);
+            assertThat(sept.amount()).isEqualByComparingTo("550.00"); // 11 × 150 / 3
+            SalaryResult oct = Rules.computeSalary(HAMZA, PayMode.COMMISSION, null, members, coaches, THIRD, d("2026-10-01"));
+            // the quarterly ones and the one of the 25th; the one of the 10th (monthly) has ended
+            assertThat(oct.lines()).extracting(Rules.SalaryLine::memberId).contains(12L).doesNotContain(11L).hasSize(11);
+        }
+
+        @Test
+        void cutoffDayBoundaries() {
             var members = List.of(
-                    member(1, "2026-09-01", "300", KARATE),   // first day: included
-                    member(2, "2026-09-23", "600", KARATE),   // last day: included
-                    member(3, "2026-09-24", "900", KARATE),   // day after: excluded
-                    member(4, "2026-08-31", "900", KARATE));  // day before: excluded
+                    member(1, "2026-09-24", "300", KARATE),   // day before the cut-off: this month
+                    member(2, "2026-09-25", "600", KARATE),   // cut-off day: next month
+                    member(3, "2026-08-25", "900", KARATE),   // previous month's cut-off day: this month
+                    member(4, "2026-08-24", "900", KARATE));  // previous month before the cut-off: ended
             SalaryResult r = Rules.computeSalary(HAMZA, PayMode.COMMISSION, null, members, Map.of(KARATE, List.of(HAMZA)), THIRD, TODAY);
-            assertThat(r.lines()).extracting(Rules.SalaryLine::memberId).containsExactly(1L, 2L);
-            assertThat(r.amount()).isEqualByComparingTo("300.00");
+            assertThat(r.lines()).extracting(Rules.SalaryLine::memberId).containsExactlyInAnyOrder(1L, 3L);
+            assertThat(r.amount()).isEqualByComparingTo("400.00");
         }
 
         @Test
-        void shareAndWindowAreParameters() {
+        void aPeriodCountsItsNumberOfMonthsAtItsMonthlyPrice() {
+            var annual = List.of(period(1, "2026-01-10", 12, "3060", KARATE));
+            var coaches = Map.of(KARATE, List.of(HAMZA));
+            assertThat(Rules.computeSalary(HAMZA, PayMode.COMMISSION, null, annual, coaches, THIRD, TODAY).lines())
+                    .singleElement().satisfies(l -> assertThat(l.price()).isEqualByComparingTo("255"));
+            assertThat(Rules.computeSalary(HAMZA, PayMode.COMMISSION, null, annual, coaches, THIRD, d("2026-12-01")).amount()).isEqualByComparingTo("85.00");
+            assertThat(Rules.computeSalary(HAMZA, PayMode.COMMISSION, null, annual, coaches, THIRD, d("2027-01-01")).lines()).isEmpty();
+        }
+
+        @Test
+        void overlappingPeriodsOfAMemberCountOnceWithTheLatest() {
+            var members = List.of(member(1, "2026-09-01", "300", KARATE), member(1, "2026-09-15", "150", KARATE));
+            SalaryResult r = Rules.computeSalary(HAMZA, PayMode.COMMISSION, null, members, Map.of(KARATE, List.of(HAMZA)), THIRD, TODAY);
+            assertThat(r.lines()).singleElement().satisfies(l -> assertThat(l.price()).isEqualByComparingTo("150"));
+        }
+
+        @Test
+        void shareAndCutoffAreParameters() {
             var members = List.of(member(1, "2026-09-05", "300", KARATE), member(2, "2026-09-25", "200", KARATE));
             var coaches = Map.of(KARATE, List.of(HAMZA));
-            var p40 = new SalaryParams(Rules.parseShare("40"), 1, 25, MultiCoach.FULL, R2);
+            var p40 = new SalaryParams(Rules.parseShare("40"), 26, MultiCoach.FULL, R2);
             SalaryResult r = Rules.computeSalary(HAMZA, PayMode.COMMISSION, null, members, coaches, p40, TODAY);
             assertThat(r.amount()).isEqualByComparingTo("200.00"); // 40 % × 500
         }
@@ -307,23 +354,28 @@ class RulesTest {
         void severalCoachesSplitModeShareEqually() {
             var members = List.of(member(1, "2026-09-05", "300", KARATE));
             var coaches = Map.of(KARATE, List.of(HAMZA, OTHER));
-            var split = new SalaryParams(Rules.parseShare("1/3"), 1, 23, MultiCoach.SPLIT, R2);
+            var split = new SalaryParams(Rules.parseShare("1/3"), 25, MultiCoach.SPLIT, R2);
             assertThat(Rules.computeSalary(HAMZA, PayMode.COMMISSION, null, members, coaches, split, TODAY).amount()).isEqualByComparingTo("50.00");
             assertThat(Rules.computeSalary(OTHER, PayMode.COMMISSION, null, members, coaches, split, TODAY).amount()).isEqualByComparingTo("50.00");
         }
 
         @Test
         void membersOfOtherSportsOrDisabledAreIgnored() {
-            var disabled = new MemberFacts(2, Set.of(KARATE), d("2026-09-05"), bd("300"), false);
+            var disabled = new MemberFacts(2, Set.of(KARATE), d("2026-09-05"), 1, bd("300"), false);
             var members = List.of(member(1, "2026-09-05", "400", BOXE), disabled);
             var coaches = Map.of(KARATE, List.of(HAMZA), BOXE, List.of(OTHER));
             assertThat(Rules.computeSalary(HAMZA, PayMode.COMMISSION, null, members, coaches, THIRD, TODAY).amount()).isEqualByComparingTo("0.00");
         }
 
         @Test
-        void windowIsClampedToTheMonthLength() {
-            var w = Rules.salaryWindow(d("2026-02-10"), 1, 31);
-            assertThat(w.to()).isEqualTo(d("2026-02-28"));
+        void windowFollowsShortMonths() {
+            // February has no 31st: the March window starts on 01/03; a registration on 31/03 counts from April
+            var w = Rules.newRegistrationWindow(java.time.YearMonth.of(2026, 3), 31);
+            assertThat(w.from()).isEqualTo(d("2026-03-01"));
+            assertThat(w.to()).isEqualTo(d("2026-03-30"));
+            var first = Rules.newRegistrationWindow(java.time.YearMonth.of(2026, 3), 1);
+            assertThat(first.from()).isEqualTo(d("2026-02-01"));
+            assertThat(first.to()).isEqualTo(d("2026-02-28"));
         }
 
         @ParameterizedTest

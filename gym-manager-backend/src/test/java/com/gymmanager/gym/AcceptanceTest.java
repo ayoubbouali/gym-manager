@@ -208,7 +208,7 @@ class AcceptanceTest {
         long sport = ((Number) read(send(admin, "POST", "/api/sports", Map.of("name", "Natation", "color", "#00ACC1",
                 "capacity", 40, "monthlyPrice", 500, "coachIds", List.of(coach), "schedules", List.of())), "$.id")).longValue();
 
-        // pack generator, then a member registered within the salary window (1 → 23 of the current month)
+        // pack generator, then a member registered before the salary cut-off day (25)
         long monthly = id("/api/durations", "$[?(@.label=='Mensuel')].id");
         send(admin, "POST", "/api/packs/generate", Map.of("sportId", sport, "items", List.of(
                 Map.of("durationId", monthly, "name", "Natation - Mensuel")))).andExpect(status().isOk());
@@ -242,12 +242,13 @@ class AcceptanceTest {
         long pack = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
         send(admin, "POST", "/api/members", member("Test", "Un", "0612000002", karate, pack, null, "2026-11-05")).andExpect(status().isOk());
         send(admin, "POST", "/api/members", member("Test", "Deux", "0612000003", karate, pack, null, "2026-11-24")).andExpect(status().isOk());
+        // Karaté in progress in November: A006 quarterly from 26/08 (810 / 3 = 270), annual A013 (3060 / 12 = 255), the two new ones
         String hamza = "$.rows[?(@.code=='E001')].salary";
-        assertThat((List<Object>) read(get(admin, "/api/staff"), hamza)).containsExactly(100.0);   // 1/3 × 300
+        assertThat((List<Object>) read(get(admin, "/api/staff"), hamza)).containsExactly(375.0);   // 1/3 × 1125
         setting("salary.share", "40");
-        assertThat((List<Object>) read(get(admin, "/api/staff"), hamza)).containsExactly(120.0);   // 40 % × 300
-        setting("salary.endDay", "25");
-        assertThat((List<Object>) read(get(admin, "/api/staff"), hamza)).containsExactly(240.0);   // 40 % × 600
+        assertThat((List<Object>) read(get(admin, "/api/staff"), hamza)).containsExactly(450.0);   // 40 % × 1125
+        setting("salary.cutoffDay", "24");
+        assertThat((List<Object>) read(get(admin, "/api/staff"), hamza)).containsExactly(330.0);   // 40 % × 825: the 24/11 one moves to December
 
         setting("club.name", "Gym Manager Center");
         get(admin, "/api/config").andExpect(jsonPath("$.clubName").value("Gym Manager Center"));
@@ -305,6 +306,35 @@ class AcceptanceTest {
         send(admin, "DELETE", "/api/discounts/" + r10, null).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("IN_USE"));
         long none = id("/api/discounts", "$[?(@.name=='Aucune')].id");
         send(admin, "PATCH", "/api/discounts/" + none + "/active", Map.of("active", false)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Remise saisie à la main : le montant tapé devient le prix, la remise en % est déduite du prix du pack")
+    void customAmount() throws Exception {
+        long karate = id("/api/sports", "$[?(@.name=='Karaté')].id");
+        long monthly = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
+        long r10 = id("/api/discounts", "$[?(@.name=='Remise 10%')].id");
+        send(admin, "POST", "/api/members/preview", Map.of("packId", monthly, "registrationDate", "2026-11-18", "customAmount", 200))
+                .andExpect(jsonPath("$.price").value(200.0));
+        var body = member("Manuel", "Prix", "0612000007", karate, monthly, r10, "2026-11-18");
+        body.put("customAmount", 200);
+        String created = body(send(admin, "POST", "/api/members", body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.price").value(200.0)).andExpect(jsonPath("$.customAmount").value(200.0))
+                .andExpect(jsonPath("$.discount.name").value("Montant saisi (−33,33 %)"))
+                .andExpect(jsonPath("$.discount.percent").value(33.33)));
+        long memberId = ((Number) JsonPath.read(created, "$.id")).longValue();
+        // the typed price ignores the pricing rules
+        setting("subscription.cumulative", "false");
+        assertThat((List<Object>) read(get(admin, "/api/members"), "$[?(@.lastName=='Manuel')].price")).containsExactly(200.0);
+        // more than the pack price is not a discount
+        body.put("customAmount", 301);
+        send(admin, "PUT", "/api/members/" + memberId, body)
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("customAmount"));
+        // back to a discount from the list
+        body.remove("customAmount");
+        send(admin, "PUT", "/api/members/" + memberId, body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.price").value(270.0)).andExpect(jsonPath("$.customAmount").isEmpty())
+                .andExpect(jsonPath("$.discount.name").value("Remise 10%"));
     }
 
     @Test
@@ -1131,6 +1161,119 @@ class AcceptanceTest {
         // a role change leaves the email untouched; a blank email removes it
         send(admin, "PUT", "/api/users/" + accueilId, Map.of("role", "ACCUEIL")).andExpect(jsonPath("$.email").value("accueil@club.test"));
         send(admin, "PUT", "/api/users/" + accueilId, Map.of("email", "")).andExpect(status().isOk()).andExpect(jsonPath("$.email").isEmpty());
+    }
+
+    @Test
+    @DisplayName("E-mail du compte : une adresse déjà utilisée par un autre utilisateur est refusée, sans tenir compte de la casse")
+    void accountEmailIsUnique() throws Exception {
+        setEmail("admin", "direction@club.test");
+        send(admin, "POST", "/api/users", Map.of("username", "second", "password", "Second2026", "role", "ADMIN", "email", "Direction@Club.test"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("email"))
+                .andExpect(jsonPath("$.message").value("Cette adresse e-mail est déjà utilisée par l'utilisateur « admin »."));
+        send(admin, "PUT", "/api/users/" + userId("accueil"), Map.of("email", "direction@club.test"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("email"));
+        MockHttpSession accueil = login("accueil", "accueil123", "Accueil2026");
+        send(accueil, "PUT", "/api/auth/me", Map.of("email", "DIRECTION@club.test"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("email"));
+
+        // the holder may save its own unchanged address
+        send(admin, "PUT", "/api/auth/me", Map.of("email", "direction@club.test")).andExpect(status().isOk());
+        send(admin, "POST", "/api/users", Map.of("username", "second", "password", "Second2026", "role", "ADMIN", "email", "second@club.test"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Téléphone du compte : facultatif, vérifié selon le pays, modifiable par l'admin et par l'utilisateur")
+    void accountPhone() throws Exception {
+        send(admin, "POST", "/api/users", Map.of("username", "sanstel", "password", "Sanstel2026", "role", "ACCUEIL"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.phone").isEmpty());
+        send(admin, "POST", "/api/users", Map.of("username", "avectel", "password", "Avectel2026", "role", "ACCUEIL", "phone", "123"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("phone"));
+        send(admin, "POST", "/api/users", Map.of("username", "avectel", "password", "Avectel2026", "role", "ACCUEIL", "phone", "06 61 11 22 33"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.phone").value("0661112233"));
+
+        long id = userId("avectel");
+        send(admin, "PUT", "/api/users/" + id, Map.of("active", false)).andExpect(jsonPath("$.phone").value("0661112233"));
+        send(admin, "PUT", "/api/users/" + id, Map.of("phone", "")).andExpect(status().isOk()).andExpect(jsonPath("$.phone").isEmpty());
+
+        MockHttpSession accueil = login("accueil", "accueil123", "Accueil2026");
+        send(accueil, "PUT", "/api/auth/me", Map.of("phone", "0661445566")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.phone").value("0661445566"));
+        // updating only the phone leaves the email untouched, and vice versa
+        send(accueil, "PUT", "/api/auth/me", Map.of("email", "accueil@club.test")).andExpect(jsonPath("$.phone").value("0661445566"));
+    }
+
+    @Test
+    @DisplayName("Rôles : nom libre rattaché à un niveau d'accès qui fixe les droits réels")
+    void customRoles() throws Exception {
+        List<String> levels = read(get(admin, "/api/roles").andExpect(status().isOk()), "$[?(@.name in ['ADMIN', 'ACCUEIL'])].accessLevel");
+        assertThat(levels).containsExactlyInAnyOrder("ADMIN", "ACCUEIL");
+        long coach = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Coach", "accessLevel", "ACCUEIL")).andExpect(status().isOk()), "$.id")).longValue();
+        send(admin, "POST", "/api/roles", Map.of("name", "coach", "accessLevel", "ADMIN"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("name"));
+        send(admin, "POST", "/api/roles", Map.of("name", "Sans niveau")).andExpect(status().isBadRequest());
+
+        send(admin, "POST", "/api/users", Map.of("username", "karim", "password", "Karim2026x", "roleId", coach))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.role").value("ACCUEIL")).andExpect(jsonPath("$.roleName").value("Coach"));
+        MockHttpSession karim = login("karim", "Karim2026x", "Karim2027x");
+        get(karim, "/api/members").andExpect(status().isOk());
+        get(karim, "/api/users").andExpect(status().isForbidden());
+        get(karim, "/api/roles").andExpect(status().isForbidden());
+
+        // raising the role's level takes effect on the next login (the current session is closed)
+        send(admin, "PUT", "/api/roles/" + coach, Map.of("name", "Coach principal", "accessLevel", "ADMIN")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.userCount").value(1));
+        get(karim, "/api/members").andExpect(status().isUnauthorized());
+        MockHttpSession karim2 = (MockHttpSession) mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(json(Map.of("username", "karim", "password", "Karim2027x")))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.roleName").value("Coach principal")).andReturn().getRequest().getSession();
+        get(karim2, "/api/users").andExpect(status().isOk());
+
+        // a role in use cannot be deleted; an unused one can
+        send(admin, "DELETE", "/api/roles/" + coach, null).andExpect(status().isConflict());
+        long compta = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Comptable", "accessLevel", "ADMIN")), "$.id")).longValue();
+        send(admin, "DELETE", "/api/roles/" + compta, null).andExpect(status().isNoContent());
+        send(accueilSession(), "POST", "/api/roles", Map.of("name", "Pirate", "accessLevel", "ADMIN")).andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Rôles : on ne peut pas retirer l'accès administrateur à son propre rôle ni au dernier administrateur actif")
+    void customRolesKeepAnAdmin() throws Exception {
+        long adminRole = id("/api/roles", "$[?(@.name=='ADMIN')].id");
+        send(admin, "PUT", "/api/roles/" + adminRole, Map.of("name", "ADMIN", "accessLevel", "ACCUEIL"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("accessLevel"));
+
+        long gerant = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Gérant", "accessLevel", "ADMIN")), "$.id")).longValue();
+        send(admin, "PUT", "/api/users/" + userId("accueil"), Map.of("roleId", gerant)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("ADMIN"));
+        send(admin, "PUT", "/api/users/" + userId("admin"), Map.of("roleId", gerant)).andExpect(status().isOk());
+        // admin now holds "Gérant": the old ADMIN role may be renamed and downgraded
+        send(admin, "PUT", "/api/roles/" + adminRole, Map.of("name", "Ancien admin", "accessLevel", "ACCUEIL")).andExpect(status().isOk());
+        // own role: refused
+        send(admin, "PUT", "/api/roles/" + gerant, Map.of("name", "Gérant", "accessLevel", "ACCUEIL"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("Vous ne pouvez pas retirer l'accès administrateur à votre propre rôle."));
+    }
+
+    @Test
+    @DisplayName("Photo du profil : JPG ou PNG de 2 Mo maximum, déposée et retirée par l'utilisateur lui-même")
+    void accountPhoto() throws Exception {
+        MockHttpSession accueil = accueilSession();
+        get(accueil, "/api/auth/me/photo").andExpect(status().isNotFound());
+        mvc.perform(multipart("/api/auth/me/photo").file(new MockMultipartFile("file", "p.gif", "image/gif", new byte[]{'G', 'I', 'F', '8', '9', 'a'})).session(accueil))
+                .andExpect(status().isBadRequest());
+        byte[] photo = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 1, 2, 3, 4};
+        mvc.perform(multipart("/api/auth/me/photo").file(new MockMultipartFile("file", "p.jpg", "image/jpeg", photo)).session(accueil))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.hasPhoto").value(true));
+        assertThat(get(accueil, "/api/auth/me/photo").andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray()).isEqualTo(photo);
+        get(admin, "/api/users/" + userId("accueil") + "/photo").andExpect(status().isOk());
+        get(accueil, "/api/users/" + userId("accueil") + "/photo").andExpect(status().isForbidden());
+
+        send(accueil, "DELETE", "/api/auth/me/photo", null).andExpect(status().isOk()).andExpect(jsonPath("$.hasPhoto").value(false));
+        get(accueil, "/api/auth/me/photo").andExpect(status().isNotFound());
+    }
+
+    MockHttpSession accueilSession() throws Exception {
+        return login("accueil", "accueil123", "Accueil2026");
     }
 
     @Test

@@ -10,6 +10,7 @@ export type Situation = 'EXPIRED' | 'SOON' | 'FOLLOW' | 'OK' | 'NONE';
 export type MemberState = 'EXPIRED' | 'UNPAID' | 'SOON' | 'UP_TO_DATE' | 'NONE';
 export type PayMode = 'COMMISSION' | 'FIXED';
 
+/** `role`: access level enforced by the server; `roleName`: the club's name for the user's role. */
 export interface User {
   id: number;
   username: string;
@@ -17,6 +18,17 @@ export interface User {
   active: boolean;
   mustChangePassword: boolean;
   email: string | null;
+  roleId: number;
+  roleName: string;
+  phone: string | null;
+  hasPhoto: boolean;
+}
+
+export interface UserRoleView {
+  id: number;
+  name: string;
+  accessLevel: Role;
+  userCount: number;
 }
 
 export interface AppConfig {
@@ -64,6 +76,8 @@ export interface MemberView {
   /** Subscription fields are null for a member without subscription (situation NONE). */
   subscriptionId: number | null; periodStart: string | null; periodCount: number;
   packId: number | null; pack: PackRef | null; discountId: number | null; discount: DiscountView | null;
+  /** Price typed by hand for the current period (replaces pack price and discount), null otherwise. */
+  customAmount: number | null;
   insurance: Insurance; hasPhoto: boolean; notes: string; active: boolean; activityIds: number[];
   price: number | null; endDate: string | null; remainingDays: number | null;
   paid: number; balance: number;
@@ -109,13 +123,15 @@ export interface SportView {
   memberCount: number; fillPercent: number;
 }
 
+/** {@code price}: monthly price counted this month ({@code periodAmount} ÷ {@code months}). */
 export interface SalaryLine {
   memberId: number; code: string; name: string; pack: string; registrationDate: string;
-  price: number; factor: number; sports: string[];
+  months: number; periodAmount: number; price: number; factor: number; sports: string[];
 }
 
+/** {@code from}/{@code to}: start dates of the new registrations counted from this month on. */
 export interface SalaryDetail {
-  from: string; to: string; shareRaw: string; sharePercent: number; base: number;
+  month: string; from: string; to: string; cutoffDay: number; shareRaw: string; sharePercent: number; base: number;
   multiCoach: 'FULL' | 'SPLIT'; lines: SalaryLine[];
 }
 

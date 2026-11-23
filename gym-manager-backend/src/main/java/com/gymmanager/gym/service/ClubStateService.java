@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.DayOfWeek;
+import java.time.YearMonth;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -144,7 +145,7 @@ public class ClubStateService {
             if (periods.isEmpty()) return withoutSubscription(m, sportIds, sportRef, activitiesByMember);
             Subscription cur = periods.getLast();
             PackView pack = packById.get(cur.getPackId());
-            DiscountView disc = discById.get(cur.getDiscountId());
+            DiscountView disc = shownDiscount(cur, pack, discById);
             BigDecimal totalDue = periods.stream().map(Subscription::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal totalPaid = periods.stream().map(x -> paidBySub.getOrDefault(x.getId(), BigDecimal.ZERO)).reduce(BigDecimal.ZERO, BigDecimal::add);
             Subscription ref = periods.get(Rules.referencePeriod(periods.stream()
@@ -156,7 +157,7 @@ public class ClubStateService {
                     sportIds.stream().map(sportRef).filter(Objects::nonNull).toList(),
                     cur.getId(), cur.getStartDate(), periods.size(),
                     pack.id(), new PackRef(pack.id(), pack.code(), pack.name(), pack.active(), cur.getMonths(), pack.total()),
-                    disc.id(), disc, m.getInsurance(), m.getPhoto() != null, m.getNotes(), m.isActive(),
+                    disc.id(), disc, cur.getCustomAmount(), m.getInsurance(), m.getPhoto() != null, m.getNotes(), m.isActive(),
                     activitiesByMember.getOrDefault(m.getId(), List.of()),
                     c.price(), c.endDate(), c.remainingDays(), c.paid(), c.balance(), c.paymentStatus(), c.active(), c.situation(), c.state());
         }).toList();
@@ -176,7 +177,7 @@ public class ClubStateService {
         List<SubscriptionView> subscriptions = subRows.stream().map(x -> {
             BigDecimal paid = paidBySub.getOrDefault(x.getId(), BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
             List<Subscription> periods = subsByMember.get(x.getMemberId());
-            DiscountView d = discById.get(x.getDiscountId());
+            DiscountView d = shownDiscount(x, packById.get(x.getPackId()), discById);
             return new SubscriptionView(x.getId(), x.getMemberId(), x.getPackId(), packById.get(x.getPackId()).name(),
                     d.id(), d.name(), x.getStartDate(), Rules.subscriptionEnd(x.getStartDate(), x.getMonths()), x.getMonths(),
                     x.getAmount(), paid, Rules.balance(x.getAmount(), paid), Rules.paymentStatus(x.getAmount(), paid),
@@ -236,9 +237,17 @@ public class ClubStateService {
         return new MemberView(m.getId(), m.getCode(), m.getLastName(), m.getFirstName(), m.getPhone(),
                 m.getBirthDate(), m.getRegistrationDate(), sportIds,
                 sportIds.stream().map(sportRef).filter(Objects::nonNull).toList(),
-                null, null, 0, null, null, null, null, m.getInsurance(), m.getPhoto() != null, m.getNotes(), m.isActive(),
+                null, null, 0, null, null, null, null, null, m.getInsurance(), m.getPhoto() != null, m.getNotes(), m.isActive(),
                 activitiesByMember.getOrDefault(m.getId(), List.of()),
                 null, null, null, zero, zero, null, false, Rules.Situation.NONE, Rules.MemberState.NONE);
+    }
+
+    /** The period's discount; a typed price shows as a "manual" discount whose percentage is measured against the pack price. */
+    private static DiscountView shownDiscount(Subscription x, PackView pack, Map<Long, DiscountView> discById) {
+        DiscountView d = discById.get(x.getDiscountId());
+        if (x.getCustomAmount() == null) return d;
+        BigDecimal pct = Rules.discountPercent(pack.total(), x.getCustomAmount());
+        return new DiscountView(d.id(), "", "Montant saisi (−" + pct.toPlainString().replace('.', ',') + " %)", pct, true, false);
     }
 
     /** Detached copy of a period priced with the current rules (RG-PRIX) — used while nothing has been paid. */
@@ -252,7 +261,9 @@ public class ClubStateService {
         c.setDiscountId(x.getDiscountId());
         c.setStartDate(x.getStartDate());
         c.setMonths(pack.duration().months());
-        c.setAmount(Rules.memberPrice(pack.monthlyPrice(), pack.duration().months(), pack.discount().percent(), disc.percent(),
+        c.setCustomAmount(x.getCustomAmount());
+        c.setAmount(x.getCustomAmount() != null ? x.getCustomAmount()
+                : Rules.memberPrice(pack.monthlyPrice(), pack.duration().months(), pack.discount().percent(), disc.percent(),
                 cfg.cumulative(), cfg.rounding()));
         c.setCreatedAt(x.getCreatedAt());
         c.setCreatedBy(x.getCreatedBy());
@@ -266,22 +277,22 @@ public class ClubStateService {
     public static SalaryComputation salary(Long staffId, PayMode mode, BigDecimal fixed, List<MemberView> members,
                                            Map<Long, List<Subscription>> subsByMember, Map<Long, List<Long>> coachesBySport,
                                            Map<Long, String> sportNames, Map<Long, String> packNames, ClubConfig cfg, java.time.LocalDate day) {
-        List<Rules.MemberFacts> facts = salaryFacts(members, subsByMember, cfg, day);
-        Map<Long, Rules.MemberFacts> factByMember = new HashMap<>();
-        facts.forEach(f -> factByMember.put(f.id(), f));
+        List<Rules.MemberFacts> facts = salaryFacts(members, subsByMember);
         Map<Long, MemberView> memberById = new HashMap<>();
         members.forEach(m -> memberById.put(m.id(), m));
         Rules.SalaryResult r = Rules.computeSalary(staffId, Rules.PayMode.valueOf(mode.name()), fixed, facts, coachesBySport, cfg.salaryParams(), day);
         List<SalaryLineView> lines = r.lines().stream().map(l -> {
             MemberView m = memberById.get(l.memberId());
-            Rules.MemberFacts f = factByMember.get(l.memberId());
-            String pack = subsByMember.get(m.id()).stream().filter(x -> x.getStartDate().equals(f.registrationDate()))
+            Rules.MemberFacts f = l.period();
+            String pack = subsByMember.get(m.id()).stream().filter(x -> x.getStartDate().equals(f.start()))
                     .reduce((a, b) -> b).map(x -> packNames.get(x.getPackId())).orElse(m.pack() == null ? null : m.pack().name());
-            return new SalaryLineView(m.id(), m.code(), m.fullName(), pack, f.registrationDate(), l.price(),
+            return new SalaryLineView(m.id(), m.code(), m.fullName(), pack, f.start(), f.months(), f.amount(),
+                    l.price().setScale(2, RoundingMode.HALF_UP),
                     l.factor().setScale(4, RoundingMode.HALF_UP).stripTrailingZeros(),
                     l.sportIds().stream().map(sportNames::get).toList());
         }).toList();
-        return new SalaryComputation(r.amount(), new SalaryDetail(r.window().from(), r.window().to(), cfg.salaryShareRaw(),
+        return new SalaryComputation(r.amount(), new SalaryDetail(YearMonth.from(day).toString(), r.window().from(), r.window().to(),
+                cfg.salaryCutoffDay(), cfg.salaryShareRaw(),
                 cfg.salaryShare().asPercent(), r.base(), cfg.multiCoach(), lines));
     }
 
@@ -289,14 +300,13 @@ public class ClubStateService {
      * Facts for RG-SALAIRE for the month of {@code day}: for each member, the latest subscription period
      * (first registration or renewal) starting inside the calculation window, with its price.
      */
-    static List<Rules.MemberFacts> salaryFacts(List<MemberView> members, Map<Long, List<Subscription>> subsByMember,
-                                               ClubConfig cfg, java.time.LocalDate day) {
-        Rules.DateWindow w = Rules.salaryWindow(day, cfg.salaryStartDay(), cfg.salaryEndDay());
+    /** Every subscription period of every member: RG-SALAIRE picks those covering the month. */
+    static List<Rules.MemberFacts> salaryFacts(List<MemberView> members, Map<Long, List<Subscription>> subsByMember) {
         List<Rules.MemberFacts> facts = new ArrayList<>();
         for (MemberView m : members) {
-            subsByMember.getOrDefault(m.id(), List.of()).stream().filter(x -> w.contains(x.getStartDate()))
-                    .reduce((a, b) -> b)
-                    .ifPresent(x -> facts.add(new Rules.MemberFacts(m.id(), new HashSet<>(m.sportIds()), x.getStartDate(), x.getAmount(), m.active())));
+            for (Subscription x : subsByMember.getOrDefault(m.id(), List.of())) {
+                facts.add(new Rules.MemberFacts(m.id(), new HashSet<>(m.sportIds()), x.getStartDate(), x.getMonths(), x.getAmount(), m.active()));
+            }
         }
         return facts;
     }

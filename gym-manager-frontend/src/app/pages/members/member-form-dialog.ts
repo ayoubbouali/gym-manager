@@ -7,10 +7,10 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { debounceTime, firstValueFrom } from 'rxjs';
+import { debounceTime, firstValueFrom, startWith } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
-import { FrDatePipe, MoneyPipe } from '../../core/format';
+import { FrDatePipe, MoneyPipe, formatAmount } from '../../core/format';
 import { DiscountView, MemberPreview, MemberView, PackView, SportView } from '../../core/models';
 import { NotifyService, apiError, errorMessage } from '../../core/notify.service';
 import { DateField } from '../../shared/date-field';
@@ -44,14 +44,31 @@ import { PhoneInput, PhoneValue } from '../../shared/phone-input';
               }
             </mat-select>
           </mat-form-field>
-          <mat-form-field>
-            <mat-label>Remise</mat-label>
-            <mat-select formControlName="discountId">
-              @for (d of discountOptions(); track d.id) {
-                <mat-option [value]="d.id" [disabled]="!d.active">{{ d.name }}{{ d.active ? '' : ' — inactive' }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
+          <div class="field-block">
+            <span class="field-label">Remise</span>
+            <mat-button-toggle-group formControlName="discountMode" aria-label="Type de remise">
+              <mat-button-toggle value="LIST">Remise existante</mat-button-toggle>
+              <mat-button-toggle value="AMOUNT">Montant saisi</mat-button-toggle>
+            </mat-button-toggle-group>
+          </div>
+          @if (values().discountMode === 'AMOUNT') {
+            <mat-form-field>
+              <mat-label>Prix appliqué</mat-label>
+              <input matInput type="number" min="0" step="0.01" formControlName="customAmount" required />
+              <span matTextSuffix>&nbsp;{{ config.currency() }}</span>
+              @if (manualHint(); as h) {<mat-hint>{{ h }}</mat-hint>}
+              <mat-error>{{ form.controls.customAmount.errors?.['server'] ?? 'Saisissez le prix à appliquer.' }}</mat-error>
+            </mat-form-field>
+          } @else {
+            <mat-form-field>
+              <mat-label>Remise</mat-label>
+              <mat-select formControlName="discountId">
+                @for (d of discountOptions(); track d.id) {
+                  <mat-option [value]="d.id" [disabled]="!d.active">{{ d.name }}{{ d.active ? '' : ' — inactive' }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          }
         }
         <app-date-field label="Date d'inscription" formControlName="registrationDate" required />
         <div class="field-block">
@@ -107,11 +124,14 @@ export class MemberFormDialog {
     sportIds: [this.member?.sportIds ?? ([] as number[])],
     packId: [this.member?.packId ?? (null as number | null), this.withoutSubscription ? [] : [Validators.required]],
     discountId: [this.member?.discountId ?? (null as number | null)],
+    /** LIST: a discount of the referential; AMOUNT: the price is typed by hand and the discount is deduced from the pack price. */
+    discountMode: [(this.member?.customAmount != null ? 'AMOUNT' : 'LIST') as 'LIST' | 'AMOUNT'],
+    customAmount: [this.member?.customAmount ?? (null as number | null)],
     registrationDate: [this.member?.registrationDate ?? this.config.config()?.today ?? '', Validators.required],
     insurance: [this.member?.insurance ?? 'IMPAYE'],
     notes: [this.member?.notes ?? ''],
   });
-  private values = toSignal(this.form.valueChanges, { initialValue: this.form.value });
+  protected values = toSignal(this.form.valueChanges, { initialValue: this.form.value });
 
   sportOptions = computed<SelectOption[]>(() =>
     this.sports().map((s) => ({ id: s.id, label: s.name, color: s.color, disabled: !s.active })));
@@ -121,6 +141,15 @@ export class MemberFormDialog {
     return this.packs().filter((p) => ids.includes(p.sportId) && (p.active || p.id === this.member?.packId));
   });
   discountOptions = computed(() => this.discounts().filter((d) => d.active || d.id === this.member?.discountId));
+  /** "soit −33,33 % sur 150,00 DH" for a typed price, measured against the selected pack's price. */
+  manualHint = computed(() => {
+    const v = this.values();
+    const total = this.packs().find((p) => p.id === v.packId)?.total;
+    if (total == null || v.customAmount == null) return '';
+    if (v.customAmount > total) return `Supérieur au prix du type d'abonnement (${formatAmount(total)} ${this.config.currency()})`;
+    const pct = total > 0 ? Math.round((1 - v.customAmount / total) * 10000) / 100 : 0;
+    return `soit −${formatAmount(pct)} % sur ${formatAmount(total)} ${this.config.currency()}`;
+  });
 
   constructor() {
     Promise.all([this.api.sports(), this.api.packs(), this.api.discounts()]).then(([s, p, d]) => {
@@ -136,6 +165,18 @@ export class MemberFormDialog {
       if (pack && !(ids ?? []).includes(pack.sportId)) this.form.patchValue({ packId: null });
     });
     this.form.valueChanges.pipe(debounceTime(250), takeUntilDestroyed(destroy)).subscribe(() => this.refreshPreview());
+    const mode = this.form.controls.discountMode;
+    mode.valueChanges.pipe(startWith(mode.value), takeUntilDestroyed(destroy)).subscribe((m) => {
+      const amount = this.form.controls.customAmount;
+      amount.setValidators(m === 'AMOUNT' ? [Validators.required, Validators.min(0)] : []);
+      amount.updateValueAndValidity({ emitEvent: false });
+    });
+  }
+
+  /** The typed price, or null when a discount of the list applies. */
+  private customAmount(): number | null {
+    const v = this.form.value;
+    return v.discountMode === 'AMOUNT' && v.customAmount != null ? v.customAmount : null;
   }
 
   private async refreshPreview(): Promise<void> {
@@ -145,7 +186,8 @@ export class MemberFormDialog {
       return;
     }
     try {
-      this.preview.set(await this.api.memberPreview({ packId: v.packId, discountId: v.discountId ?? null, registrationDate: v.registrationDate }));
+      this.preview.set(await this.api.memberPreview({ packId: v.packId, discountId: v.discountId ?? null,
+        registrationDate: v.registrationDate, customAmount: this.customAmount() }));
     } catch {
       this.preview.set(null);
     }
@@ -166,11 +208,12 @@ export class MemberFormDialog {
         : 'Renseignez les champs obligatoires : nom, prénom, téléphone, au moins un sport, un abonnement et la date d\'inscription.');
       return;
     }
-    const v = this.form.getRawValue();
+    const { discountMode, ...v } = this.form.getRawValue();
     this.busy.set(true);
     try {
       const saved = await this.api.save<MemberView>('members', this.member?.id,
-        { ...v, phone: v.phone?.number ?? '', phoneCountry: v.phone?.country ?? null, birthDate: v.birthDate || null });
+        { ...v, customAmount: discountMode === 'AMOUNT' ? v.customAmount : null,
+          phone: v.phone?.number ?? '', phoneCountry: v.phone?.country ?? null, birthDate: v.birthDate || null });
       this.notify.success(this.member ? 'Adhérent modifié.' : `Adhérent ${saved.code} créé.`);
       this.ref.close(saved);
     } catch (e) {

@@ -23,6 +23,8 @@ public class Subscription {
     private LocalDate startDate;
     private int months;
     private BigDecimal amount;
+    /** Price typed by hand in the member form; when set, it replaces the pack price and the discount. */
+    private BigDecimal customAmount;
     private LocalDateTime createdAt;
     private String createdBy = "";
 }

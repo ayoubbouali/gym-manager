@@ -149,3 +149,62 @@ describe('popup adhérent : téléphone avec choix du pays', () => {
     expect((el.querySelector('app-phone-input input[type="tel"]') as HTMLInputElement).placeholder).toBe('06 50 12 34 56');
   });
 });
+
+describe('popup adhérent : remise saisie à la main', () => {
+  let api: Record<string, ReturnType<typeof vi.fn>>;
+  const pack = { id: 1, name: 'Karaté - Mensuel', sportId: 1, active: true, total: 150 };
+
+  beforeEach(() => {
+    api = {
+      sports: vi.fn().mockResolvedValue([{ id: 1, name: 'Karaté', color: '#E53935', active: true }]),
+      packs: vi.fn().mockResolvedValue([pack]),
+      discounts: vi.fn().mockResolvedValue([{ id: 5, code: 'R1', name: 'Aucune', percent: 0, active: true, system: true }]),
+      memberPreview: vi.fn().mockResolvedValue(null), save: vi.fn().mockResolvedValue({ code: 'A020' }),
+    };
+    TestBed.configureTestingModule({
+      imports: [MemberFormDialog],
+      providers: [
+        provideFrDates(),
+        importProvidersFrom(LucideAngularModule.pick(APP_ICONS)),
+        { provide: ApiService, useValue: api },
+        { provide: MatDialogRef, useValue: { close: vi.fn() } },
+        { provide: MAT_DIALOG_DATA, useValue: {} },
+        { provide: NotifyService, useValue: { success: vi.fn(), error: vi.fn() } },
+        { provide: ConfigService, useValue: config() },
+      ],
+    });
+  });
+
+  async function create() {
+    const f = TestBed.createComponent(MemberFormDialog);
+    f.detectChanges();
+    await f.whenStable();
+    f.componentInstance.form.patchValue({ lastName: 'Bennis', firstName: 'Lina', phone: { country: 'MA', number: '0650123456' },
+      sportIds: [1], packId: 1 });
+    f.detectChanges();
+    return f;
+  }
+
+  it('affiche la remise en % déduite du prix du type d’abonnement, et envoie le montant tapé', async () => {
+    const f = await create();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('input[formcontrolname="customAmount"]')).toBeNull();
+    f.componentInstance.form.patchValue({ discountMode: 'AMOUNT', customAmount: 100 });
+    f.detectChanges();
+    expect(el.querySelector('input[formcontrolname="customAmount"]')).not.toBeNull();
+    expect(el.querySelector('mat-hint')!.textContent).toContain('−33,33 %');
+    await f.componentInstance.save();
+    expect(api['save']).toHaveBeenCalledWith('members', undefined, expect.objectContaining({ customAmount: 100, packId: 1 }));
+    expect(api['save'].mock.calls[0][2]).not.toHaveProperty('discountMode');
+  });
+
+  it('sans montant, le mode « Montant saisi » bloque l’enregistrement ; en mode liste, aucun montant n’est envoyé', async () => {
+    const f = await create();
+    f.componentInstance.form.patchValue({ discountMode: 'AMOUNT', customAmount: null });
+    await f.componentInstance.save();
+    expect(api['save']).not.toHaveBeenCalled();
+    f.componentInstance.form.patchValue({ discountMode: 'LIST', customAmount: 80 });
+    await f.componentInstance.save();
+    expect(api['save']).toHaveBeenCalledWith('members', undefined, expect.objectContaining({ customAmount: null, discountId: 5 }));
+  });
+});

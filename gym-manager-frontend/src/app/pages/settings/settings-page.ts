@@ -13,7 +13,7 @@ import { LucideAngularModule } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ConfigService } from '../../core/config.service';
-import { FunctionView, SettingDef, SettingsPayload, User } from '../../core/models';
+import { FunctionView, SettingDef, SettingsPayload, User, UserRoleView } from '../../core/models';
 import { NotifyService, apiError, errorMessage } from '../../core/notify.service';
 import { ActiveBadge } from '../../shared/badges';
 import { ConfirmService } from '../../shared/confirm.service';
@@ -22,6 +22,8 @@ import { openSimpleForm } from '../../shared/simple-form-dialog';
 import { DataImport } from './data-import';
 import { ListPicker, PickOption } from './list-picker';
 import { applyRegional } from './regional';
+import { ACCESS_LEVELS, UserFormDialog, accessLevelLabel } from './user-form-dialog';
+import { firstValueFrom } from 'rxjs';
 
 const VARIABLES = ['prenom', 'nom', 'jours', 'date_fin', 'club', 'pack'];
 const RESET_TEMPLATE = 'mail.reset.template';
@@ -182,22 +184,28 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
 
           <mat-tab label="Utilisateurs">
             <div class="tab-body">
-              <table class="table compact max-760">
-                <thead><tr><th>Identifiant</th><th>E-mail</th><th>Rôle</th><th>Actif</th><th>Mot de passe</th><th><span class="sr-only">Actions</span></th></tr></thead>
+              <table class="table compact">
+                <thead><tr><th>Identifiant</th><th>E-mail</th><th>Téléphone</th><th>Rôle</th><th>Actif</th><th>Mot de passe</th><th><span class="sr-only">Actions</span></th></tr></thead>
                 <tbody>
                   @for (u of users(); track u.id) {
                     <tr [class.inactive]="!u.active">
-                      <td class="strong">{{ u.username }} @if (u.username === me()) {<span class="muted">(vous)</span>}</td>
+                      <td class="strong">
+                        <span class="user-cell">
+                          @if (u.hasPhoto) {<img class="avatar" [src]="'/api/users/' + u.id + '/photo'" alt="" />} @else {<span class="avatar">{{ u.username.slice(0, 1).toUpperCase() }}</span>}
+                          {{ u.username }} @if (u.username === me()) {<span class="muted">(vous)</span>}
+                        </span>
+                      </td>
                       <td>@if (u.email) {<span>{{ u.email }}</span>} @else {<span class="muted">—</span>}</td>
+                      <td>@if (u.phone) {<span>{{ u.phone }}</span>} @else {<span class="muted">—</span>}</td>
                       <td>
-                        <select class="cell-input" [ngModel]="u.role" (ngModelChange)="setRole(u, $event)" [disabled]="u.username === me()" [attr.aria-label]="'Rôle de ' + u.username">
-                          <option value="ADMIN">ADMIN</option><option value="ACCUEIL">ACCUEIL</option>
+                        <select class="cell-input" [ngModel]="u.roleId" (ngModelChange)="setRole(u, $event)" [disabled]="u.username === me()" [attr.aria-label]="'Rôle de ' + u.username">
+                          @for (r of roles(); track r.id) {<option [ngValue]="r.id">{{ r.name }}</option>}
                         </select>
                       </td>
                       <td><app-active-badge [active]="u.active" /></td>
                       <td>@if (u.mustChangePassword) {<span class="badge warn">à changer</span>} @else {<span class="muted">—</span>}</td>
                       <td class="actions">
-                        <button class="icon-btn" (click)="editEmail(u)" matTooltip="Modifier l'e-mail" [attr.aria-label]="'Modifier l’e-mail de ' + u.username"><lucide-icon name="mail" [size]="16" /></button>
+                        <button class="icon-btn" (click)="editUser(u)" matTooltip="Modifier l'e-mail et le téléphone" [attr.aria-label]="'Modifier ' + u.username"><lucide-icon name="pencil" [size]="16" /></button>
                         <button mat-stroked-button class="sm" (click)="resetPassword(u)"><lucide-icon name="key-round" [size]="14" /> Réinitialiser</button>
                         @if (u.username !== me()) {
                           <button class="icon-btn" (click)="toggleUser(u)" [matTooltip]="u.active ? 'Désactiver' : 'Réactiver'" [attr.aria-label]="(u.active ? 'Désactiver ' : 'Réactiver ') + u.username"><lucide-icon name="power" [size]="16" /></button>
@@ -208,6 +216,27 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                 </tbody>
               </table>
               <button mat-flat-button class="mt" (click)="addUser()"><lucide-icon name="user-plus" [size]="16" /> Nouvel utilisateur</button>
+
+              <h3 class="mt-lg">Rôles</h3>
+              <p class="muted small">Chaque rôle porte un nom libre et s'appuie sur un niveau d'accès qui fixe les droits :
+                <strong>Administrateur</strong> (tout) ou <strong>Accueil</strong> (adhérents, paiements, inscriptions ; ni personnel, ni paie, ni statistiques, ni paramètres).</p>
+              <table class="table compact max-640">
+                <thead><tr><th>Rôle</th><th>Niveau d'accès</th><th>Utilisateurs</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                  @for (r of roles(); track r.id) {
+                    <tr>
+                      <td class="strong">{{ r.name }}</td>
+                      <td><span class="badge" [class.info]="r.accessLevel === 'ADMIN'" [class.warn]="r.accessLevel !== 'ADMIN'">{{ levelLabel(r.accessLevel) }}</span></td>
+                      <td>{{ r.userCount }}</td>
+                      <td class="actions">
+                        <button class="icon-btn" (click)="editRole(r)" matTooltip="Modifier" [attr.aria-label]="'Modifier le rôle ' + r.name"><lucide-icon name="pencil" [size]="16" /></button>
+                        <button class="icon-btn danger" (click)="removeRole(r)" matTooltip="Supprimer" [attr.aria-label]="'Supprimer le rôle ' + r.name"><lucide-icon name="trash-2" [size]="16" /></button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+              <button mat-flat-button class="mt" (click)="editRole()"><lucide-icon name="plus" [size]="16" /> Nouveau rôle</button>
             </div>
           </mat-tab>
         </mat-tab-group>
@@ -228,6 +257,8 @@ export class SettingsPage {
   payload = signal<SettingsPayload | null>(null);
   functions = signal<FunctionView[]>([]);
   users = signal<User[]>([]);
+  roles = signal<UserRoleView[]>([]);
+  levelLabel = accessLevelLabel;
   tab = signal(0);
   busy = signal(false);
   fieldError = signal<{ field?: string; message: string } | null>(null);
@@ -417,47 +448,69 @@ export class SettingsPage {
   // ---------------------------------------------------------------- users
 
   async loadUsers(): Promise<void> {
-    this.users.set(await this.api.users());
+    const [users, roles] = await Promise.all([this.api.users(), this.api.roles()]);
+    this.users.set(users);
+    this.roles.set(roles);
+    // keeps "Mon compte" and the top bar in step with an edit of one's own account made here
+    const self = users.find((u) => u.id === this.auth.user()?.id);
+    if (self) this.auth.user.set(self);
+  }
+
+  // ---------------------------------------------------------------- roles
+
+  async editRole(r?: UserRoleView): Promise<void> {
+    const ok = await openSimpleForm(this.dialog, {
+      title: r ? `Modifier le rôle « ${r.name} »` : 'Nouveau rôle',
+      fields: [
+        { key: 'name', label: 'Nom du rôle', required: true, hint: 'Exemples : Coach, Comptable, Gérant.' },
+        { key: 'accessLevel', label: "Niveau d'accès", type: 'select', required: true, options: ACCESS_LEVELS.map((l) => ({ ...l })),
+          hint: r?.userCount ? 'Un changement de niveau reconnecte les utilisateurs de ce rôle.' : undefined },
+      ],
+      value: { name: r?.name ?? '', accessLevel: r?.accessLevel ?? 'ACCUEIL' },
+      submit: (v) => this.api.save('roles', r?.id, v),
+    });
+    if (ok) {
+      this.notify.success(r ? 'Rôle enregistré.' : 'Rôle créé.');
+      this.loadUsers();
+    }
+  }
+
+  async removeRole(r: UserRoleView): Promise<void> {
+    if (!(await this.confirm.confirm({ title: `Supprimer le rôle « ${r.name} » ?`, message: 'Un rôle attribué à des utilisateurs ne peut pas être supprimé.', confirmLabel: 'Supprimer', danger: true }))) return;
+    try {
+      await this.api.remove('roles', r.id);
+      this.loadUsers();
+    } catch (e) {
+      this.notify.error(e);
+    }
   }
 
   async addUser(): Promise<void> {
-    const ok = await openSimpleForm(this.dialog, {
-      title: 'Nouvel utilisateur',
-      fields: [
-        { key: 'username', label: 'Identifiant', required: true },
-        { key: 'password', label: 'Mot de passe provisoire', type: 'password', required: true, hint: 'À changer à la première connexion (8 caractères, lettres et chiffres).' },
-        { key: 'role', label: 'Rôle', type: 'select', required: true, options: [{ value: 'ACCUEIL', label: 'ACCUEIL' }, { value: 'ADMIN', label: 'ADMIN' }] },
-        { key: 'email', label: 'Adresse e-mail', type: 'email', hint: 'Facultative : permet de recevoir un mot de passe provisoire en cas d\'oubli.' },
-      ],
-      value: { username: '', password: '', role: 'ACCUEIL', email: '' },
-      submit: (v) => this.api.post('/users', v),
-    });
-    if (ok) {
+    if (await this.openUserForm()) {
       this.notify.success('Utilisateur créé.');
       this.loadUsers();
     }
   }
 
-  async editEmail(u: User): Promise<void> {
-    const ok = await openSimpleForm(this.dialog, {
-      title: `Adresse e-mail de ${u.username}`,
-      fields: [{ key: 'email', label: 'Adresse e-mail', type: 'email', hint: 'Laisser vide pour la retirer.' }],
-      value: { email: u.email ?? '' },
-      submit: (v) => this.api.put(`/users/${u.id}`, { email: v['email'] ?? '' }),
-    });
-    if (ok) {
-      this.notify.success('Adresse e-mail enregistrée.');
+  async editUser(u: User): Promise<void> {
+    if (await this.openUserForm(u)) {
+      this.notify.success('Utilisateur enregistré.');
       this.loadUsers();
     }
   }
 
-  async setRole(u: User, role: string): Promise<void> {
-    if (!(await this.confirm.confirm({ title: `Passer ${u.username} en ${role} ?`, confirmLabel: 'Confirmer' }))) {
+  private openUserForm(user?: User): Promise<unknown> {
+    return firstValueFrom(this.dialog.open(UserFormDialog, { data: { user, roles: this.roles() }, width: '460px', maxWidth: '96vw' }).afterClosed());
+  }
+
+  async setRole(u: User, roleId: number): Promise<void> {
+    const role = this.roles().find((r) => r.id === roleId);
+    if (!role || !(await this.confirm.confirm({ title: `Passer ${u.username} en ${role.name} (${accessLevelLabel(role.accessLevel)}) ?`, confirmLabel: 'Confirmer' }))) {
       this.loadUsers();
       return;
     }
     try {
-      await this.api.put(`/users/${u.id}`, { role });
+      await this.api.put(`/users/${u.id}`, { roleId });
       this.loadUsers();
     } catch (e) {
       this.notify.error(e);

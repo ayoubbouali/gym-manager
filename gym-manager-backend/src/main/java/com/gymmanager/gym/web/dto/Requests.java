@@ -56,13 +56,16 @@ public final class Requests {
     public record GeneratePacksRequest(Long sportId, List<GenerateItem> items) {
     }
 
-    /** {@code phoneCountry}: ISO country chosen in the phone field, null = the club's country. */
+    /**
+     * {@code phoneCountry}: ISO country chosen in the phone field, null = the club's country.
+     * {@code customAmount}: price typed by hand for the period, null = pack price with {@code discountId}.
+     */
     public record MemberRequest(String lastName, String firstName, String phone, LocalDate birthDate, LocalDate registrationDate,
                                 List<Long> sportIds, Long packId, Long discountId, Insurance insurance, String notes,
-                                String phoneCountry) {
+                                String phoneCountry, BigDecimal customAmount) {
     }
 
-    public record MemberPreviewRequest(Long packId, Long discountId, LocalDate registrationDate) {
+    public record MemberPreviewRequest(Long packId, Long discountId, LocalDate registrationDate, BigDecimal customAmount) {
     }
 
     public record ActivityRequest(String name, String description, BigDecimal price, LocalDateTime startsAt, String location,
@@ -96,15 +99,23 @@ public final class Requests {
     public record ChangePasswordRequest(String currentPassword, String newPassword) {
     }
 
-    /** email: optional, blank = none. */
-    public record UserCreateRequest(String username, String password, Role role, String email) {
+    /**
+     * email, phone: optional, blank = none. {@code roleId} wins over {@code role}, which picks the first role of that
+     * access level. {@code phoneCountry}: ISO country chosen in the phone field, null = the club's country.
+     */
+    public record UserCreateRequest(String username, String password, Role role, String email, Long roleId,
+                                    String phone, String phoneCountry) {
     }
 
-    /** Null fields are left unchanged; a blank email removes it. */
-    public record UserUpdateRequest(Role role, Boolean active, String email) {
+    /** Null fields are left unchanged; a blank email or phone removes it. {@code roleId} wins over {@code role}. */
+    public record UserUpdateRequest(Role role, Boolean active, String email, Long roleId, String phone, String phoneCountry) {
     }
 
-    public record AccountUpdateRequest(String email) {
+    /** Null fields are left unchanged; a blank email or phone removes it. */
+    public record AccountUpdateRequest(String email, String phone, String phoneCountry) {
+    }
+
+    public record UserRoleRequest(String name, Role accessLevel) {
     }
 
     public record ForgotPasswordRequest(String username) {

@@ -119,7 +119,7 @@ export class SalaryHistoryDialog {
       <button class="icon-btn" (click)="shift(1)" [disabled]="month() >= currentMonth" aria-label="Mois suivant"><lucide-icon name="chevron-right" /></button>
       <h2 class="month-title">{{ title() }}</h2>
       <span class="grow"></span>
-      @if (data(); as d) {<span class="muted">Commissions calculées sur les inscriptions du {{ d.from | frDate }} au {{ d.to | frDate }}</span>}
+      @if (data(); as d) {<span class="muted">Commissions sur les adhérents en cours ce mois-ci · nouveaux inscrits comptés : du {{ d.from | frDate }} au {{ d.to | frDate }}</span>}
       <button mat-stroked-button (click)="csv()"><lucide-icon name="download" [size]="16" /> CSV</button>
     </div>
 

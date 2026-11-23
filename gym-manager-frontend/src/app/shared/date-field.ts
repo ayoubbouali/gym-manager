@@ -11,6 +11,27 @@ import { LucideAngularModule } from 'lucide-angular';
 import { DAY_FORMAT, MONTH_FORMAT, dateToIso, isoToDate } from '../core/date-adapter';
 
 /**
+ * Inserts the slashes while digits are typed or pasted: '05' -> '05/', '05112026' -> '05/11/2026' ('112026' -> '11/2026' in month mode).
+ * Text already holding separators is left as typed (tolerant input such as '5/1/2026'); too many digits are left as typed too,
+ * so the parser reports them instead of silently dropping some. A '-' typed after four digits means an ISO date
+ * (2026-11-05): the slashes inserted in the year are removed.
+ */
+export function autoSlash(text: string, month: boolean): string {
+  const iso = /^(\d{2})\/(\d{2})\/?-$/.exec(text);
+  if (iso) return `${iso[1]}${iso[2]}-`;
+  if (/^\d+$/.test(text)) {
+    if (text.length > (month ? 6 : 8)) return text;
+    const groups = month ? [text.slice(0, 2), text.slice(2, 6)] : [text.slice(0, 2), text.slice(2, 4), text.slice(4, 8)];
+    const filled = groups.filter((g) => g);
+    const last = filled.length - 1;
+    // A complete group that is not the year gets its slash right away.
+    return filled.join('/') + (last < groups.length - 1 && filled[last].length === 2 ? '/' : '');
+  }
+  if (!month && /^\d{1,2}\/\d{2}$/.test(text)) return text + '/';
+  return text.replace(/\/\/$/, '/');
+}
+
+/**
  * Date (or month) field: typed as jj/mm/aaaa or picked in a calendar.
  * Exchanges the same value as the former native inputs: 'yyyy-mm-dd' ('yyyy-mm' in month mode), null when empty or invalid.
  */
@@ -31,7 +52,7 @@ import { DAY_FORMAT, MONTH_FORMAT, dateToIso, isoToDate } from '../core/date-ada
     <mat-form-field class="w-full" [subscriptSizing]="subscriptSizing()">
       <mat-label>{{ label() }}</mat-label>
       <input matInput [matDatepicker]="picker" [formControl]="ctrl" [min]="minDate()" [max]="maxDate()" [required]="required()"
-             [errorStateMatcher]="matcher" [placeholder]="isMonth() ? 'mm/aaaa' : 'jj/mm/aaaa'" autocomplete="off" (blur)="onTouched()" />
+             [errorStateMatcher]="matcher" [placeholder]="isMonth() ? 'mm/aaaa' : 'jj/mm/aaaa'" autocomplete="off" (input)="maskInput($event)" (blur)="onTouched()" />
       <mat-datepicker-toggle matIconSuffix [for]="picker">
         <lucide-icon matDatepickerToggleIcon [name]="isMonth() ? 'calendar-range' : 'calendar-days'" [size]="18" />
       </mat-datepicker-toggle>
@@ -104,6 +125,18 @@ export class DateField implements ControlValueAccessor, Validator, OnChanges {
     this.ctrl.setValue(new Date(date.getFullYear(), date.getMonth(), 1));
     this.ctrl.markAsTouched();
     picker.close();
+  }
+
+  /** Only on insertion with the caret at the end: deleting or editing in the middle stays free. */
+  maskInput(event: Event): void {
+    const type = (event as InputEvent).inputType;
+    const el = event.target as HTMLInputElement;
+    if ((type !== 'insertText' && type !== 'insertFromPaste') || el.selectionStart !== el.value.length) return;
+    const masked = autoSlash(el.value, this.isMonth());
+    if (masked === el.value) return;
+    el.value = masked;
+    // Plain re-dispatch (no inputType, so not masked again) for the datepicker input to parse the new text.
+    el.dispatchEvent(new Event('input'));
   }
 
   show(d: Date): string {

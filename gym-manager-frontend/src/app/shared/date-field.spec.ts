@@ -9,7 +9,7 @@ import { LucideAngularModule } from 'lucide-angular';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { provideFrDates } from '../core/date-adapter';
 import { APP_ICONS } from '../core/icons';
-import { DateField } from './date-field';
+import { DateField, autoSlash } from './date-field';
 
 @Component({
   imports: [ReactiveFormsModule, DateField],
@@ -37,6 +37,18 @@ function type<T>(f: ComponentFixture<T>, text: string): void {
   const el = input(f);
   el.value = text;
   el.dispatchEvent(new Event('input'));
+  el.dispatchEvent(new Event('blur'));
+  f.detectChanges();
+}
+
+/** Types the characters one by one, as a keyboard would: each one is an insertion at the end. */
+function keyIn<T>(f: ComponentFixture<T>, keys: string): void {
+  const el = input(f);
+  for (const k of keys) {
+    el.value += k;
+    el.setSelectionRange(el.value.length, el.value.length);
+    el.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: k }));
+  }
   el.dispatchEvent(new Event('blur'));
   f.detectChanges();
 }
@@ -78,6 +90,50 @@ describe('champ date (app-date-field)', () => {
     expect(f.componentInstance.ctrl.value).toBe('2026-01-05');
     expect(input(f).value).toBe('05/01/2026');
     expect(f.componentInstance.ctrl.valid).toBe(true);
+  });
+
+  it('insère les « / » pendant la frappe des chiffres', async () => {
+    const f = await reactive();
+    keyIn(f, '05');
+    expect(input(f).value).toBe('05/');
+    keyIn(f, '112026');
+    expect(input(f).value).toBe('05/11/2026');
+    expect(f.componentInstance.ctrl.value).toBe('2026-11-05');
+  });
+
+  it('un « / » tapé après un « / » inséré est ignoré, la saisie tolérante reste possible', async () => {
+    const f = await reactive();
+    keyIn(f, '05/11/2026');
+    expect(input(f).value).toBe('05/11/2026');
+    expect(f.componentInstance.ctrl.value).toBe('2026-11-05');
+    const g = await reactive();
+    keyIn(g, '5/1/2026');
+    expect(g.componentInstance.ctrl.value).toBe('2026-01-05');
+  });
+
+  it('une date ISO tapée au clavier reste acceptée', async () => {
+    const f = await reactive();
+    keyIn(f, '2026-11-05');
+    expect(f.componentInstance.ctrl.value).toBe('2026-11-05');
+    expect(input(f).value).toBe('05/11/2026');
+  });
+
+  it('l’effacement ne réinsère pas le « / »', async () => {
+    const f = await reactive();
+    keyIn(f, '05');
+    const el = input(f);
+    el.value = '05';
+    el.dispatchEvent(new InputEvent('input', { inputType: 'deleteContentBackward' }));
+    expect(el.value).toBe('05');
+  });
+
+  it.each([
+    ['', false, ''], ['0', false, '0'], ['05', false, '05/'], ['051', false, '05/1'], ['0511', false, '05/11/'],
+    ['05112026', false, '05/11/2026'], ['5/11', false, '5/11/'], ['05//', false, '05/'], ['051120261', false, '051120261'], ['20/26/-', false, '2026-'],
+    ['5/1/2026', false, '5/1/2026'], ['2026-11-05', false, '2026-11-05'],
+    ['11', true, '11/'], ['112026', true, '11/2026'], ['9/2026', true, '9/2026'], ['11/12', true, '11/12'], ['05112026', true, '05112026'], ['20/26-', true, '2026-'],
+  ])('autoSlash(%j, mois=%s) → %j', (text, month, expected) => {
+    expect(autoSlash(text, month)).toBe(expected);
   });
 
   it('remplit le champ avec le jour choisi au calendrier', async () => {
@@ -168,6 +224,23 @@ describe('champ date (app-date-field)', () => {
       expect(f.componentInstance.month).toBe('2026-10');
       expect(input(f).value).toBe('10/2026');
       expect(p.opened).toBe(false);
+    });
+
+    it('insère le « / » du mois pendant la frappe', async () => {
+      const f = await month();
+      input(f).value = '';
+      keyIn(f, '102026');
+      await f.whenStable();
+      expect(input(f).value).toBe('10/2026');
+      expect(f.componentInstance.month).toBe('2026-10');
+    });
+
+    it('accepte un mois ISO tapé au clavier', async () => {
+      const f = await month();
+      input(f).value = '';
+      keyIn(f, '2026-09');
+      await f.whenStable();
+      expect(f.componentInstance.month).toBe('2026-09');
     });
 
     it('accepte un mois tapé au clavier', async () => {

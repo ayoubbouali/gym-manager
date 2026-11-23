@@ -9,7 +9,7 @@ function member(over: Partial<MemberView> = {}): MemberView {
   return {
     id: 7, code: 'A007', lastName: 'Bennis', firstName: 'lina', phone: '0611223344', sports: [], pack: { id: 1, name: 'Mensuel' },
     insurance: 'PAYE', hasPhoto: false, notes: '', active: true, endDate: '2026-12-01', remainingDays: 9, balance: 0,
-    paymentStatus: 'PAYE', situation: 'OK',
+    paymentStatus: 'PAYE', situation: 'OK', state: 'UP_TO_DATE',
     ...over,
   } as unknown as MemberView;
 }
@@ -81,8 +81,8 @@ describe('carte d’aperçu adhérent', () => {
   });
 
   it('affiche « Sans abonnement » et des tirets quand l’adhérent n’a aucune période', () => {
-    const { el } = render(member({ pack: null, endDate: null, remainingDays: null, paymentStatus: null, situation: 'NONE' }));
-    expect(el.querySelector('app-situation-badge')!.textContent!.trim()).toBe('Sans abonnement');
+    const { el } = render(member({ pack: null, endDate: null, remainingDays: null, paymentStatus: null, situation: 'NONE', state: 'NONE' }));
+    expect(el.querySelector('app-state-badge')!.textContent!.trim()).toBe('Sans abonnement');
     const grid = el.querySelector('.mp-grid')!.textContent!;
     expect(grid).toContain('Abonnement—');
     expect(grid).toContain('Fin—');

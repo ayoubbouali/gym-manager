@@ -1,6 +1,7 @@
 package com.gymmanager.gym.rules;
 
 import com.gymmanager.gym.rules.Rules.MemberFacts;
+import com.gymmanager.gym.rules.Rules.MemberState;
 import com.gymmanager.gym.rules.Rules.MultiCoach;
 import com.gymmanager.gym.rules.Rules.PayMode;
 import com.gymmanager.gym.rules.Rules.PaymentStatus;
@@ -166,6 +167,7 @@ class RulesTest {
             assertThat(c.balance()).isEqualByComparingTo("187.50");
             assertThat(c.paymentStatus()).isEqualTo(PaymentStatus.PARTIEL);
             assertThat(c.situation()).isEqualTo(Situation.FOLLOW);
+            assertThat(c.state()).isEqualTo(MemberState.UP_TO_DATE);
         }
 
         @Test
@@ -212,6 +214,26 @@ class RulesTest {
             assertThat(Rules.situation(8, 7, 30)).isEqualTo(Situation.FOLLOW);
             assertThat(Rules.situation(8, 10, 30)).isEqualTo(Situation.SOON);
             assertThat(Rules.situation(40, 10, 45)).isEqualTo(Situation.FOLLOW);
+        }
+    }
+
+    @Nested
+    @DisplayName("RG-ETAT")
+    class StateRule {
+        @ParameterizedTest(name = "{0} jours, {1} → {2}")
+        @CsvSource({
+                "-1, PAYE, EXPIRED", "-1, PARTIEL, EXPIRED", "-1, IMPAYE, EXPIRED",
+                "20, IMPAYE, UNPAID", "3, IMPAYE, UNPAID",
+                "0, PAYE, SOON", "6, PAYE, SOON", "6, PARTIEL, SOON",
+                "7, PAYE, UP_TO_DATE", "7, PARTIEL, UP_TO_DATE", "300, PAYE, UP_TO_DATE"})
+        void sevenDayThreshold(long days, PaymentStatus status, MemberState expected) {
+            assertThat(Rules.memberState(days, status, 7)).isEqualTo(expected);
+        }
+
+        @Test
+        void thresholdIsTheClubSetting() {
+            assertThat(Rules.memberState(8, PaymentStatus.PAYE, 10)).isEqualTo(MemberState.SOON);
+            assertThat(Rules.memberState(10, PaymentStatus.PAYE, 10)).isEqualTo(MemberState.UP_TO_DATE);
         }
     }
 

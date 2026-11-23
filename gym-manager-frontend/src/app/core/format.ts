@@ -73,6 +73,14 @@ export const SITUATION_LABELS: Record<string, string> = {
   NONE: 'Sans abonnement',
 };
 
+export const MEMBER_STATE_LABELS: Record<string, string> = {
+  EXPIRED: 'Expiré',
+  UNPAID: 'En attente de paiement',
+  SOON: 'Expire bientôt',
+  UP_TO_DATE: 'À jour',
+  NONE: 'Sans abonnement',
+};
+
 export const WEEKDAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
 export const PAYMENT_METHODS: { value: 'ESPECES' | 'CARTE' | 'VIREMENT'; label: string }[] = [

@@ -18,10 +18,10 @@ import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
 import { csvNumber, exportCsv } from '../../core/csv';
 import { FrDatePipe, MoneyPipe, PAYMENT_STATUS_LABELS, SITUATION_LABELS, formatDate } from '../../core/format';
-import { MemberView, Situation, SportView } from '../../core/models';
+import { MemberView, SportView } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ConfirmService } from '../../shared/confirm.service';
-import { DaysLeft, PaidBadge, SituationBadge, SportChip } from '../../shared/badges';
+import { DaysLeft, PaidBadge, SportChip, StateBadge } from '../../shared/badges';
 import { Pager, SortHeader, TableState } from '../../shared/table';
 import { openMemberForm } from './member-form-dialog';
 import { openMemberNote } from './member-note-dialog';
@@ -35,8 +35,9 @@ const hasNote = (m: MemberView) => !!m.notes.trim();
 
 const DEFAULT_SORT = { key: 'code', dir: 'asc' } as const;
 
-/** Most urgent first when sorting the Situation column. */
-const SITUATION_RANK: Record<Situation, number> = { EXPIRED: 0, SOON: 1, FOLLOW: 2, OK: 3, NONE: 4 };
+/** Most urgent first when sorting the État column; up to date with an amount due comes before fully paid. */
+const stateRank = (m: MemberView): number =>
+  ({ EXPIRED: 0, UNPAID: 1, SOON: 2, UP_TO_DATE: m.balance > 0 ? 3 : 4, NONE: 5 })[m.state];
 
 /** Hover delay before the preview card opens, so sweeping the mouse across the ID column does not flicker. */
 export const PREVIEW_DELAY_MS = 300;
@@ -53,7 +54,7 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
 @Component({
   selector: 'app-members',
   imports: [RouterLink, FormsModule, MatButtonModule, MatSelectModule, MatFormFieldModule, MatSlideToggleModule, MatTooltipModule,
-    MatMenuModule, MatPseudoCheckbox, MatDividerModule, LucideAngularModule, SortHeader, Pager, SportChip, PaidBadge, SituationBadge, DaysLeft, MoneyPipe,
+    MatMenuModule, MatPseudoCheckbox, MatDividerModule, LucideAngularModule, SortHeader, Pager, SportChip, PaidBadge, StateBadge, DaysLeft, MoneyPipe,
     FrDatePipe, CdkConnectedOverlay, CdkScrollable, CdkDropList, CdkDrag, MemberPreview],
   template: `
     <div class="toolbar">
@@ -145,7 +146,7 @@ const PREVIEW_POSITIONS: ConnectedPosition[] = [
                   @case ('paid') {<td class="num">{{ m.paid | money }}</td>}
                   @case ('balance') {<td class="num" [class.red]="m.balance > 0">{{ m.balance > 0 ? (m.balance | money) : '—' }}</td>}
                   @case ('days') {<td><app-days [days]="m.remainingDays" /></td>}
-                  @case ('situation') {<td><app-situation-badge [value]="m.situation" /></td>}
+                  @case ('state') {<td><app-state-badge [member]="m" /></td>}
                   @case ('insurance') {<td><app-paid-badge [value]="m.insurance" /></td>}
                   @case ('note') {
                     <td>
@@ -200,7 +201,7 @@ export class MembersPage {
       code: (m) => m.code, lastName: (m) => m.lastName, firstName: (m) => m.firstName, birthDate: (m) => m.birthDate,
       registrationDate: (m) => m.registrationDate, pack: (m) => m.pack?.name, price: (m) => m.price,
       status: (m) => m.paymentStatus, paid: (m) => m.paid, balance: (m) => m.balance, days: (m) => m.remainingDays,
-      situation: (m) => SITUATION_RANK[m.situation], insurance: (m) => m.insurance,
+      state: stateRank, insurance: (m) => m.insurance,
     },
     defaultSort: DEFAULT_SORT,
     isActive,

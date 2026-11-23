@@ -6,6 +6,8 @@ export type PaymentMethod = 'ESPECES' | 'CARTE' | 'VIREMENT';
 export type Insurance = 'PAYE' | 'IMPAYE';
 /** NONE: the member has no subscription period at all. */
 export type Situation = 'EXPIRED' | 'SOON' | 'FOLLOW' | 'OK' | 'NONE';
+/** Remaining days of the paid period combined with the payment status. NONE: no subscription period. */
+export type MemberState = 'EXPIRED' | 'UNPAID' | 'SOON' | 'UP_TO_DATE' | 'NONE';
 export type PayMode = 'COMMISSION' | 'FIXED';
 
 export interface User {
@@ -62,7 +64,7 @@ export interface MemberView {
   price: number | null; endDate: string | null; remainingDays: number | null;
   paid: number; balance: number;
   /** Null without subscription: nothing is due, so there is no payment status. */
-  paymentStatus: PaymentStatus | null; activeMember: boolean; situation: Situation;
+  paymentStatus: PaymentStatus | null; activeMember: boolean; situation: Situation; state: MemberState;
 }
 
 export interface PaymentView {

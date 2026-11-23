@@ -9,17 +9,17 @@ class MemoryStorage {
 }
 
 const TODAY = ['code', 'lastName', 'firstName', 'phone', 'birthDate', 'sports', 'registrationDate', 'pack', 'price',
-  'discount', 'status', 'balance', 'days', 'insurance', 'note'];
+  'discount', 'status', 'balance', 'days', 'state', 'insurance', 'note'];
 
 const ids = (c: MemberColumns) => c.visible().map((x) => x.id);
 const stored = (s: MemoryStorage) => JSON.parse(s.getItem(MEMBER_COLUMNS_KEY)!);
 
 describe('MemberColumns', () => {
-  it('par défaut, reproduit le tableau actuel, Déjà payé et Situation masquées', () => {
+  it('par défaut, État visible et Déjà payé masqué', () => {
     const c = new MemberColumns(new MemoryStorage());
     expect(ids(c)).toEqual(TODAY);
     expect(c.isVisible('paid')).toBe(false);
-    expect(c.isVisible('situation')).toBe(false);
+    expect(c.isVisible('state')).toBe(true);
     expect(c.all().length).toBe(MEMBER_COLUMNS.length);
   });
 
@@ -52,7 +52,7 @@ describe('MemberColumns', () => {
     expect(ids(c)).not.toContain('discount');
     expect(ids(c)).toContain('paid');
     expect(ids(c)).toContain('code');
-    expect(stored(s).hidden.sort()).toEqual(['discount', 'situation']);
+    expect(stored(s).hidden.sort()).toEqual(['discount']);
   });
 
   it('restaure ordre et sélection au rechargement', () => {
@@ -60,7 +60,7 @@ describe('MemberColumns', () => {
     const a = new MemberColumns(s);
     a.move(3, 1);
     a.toggle('discount');
-    a.toggle('situation');
+    a.toggle('state');
     const b = new MemberColumns(s);
     expect(ids(b)).toEqual(ids(a));
     expect(b.order()).toEqual(a.order());
@@ -89,13 +89,13 @@ describe('MemberColumns', () => {
 
   it('nettoie un stockage obsolète : id inconnu ignoré, colonne absente remise à sa place par défaut', () => {
     const s = new MemoryStorage();
-    // Saved before paid/situation existed, with an unknown id, a duplicate, and ID wrongly hidden.
-    const order = ['lastName', 'code', 'ghost', ...TODAY.filter((id) => id !== 'code' && id !== 'lastName' && id !== 'phone'), 'code'];
-    s.setItem(MEMBER_COLUMNS_KEY, JSON.stringify({ order, hidden: ['discount', 'ghost', 'code'] }));
+    // Saved before paid/state existed, with unknown ids (the former Situation column), a duplicate, and ID wrongly hidden.
+    const order = ['lastName', 'code', 'ghost', ...TODAY.filter((id) => !['code', 'lastName', 'phone', 'state'].includes(id)), 'code'];
+    s.setItem(MEMBER_COLUMNS_KEY, JSON.stringify({ order: [...order, 'situation'], hidden: ['discount', 'ghost', 'code', 'situation'] }));
     const c = new MemberColumns(s);
     expect(c.order()).toEqual(['lastName', 'code', 'firstName', 'phone', 'birthDate', 'sports', 'registrationDate', 'pack', 'price',
-      'discount', 'status', 'paid', 'balance', 'days', 'situation', 'insurance', 'note'] as MemberColumnId[]);
-    expect([...c.hidden()].sort()).toEqual(['discount', 'paid', 'situation']);
+      'discount', 'status', 'paid', 'balance', 'days', 'state', 'insurance', 'note'] as MemberColumnId[]);
+    expect([...c.hidden()].sort()).toEqual(['discount', 'paid']);
   });
 
   it('une colonne nouvelle absente du stockage prend sa visibilité par défaut', () => {

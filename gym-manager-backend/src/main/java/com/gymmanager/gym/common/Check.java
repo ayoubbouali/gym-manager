@@ -41,25 +41,30 @@ public final class Check {
         return value;
     }
 
-    /** Like {@link #phone(String, String, String, boolean)}, but an unchanged stored number is kept as is, never revalidated. */
-    public static String phone(String value, String current, String dialCode, String field, boolean required) {
-        if (current != null && !current.isEmpty() && value != null && value.replaceAll("[\\s.-]", "").equals(current)) return current;
-        return phone(value, dialCode, field, required);
-    }
-
-    /** Valid fixed or mobile number for the club's dial code, stored in national format, digits only. */
-    public static String phone(String value, String dialCode, String field, boolean required) {
-        if (value == null || value.replaceAll("[\\s.-]", "").isEmpty()) {
+    /**
+     * Valid fixed or mobile number for {@code country} (the field's country, null = the club's one). Stored in national
+     * format, digits only, for the club's country; in E.164 ("+33612345678") for any other. An unchanged stored number
+     * is kept as is, never revalidated.
+     */
+    public static String phone(String value, String current, String country, String clubCountry, String field, boolean required) {
+        String c = country == null || country.isBlank() ? clubCountry : country;
+        String typed = value == null ? "" : value.replaceAll("[\\s.-]", "");
+        String stored = current == null ? "" : current.replaceAll("[\\s.-]", "");
+        // a national number is read with the club's country: keeping it while another country is chosen would ignore that choice
+        boolean sameCountry = stored.startsWith("+") || c.equals(clubCountry);
+        if (!stored.isEmpty() && typed.equals(stored) && sameCountry) return current;
+        if (typed.isEmpty()) {
             if (required) throw ApiException.invalid(field, "Le champ « Téléphone » est obligatoire.");
             return "";
         }
-        String national = RegionalCatalog.normalizePhone(value, dialCode);
-        if (national == null) {
-            String example = RegionalCatalog.phoneExample(dialCode);
-            throw ApiException.invalid(field, "Numéro de téléphone invalide pour l'indicatif +" + dialCode
+        if (!RegionalCatalog.isCountry(c)) throw ApiException.invalid(field, "Pays du téléphone inconnu (" + c + ").");
+        String normalized = RegionalCatalog.phoneForStorage(value, c, clubCountry);
+        if (normalized == null) {
+            String example = RegionalCatalog.phoneExample(c);
+            throw ApiException.invalid(field, "Numéro de téléphone invalide pour " + RegionalCatalog.phoneCountryLabel(c)
                     + (example.isEmpty() ? "" : " (ex. : " + example + ")") + ".");
         }
-        return national;
+        return normalized;
     }
 
     /** Case- and accent-insensitive uniqueness of a name among other rows. */

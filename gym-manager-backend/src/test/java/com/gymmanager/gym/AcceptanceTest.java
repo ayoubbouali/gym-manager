@@ -765,43 +765,87 @@ class AcceptanceTest {
     // ------------------------------------------------------------------ regional settings
 
     @Test
-    @DisplayName("Onglet Régional : listes officielles et options envoyées avec la page, valeur hors liste refusée")
+    @DisplayName("Onglet Régional : pays et devises envoyés avec la page, villes par pays, valeur hors liste refusée")
     void regionalLists() throws Exception {
         get(admin, "/api/settings")
+                .andExpect(jsonPath("$.values['regional.country']").value("MA"))
+                .andExpect(jsonPath("$.values['regional.city']").value(""))
                 .andExpect(jsonPath("$.values['regional.currencyCode']").value("MAD"))
                 .andExpect(jsonPath("$.values['regional.currency']").value("DH"))
-                .andExpect(jsonPath("$.regional.timezones[?(@.id=='Europe/Paris')].dialCode").value("33"))
-                .andExpect(jsonPath("$.regional.currencies[?(@.code=='EUR')].symbol").value("€"))
-                .andExpect(jsonPath("$.regional.dialCodes[?(@.code=='212')].label").value("Maroc"));
+                .andExpect(jsonPath("$.values['regional.timezone']").doesNotExist())
+                .andExpect(jsonPath("$.values['regional.dialCode']").doesNotExist())
+                .andExpect(jsonPath("$.regional.countries[?(@.code=='MA')].label").value("Maroc"))
+                .andExpect(jsonPath("$.regional.countries[?(@.code=='FR')].currencyCode").value("EUR"))
+                .andExpect(jsonPath("$.regional.currencies[?(@.code=='EUR')].symbol").value("€"));
+        get(admin, "/api/admin/regional/cities?country=MA").andExpect(status().isOk()).andExpect(jsonPath("$[0]").value("Casablanca"));
+        get(admin, "/api/regional/countries").andExpect(jsonPath("$[?(@.code=='FR')].dialCode").value("33"));
         get(admin, "/api/config")
                 .andExpect(jsonPath("$.currency").value("DH")).andExpect(jsonPath("$.currencyCode").value("MAD"))
+                .andExpect(jsonPath("$.country").value("MA")).andExpect(jsonPath("$.dialCode").value("212"))
+                .andExpect(jsonPath("$.timezone").value("Africa/Casablanca"))
                 .andExpect(jsonPath("$.phoneExample").value("06 50 12 34 56")).andExpect(jsonPath("$.phoneRegex").doesNotExist());
+        MockHttpSession accueil = login("accueil", "accueil123", "Accueil2026");
+        get(accueil, "/api/regional/countries").andExpect(status().isOk());
+        get(accueil, "/api/admin/regional/cities?country=MA").andExpect(status().isForbidden());
 
         send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.currencyCode", "XYZ")))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("regional.currencyCode"))
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("« Devise »")));
-        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.dialCode", "999")))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("regional.dialCode"))
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("« Indicatif téléphonique international »")));
-        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.timezone", "Mars/Base")))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("regional.timezone"))
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("« Fuseau horaire »")));
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.country", "XX")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("regional.country"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("« Pays »")));
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.country", "FR", "regional.city", "Casablanca")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("regional.city"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("« Ville »")));
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.timezone", "Europe/Paris"))).andExpect(status().isBadRequest());
         send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.phoneRegex", "^0\\d{9}$")))
                 .andExpect(status().isBadRequest());
 
-        // the displayed symbol stays the only source of amounts, whatever the ISO code
-        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.currencyCode", "EUR", "regional.timezone", "Europe/Paris",
-                "regional.dialCode", "33"))).andExpect(status().isOk());
-        get(admin, "/api/config").andExpect(jsonPath("$.currency").value("DH")).andExpect(jsonPath("$.currencyCode").value("EUR"))
-                .andExpect(jsonPath("$.timezone").value("Europe/Paris"));
+        // the city gives the zone; without city, the country's official zone
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.country", "US", "regional.city", "Los Angeles")))
+                .andExpect(status().isOk());
+        get(admin, "/api/config").andExpect(jsonPath("$.timezone").value("America/Los_Angeles")).andExpect(jsonPath("$.dialCode").value("1"));
+        // a new country alone drops the city of the former one
+        setting("regional.country", "FR");
+        get(admin, "/api/config").andExpect(jsonPath("$.city").value("")).andExpect(jsonPath("$.timezone").value("Europe/Paris"));
+        setting("regional.country", "US");
+        get(admin, "/api/config").andExpect(jsonPath("$.timezone").value("America/New_York"));
     }
 
     @Test
-    @DisplayName("Téléphone validé par libphonenumber pour l'indicatif du club, stocké au format national")
-    void phoneByDialCode() throws Exception {
+    @DisplayName("Symbole affiché : imposé par la devise, une valeur envoyée est ignorée, « DH » conservé tant que la devise ne change pas")
+    void currencySymbolFollowsCurrency() throws Exception {
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.currencyCode", "MAD", "regional.currency", "XX")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.values['regional.currency']").value("DH"));
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("regional.currencyCode", "EUR", "regional.currency", "DH")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.values['regional.currency']").value("€"));
+        get(admin, "/api/config").andExpect(jsonPath("$.currency").value("€")).andExpect(jsonPath("$.currencyCode").value("EUR"));
+    }
+
+    @Test
+    @DisplayName("Base existante : pays déduit de l'ancien fuseau ou de l'ancien indicatif, sans perte du fuseau")
+    void legacyRegionalRows() throws Exception {
+        jdbc.update("INSERT INTO app_settings (setting_key, setting_value) VALUES ('regional.timezone', 'Europe/Paris'), ('regional.dialCode', '33')");
+        get(admin, "/api/settings").andExpect(jsonPath("$.values['regional.country']").value("FR"));
+        get(admin, "/api/config").andExpect(jsonPath("$.timezone").value("Europe/Paris")).andExpect(jsonPath("$.dialCode").value("33"));
+
+        jdbc.update("UPDATE app_settings SET setting_value = 'America/Los_Angeles' WHERE setting_key = 'regional.timezone'");
+        get(admin, "/api/config").andExpect(jsonPath("$.country").value("US")).andExpect(jsonPath("$.timezone").value("America/Los_Angeles"));
+
+        jdbc.update("UPDATE app_settings SET setting_value = 'UTC' WHERE setting_key = 'regional.timezone'");
+        get(admin, "/api/config").andExpect(jsonPath("$.country").value("FR"));
+
+        // the Régional tab reset restores Morocco, not the country of the former rows
+        send(admin, "POST", "/api/settings/reset/regional", null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.values['regional.country']").value("MA"));
+    }
+
+    @Test
+    @DisplayName("Téléphone validé par libphonenumber pour le pays du champ : national pour le pays du club, E.164 sinon")
+    void phoneByCountry() throws Exception {
         long karate = id("/api/sports", "$[?(@.name=='Karaté')].id");
         long pack = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
-        String invalid = "Numéro de téléphone invalide pour l'indicatif +212 (ex. : 06 50 12 34 56).";
+        String invalid = "Numéro de téléphone invalide pour Maroc (+212) (ex. : 06 50 12 34 56).";
         send(admin, "POST", "/api/members", member("Tel", "Court", "0812", karate, pack, null, "2026-11-18"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("phone")).andExpect(jsonPath("$.message").value(invalid));
         send(admin, "POST", "/api/members", member("Tel", "France", "+33612345678", karate, pack, null, "2026-11-18"))
@@ -810,6 +854,20 @@ class AcceptanceTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.phone").value("0612345678"));
         send(admin, "POST", "/api/members", member("Tel", "International", "+212 6 12 00 00 10", karate, pack, null, "2026-11-18"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.phone").value("0612000010"));
+
+        // a foreign number: E.164, WhatsApp link without the club's dial code
+        Map<String, Object> french = member("Dupont", "Jean", "06 12 34 56 78", karate, pack, null, "2026-10-01");
+        french.put("phoneCountry", "FR");
+        long frenchId = ((Number) read(send(admin, "POST", "/api/members", french).andExpect(status().isOk())
+                .andExpect(jsonPath("$.phone").value("+33612345678")), "$.id")).longValue();
+        french.put("phone", "0812");
+        send(admin, "PUT", "/api/members/" + frenchId, french).andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("phone"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("Numéro de téléphone invalide pour France (+33) (ex. : 06")));
+        french.put("phoneCountry", "XX");
+        french.put("phone", "0612345678");
+        send(admin, "PUT", "/api/members/" + frenchId, french).andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("phone"));
+        List<String> links = read(get(admin, "/api/alerts"), "$.rows[?(@.lastName=='Dupont')].whatsappLink");
+        assertThat(links).singleElement().asString().startsWith("https://wa.me/33612345678?text=");
 
         // a stored number is never revalidated: an unchanged one passes even if libphonenumber rejects it
         long coachFn = id("/api/functions", "$[?(@.label=='Coach')].id");
@@ -821,12 +879,30 @@ class AcceptanceTest {
         send(admin, "PUT", "/api/staff/" + staffId, staff).andExpect(status().isOk());
         staff.put("phone", "0800000001");
         send(admin, "PUT", "/api/staff/" + staffId, staff).andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("phone"));
+        staff.put("phone", "+33 6 12 34 56 78");
+        staff.put("phoneCountry", "FR");
+        send(admin, "PUT", "/api/staff/" + staffId, staff).andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT phone FROM staff WHERE id = ?", String.class, staffId)).isEqualTo("+33612345678");
 
-        // another country: French example, French numbers accepted
-        setting("regional.dialCode", "33");
+        // another club country: French example, French numbers national
+        setting("regional.country", "FR");
         get(admin, "/api/config").andExpect(jsonPath("$.phoneExample").value(org.hamcrest.Matchers.startsWith("06")));
         send(admin, "POST", "/api/members", member("Tel", "Paris", "0612345678", karate, pack, null, "2026-11-18"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.phone").value("0612345678"));
+    }
+
+    @Test
+    @DisplayName("Téléphone du club : même validation et même stockage, sauf valeur inchangée")
+    void clubPhone() throws Exception {
+        jdbc.update("INSERT INTO app_settings (setting_key, setting_value) VALUES ('club.phone', '05 22 libre')");
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("club.name", "Club", "club.phone", "05 22 libre"))).andExpect(status().isOk());
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("club.phone", "0812")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("club.phone"));
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("club.phone", "05 22 12 34 56")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.values['club.phone']").value("0522123456"));
+        send(admin, "PUT", "/api/settings", Map.of("values", Map.of("club.phone", "01 23 45 67 89"), "phoneCountries", Map.of("club.phone", "FR")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.values['club.phone']").value("+33123456789"));
+        setting("club.phone", "");
     }
 
     @Test

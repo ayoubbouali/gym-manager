@@ -7,22 +7,22 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { ApiService } from '../../core/api.service';
-import { ConfigService } from '../../core/config.service';
 import { FrDatePipe, MoneyPipe, formatAmount, monthName } from '../../core/format';
 import { FunctionView, SportView, StaffView } from '../../core/models';
 import { NotifyService, errorMessage } from '../../core/notify.service';
 import { MultiSelect, SelectOption } from '../../shared/multi-select';
+import { PhoneInput, PhoneValue } from '../../shared/phone-input';
 
 @Component({
   selector: 'app-staff-form',
-  imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, MatSelectModule, MultiSelect],
+  imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, MatSelectModule, MultiSelect, PhoneInput],
   template: `
     <h2 mat-dialog-title>{{ d.staff ? 'Modifier ' + d.staff.code + ' — ' + d.staff.name : 'Nouveau membre du personnel' }}</h2>
     <mat-dialog-content>
       <form id="staff-form" class="form-grid" (ngSubmit)="save()">
         <mat-form-field><mat-label>Nom</mat-label><input matInput name="last" [(ngModel)]="v.lastName" required /></mat-form-field>
         <mat-form-field><mat-label>Prénom</mat-label><input matInput name="first" [(ngModel)]="v.firstName" /></mat-form-field>
-        <mat-form-field><mat-label>Téléphone</mat-label><input matInput name="phone" [(ngModel)]="v.phone" inputmode="tel" [placeholder]="config.phoneExample()" /></mat-form-field>
+        <app-phone-input label="Téléphone" name="phone" [(ngModel)]="v.phone" />
         <mat-form-field><mat-label>Fonction</mat-label>
           <mat-select name="fn" [(ngModel)]="v.functionId" required>
             @for (f of functions; track f.id) {<mat-option [value]="f.id">{{ f.label }}</mat-option>}
@@ -55,13 +55,12 @@ export class StaffFormDialog {
   private api = inject(ApiService);
   private ref = inject(MatDialogRef<StaffFormDialog>);
   private notify = inject(NotifyService);
-  config = inject(ConfigService);
   functions = this.d.functions.filter((f) => f.active || f.id === this.d.staff?.functionId);
   sportOptions: SelectOption[] = this.d.sports.map((s) => ({ id: s.id, label: s.name, color: s.color, disabled: !s.active }));
   v = {
     lastName: this.d.staff?.lastName ?? '',
     firstName: this.d.staff?.firstName ?? '',
-    phone: this.d.staff?.phone ?? '',
+    phone: { country: null, number: this.d.staff?.phone ?? '' } as PhoneValue,
     functionId: this.d.staff?.functionId ?? (null as number | null),
     sportIds: [...(this.d.staff?.sportIds ?? [])],
     payMode: this.d.staff?.payMode ?? 'COMMISSION',
@@ -74,7 +73,7 @@ export class StaffFormDialog {
     this.busy.set(true);
     this.error.set('');
     try {
-      await this.api.save('staff', this.d.staff?.id, this.v);
+      await this.api.save('staff', this.d.staff?.id, { ...this.v, phone: this.v.phone.number, phoneCountry: this.v.phone.country });
       this.notify.success(this.d.staff ? 'Fiche mise à jour.' : 'Membre du personnel ajouté.');
       this.ref.close(true);
     } catch (e) {

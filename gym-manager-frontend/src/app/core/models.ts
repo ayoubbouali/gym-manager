@@ -27,9 +27,13 @@ export interface AppConfig {
   /** Displayed symbol: the only source for amounts. */
   currency: string;
   currencyCode: string;
+  /** ISO 3166 code of the club's country: phone fields open on it. */
+  country: string;
+  city: string;
+  /** Derived from the country and city (never edited directly). */
   timezone: string;
-  dialCode: string;
-  /** Example mobile number in national format for the dial code, used as phone placeholder. */
+  dialCode: string | null;
+  /** Example mobile number in national format for the club's country. */
   phoneExample: string;
   cumulative: boolean;
   rounding: string;
@@ -187,9 +191,12 @@ export interface SettingsPayload {
 }
 
 export interface CurrencyOption { code: string; label: string; symbol: string; }
-/** `dialCode` is null for zones without a country (UTC, Etc/GMT+1…). */
-export interface TimezoneOption { id: string; dialCode: string | null; }
-export interface DialCodeOption { code: string; label: string; }
-export interface RegionalOptions { currencies: CurrencyOption[]; timezones: TimezoneOption[]; dialCodes: DialCodeOption[]; }
+/** Only countries with a dial code. `currencyCode` is null when unknown. `timezone` is the official one (the capital's). */
+export interface CountryOption {
+  code: string; label: string; dialCode: string; currencyCode: string | null; timezone: string; example: string; primary: boolean;
+}
+/** Countries offered by the phone fields. `primary`: main country of its dial code (US for +1). */
+export interface PhoneCountry { code: string; label: string; dialCode: string; example: string; primary: boolean; }
+export interface RegionalOptions { currencies: CurrencyOption[]; countries: CountryOption[]; }
 
 export interface ApiError { message: string; field?: string; code?: string; }

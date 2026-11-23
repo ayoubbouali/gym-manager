@@ -56,7 +56,7 @@ public class AdminController {
 
     /**
      * Secret values (Brevo API key) are always "" in {@code values}; {@code secretsSet} tells whether one is stored.
-     * {@code regional} holds the lists offered by the Régional tab.
+     * {@code regional} holds the lists offered by the Régional tab (cities: {@code GET /api/admin/regional/cities}).
      */
     public record SettingsPayload(Map<String, String> groups, List<SettingDef> definitions, Map<String, String> values,
                                   Map<String, Boolean> secretsSet, Map<String, String> nextCodes, RegionalCatalog.Options regional) {
@@ -69,9 +69,15 @@ public class AdminController {
         return new SettingsPayload(SettingsCatalog.GROUPS, SettingsCatalog.ALL, settings.masked(), settings.secretsSet(), next, RegionalCatalog.OPTIONS);
     }
 
+    /** Cities of a country for the Régional tab, most populous first; empty for an unknown country. */
+    @GetMapping("/admin/regional/cities")
+    public List<String> cities(@RequestParam String country) {
+        return RegionalCatalog.cities(country);
+    }
+
     @PutMapping("/settings")
     public SettingsPayload updateSettings(@RequestBody SettingsUpdateRequest r) {
-        settings.update(r.values() == null ? Map.of() : r.values());
+        settings.update(r.values() == null ? Map.of() : r.values(), r.phoneCountries() == null ? Map.of() : r.phoneCountries());
         return getSettings();
     }
 

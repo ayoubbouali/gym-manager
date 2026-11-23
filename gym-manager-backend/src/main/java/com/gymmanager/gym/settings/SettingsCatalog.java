@@ -23,6 +23,14 @@ public final class SettingsCatalog {
     public static final String RESET_SUBJECT = "mail.reset.subject";
     public static final String RESET_TEMPLATE = "mail.reset.template";
     public static final String RESET_PASSWORD_VARIABLE = "{mot_de_passe}";
+    public static final String CLUB_PHONE = "club.phone";
+    public static final String COUNTRY = "regional.country";
+    public static final String CITY = "regional.city";
+    public static final String CURRENCY_CODE = "regional.currencyCode";
+    public static final String CURRENCY_SYMBOL = "regional.currency";
+    /** Former settings, replaced by the country and city: only read to migrate an existing database or backup. */
+    public static final String LEGACY_TIMEZONE = "regional.timezone";
+    public static final String LEGACY_DIAL_CODE = "regional.dialCode";
     private static final Pattern EMAIL = Pattern.compile("[^\\s@]+@[^\\s@]+\\.[^\\s@]+");
     private static final Pattern HOST = Pattern.compile("(?=.{1,253}$)[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*");
 
@@ -40,12 +48,12 @@ public final class SettingsCatalog {
         List<SettingDef> l = new ArrayList<>();
         l.add(SettingDef.required("club.name", "club", "string", "Nom du club", "Gym Manager"));
         l.add(SettingDef.of("club.address", "club", "string", "Adresse", ""));
-        l.add(SettingDef.of("club.phone", "club", "string", "Téléphone", ""));
+        l.add(SettingDef.of(CLUB_PHONE, "club", "phone", "Téléphone", ""));
 
-        l.add(SettingDef.required("regional.currencyCode", "regional", "currency", "Devise", "MAD"));
-        l.add(SettingDef.required("regional.currency", "regional", "string", "Symbole affiché", "DH"));
-        l.add(SettingDef.required("regional.timezone", "regional", "timezone", "Fuseau horaire", "Africa/Casablanca"));
-        l.add(SettingDef.required("regional.dialCode", "regional", "dialCode", "Indicatif téléphonique international", "212"));
+        l.add(SettingDef.required(COUNTRY, "regional", "country", "Pays", "MA"));
+        l.add(SettingDef.of(CITY, "regional", "city", "Ville", ""));
+        l.add(SettingDef.required(CURRENCY_CODE, "regional", "currency", "Devise", "MAD"));
+        l.add(SettingDef.required(CURRENCY_SYMBOL, "regional", "readonly", "Symbole affiché", "DH"));
 
         String[][] codes = {{"member", "Adhérent", "A", "3"}, {"sport", "Sport", "SP", "2"}, {"pack", "Pack", "PK", "2"},
                 {"discount", "Remise", "R", "2"}, {"activity", "Activité", "AC", "2"}, {"staff", "Personnel", "E", "3"}};
@@ -111,7 +119,10 @@ public final class SettingsCatalog {
         return ALL.stream().filter(d -> d.key().equals(key)).findFirst();
     }
 
-    /** Returns null when valid, otherwise a French error message. Also used by the UI. */
+    /**
+     * Returns null when valid, otherwise a French error message. Also used by the UI. A city depends on the country
+     * and a phone on its field's country: both are checked by {@link SettingsService#update}.
+     */
     public static String validate(SettingDef d, String raw) {
         String v = raw == null ? "" : raw.trim();
         String name = "« " + d.label() + " »";
@@ -126,8 +137,8 @@ public final class SettingsCatalog {
         switch (d.type()) {
             case "currency":
                 return RegionalCatalog.isCurrency(v) ? null : name + " : code de devise ISO 4217 inconnu (" + v + ").";
-            case "dialCode":
-                return RegionalCatalog.isDialCode(v) ? null : name + " : indicatif inconnu (+" + v + ").";
+            case "country":
+                return RegionalCatalog.isCountry(v) ? null : name + " : pays inconnu (" + v + ").";
             case "prefix":
                 return v.matches("[A-Za-z]{1,5}") ? null : name + " : 1 à 5 lettres.";
             case "int": {
@@ -139,8 +150,6 @@ public final class SettingsCatalog {
                 return v.equals("true") || v.equals("false") ? null : name + " : valeur invalide.";
             case "enum":
                 return d.options().stream().anyMatch(o -> o.value().equals(v)) ? null : name + " : valeur invalide.";
-            case "timezone":
-                return RegionalCatalog.isTimezone(v) ? null : name + " : fuseau horaire inconnu (" + v + ").";
             case "email":
                 return v.isEmpty() || EMAIL.matcher(v).matches() ? null : name + " n'est pas une adresse e-mail valide.";
             case "host":

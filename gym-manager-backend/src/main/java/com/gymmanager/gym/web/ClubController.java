@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Club identity, logo and the configuration needed by the UI. */
@@ -49,9 +50,11 @@ public class ClubController {
         m.put("logoVersion", logoFile());
         m.put("currency", c.currency());
         m.put("currencyCode", c.currencyCode());
+        m.put("country", c.country());
+        m.put("city", c.city());
         m.put("timezone", c.timezone().getId());
         m.put("dialCode", c.dialCode());
-        m.put("phoneExample", RegionalCatalog.phoneExample(c.dialCode()));
+        m.put("phoneExample", RegionalCatalog.phoneExample(c.country()));
         m.put("cumulative", c.cumulative());
         m.put("rounding", c.rounding() == Rules.Rounding.UNIT ? "0" : "2");
         m.put("soonThreshold", c.soonThreshold());
@@ -60,6 +63,12 @@ public class ClubController {
         m.put("today", c.today());
         m.put("now", c.now());
         return m;
+    }
+
+    /** Countries offered by the phone fields (any authenticated user). */
+    @GetMapping("/api/regional/countries")
+    public List<RegionalCatalog.PhoneCountry> phoneCountries() {
+        return RegionalCatalog.PHONE_COUNTRIES;
     }
 
     @GetMapping("/api/club/logo")

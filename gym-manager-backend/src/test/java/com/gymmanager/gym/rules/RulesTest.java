@@ -400,6 +400,13 @@ class RulesTest {
         }
 
         @Test
+        @DisplayName("Lien WhatsApp : un numéro étranger stocké en E.164 est déjà international")
+        void whatsappLinkForE164() {
+            assertThat(Rules.whatsappLink("212", "+33612345678", "Bonjour")).isEqualTo("https://wa.me/33612345678?text=Bonjour");
+            assertThat(Rules.whatsappLink("212", "0612345678", "Bonjour")).isEqualTo("https://wa.me/212612345678?text=Bonjour");
+        }
+
+        @Test
         void templateVariablesAreReplaced() {
             String msg = Rules.renderTemplate("Bonjour {prenom} {nom}, {jours} jour(s) — {inconnu}",
                     Map.of("prenom", "Hamza", "nom", "Amrani", "jours", 246));

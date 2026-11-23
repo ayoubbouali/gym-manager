@@ -15,11 +15,12 @@ import { DiscountView, MemberPreview, MemberView, PackView, SportView } from '..
 import { NotifyService, apiError, errorMessage } from '../../core/notify.service';
 import { DateField } from '../../shared/date-field';
 import { MultiSelect, SelectOption } from '../../shared/multi-select';
+import { PhoneInput, PhoneValue } from '../../shared/phone-input';
 
 @Component({
   selector: 'app-member-form',
   imports: [ReactiveFormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatButtonToggleModule, MultiSelect, DateField, MoneyPipe, FrDatePipe],
+    MatButtonToggleModule, MultiSelect, DateField, PhoneInput, MoneyPipe, FrDatePipe],
   template: `
     <h2 mat-dialog-title>{{ member ? 'Modifier ' + member.code + ' — ' + member.firstName + ' ' + member.lastName : 'Nouvel adhérent' }}</h2>
     <mat-dialog-content #content>
@@ -27,7 +28,7 @@ import { MultiSelect, SelectOption } from '../../shared/multi-select';
       <form [formGroup]="form" class="form-grid" (ngSubmit)="save()" id="member-form">
         <mat-form-field><mat-label>Nom</mat-label><input matInput formControlName="lastName" required /></mat-form-field>
         <mat-form-field><mat-label>Prénom</mat-label><input matInput formControlName="firstName" required /></mat-form-field>
-        <mat-form-field><mat-label>Téléphone</mat-label><input matInput formControlName="phone" required inputmode="tel" [placeholder]="config.phoneExample()" /></mat-form-field>
+        <app-phone-input label="Téléphone" formControlName="phone" required />
         <app-date-field label="Date de naissance" formControlName="birthDate" />
         <app-multi-select class="span-2" label="Sport(s) *" formControlName="sportIds" [options]="sportOptions()" />
         @if (withoutSubscription) {
@@ -100,7 +101,8 @@ export class MemberFormDialog {
   form = this.fb.group({
     lastName: [this.member?.lastName ?? '', Validators.required],
     firstName: [this.member?.firstName ?? '', Validators.required],
-    phone: [this.member?.phone ?? '', Validators.required],
+    // required: checked by the phone field itself (the value is an object)
+    phone: [{ country: null, number: this.member?.phone ?? '' } as PhoneValue],
     birthDate: [this.member?.birthDate ?? ''],
     sportIds: [this.member?.sportIds ?? ([] as number[])],
     packId: [this.member?.packId ?? (null as number | null), this.withoutSubscription ? [] : [Validators.required]],
@@ -167,7 +169,8 @@ export class MemberFormDialog {
     const v = this.form.getRawValue();
     this.busy.set(true);
     try {
-      const saved = await this.api.save<MemberView>('members', this.member?.id, { ...v, birthDate: v.birthDate || null });
+      const saved = await this.api.save<MemberView>('members', this.member?.id,
+        { ...v, phone: v.phone?.number ?? '', phoneCountry: v.phone?.country ?? null, birthDate: v.birthDate || null });
       this.notify.success(this.member ? 'Adhérent modifié.' : `Adhérent ${saved.code} créé.`);
       this.ref.close(saved);
     } catch (e) {

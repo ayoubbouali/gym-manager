@@ -1,0 +1,3 @@
+/* flag-icons (MIT): SVG flags, emoji flags do not render on Windows. Rectangle flags only: the square set would put
+   two files of the same name (4x3/ma.svg, 1x1/ma.svg) in the build output. */
+@use 'flag-icons/sass/flag-icons' with ($flag-icons-use-square: false);

@@ -50,7 +50,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/public/**", "/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/**").authenticated()
                         // ADMIN only, including reads
-                        .requestMatchers("/api/staff/**", "/api/stats/**", "/api/settings/**", "/api/users/**", "/api/functions/**", "/api/data/**").hasRole(ADMIN)
+                        .requestMatchers("/api/staff/**", "/api/stats/**", "/api/settings/**", "/api/users/**", "/api/functions/**", "/api/data/**", "/api/admin/**").hasRole(ADMIN)
                         // payments: ACCUEIL records them; correcting / cancelling / deleting is ADMIN only
                         .requestMatchers(HttpMethod.PUT, "/api/payments/**").hasRole(ADMIN)
                         .requestMatchers(HttpMethod.DELETE, "/api/payments/**").hasRole(ADMIN)

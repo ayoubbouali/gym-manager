@@ -123,7 +123,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                 {"Fadili", "Anas", "0661112212", "Entretien", "FIXED", "3000"}};
         for (String[] p : people) {
             st.put(p[0], staff.save(null, new StaffRequest(p[0], p[1], p[2], fn.get(p[3]), List.of(), PayMode.valueOf(p[4]),
-                    p[5] == null ? null : new BigDecimal(p[5]))).getId());
+                    p[5] == null ? null : new BigDecimal(p[5]), null)).getId());
         }
 
         // 11.5 Sports
@@ -175,7 +175,7 @@ public class DemoDataSeeder implements ApplicationRunner {
         Map<String, Long> mb = new HashMap<>();
         for (String[] m : memberRows) {
             Long id = members.save(null, new MemberRequest(m[0], m[1], m[2], d(m[3]), d(m[5]), List.of(sp.get(m[4])),
-                    pk.get(m[6]), disc.get(m[7]), Insurance.valueOf(m[8]), ""), "admin").getId();
+                    pk.get(m[6]), disc.get(m[7]), Insurance.valueOf(m[8]), "", null), "admin").getId();
             mb.put(m[1] + " " + m[0], id);
         }
 

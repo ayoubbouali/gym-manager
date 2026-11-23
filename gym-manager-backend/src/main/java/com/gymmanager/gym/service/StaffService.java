@@ -38,7 +38,7 @@ public class StaffService {
         Staff s = id == null ? new Staff() : staff.findById(id).orElseThrow(() -> ApiException.notFound("Membre du personnel introuvable."));
         String last = Check.text(r.lastName(), "lastName", "Nom", 80, true);
         String first = Check.text(r.firstName(), "firstName", "Prénom", 80, false);
-        String phone = Check.phone(r.phone(), s.getPhone(), settings.config().dialCode(), "phone", false);
+        String phone = Check.phone(r.phone(), s.getPhone(), r.phoneCountry(), settings.config().country(), "phone", false);
         Check.required(r.functionId(), "functionId", "Fonction");
         StaffFunction fn = functions.findById(r.functionId()).orElseThrow(() -> ApiException.invalid("functionId", "Fonction introuvable."));
         Check.activeOrUnchanged(fn.isActive(), fn.getId(), s.getFunctionId(), "functionId", "Cette fonction est inactive.");

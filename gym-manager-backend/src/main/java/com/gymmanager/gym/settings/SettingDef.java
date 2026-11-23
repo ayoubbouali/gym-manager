@@ -5,7 +5,9 @@ import java.util.List;
 /**
  * Definition of a setting: key, group (tab), type, label, default value.
  * Types: string, template, prefix, int, bool, enum, share, email, host,
- * currency / timezone / dialCode (restricted to {@link RegionalCatalog}),
+ * currency / country / city (restricted to {@link RegionalCatalog}; a city to the cities of the chosen country),
+ * phone (validated for the country chosen in the field, see {@link SettingsService#update}),
+ * readonly (derived on the server, a value sent is ignored: the symbol of the currency),
  * secret (write-only: never returned by the API, an empty value keeps the stored one).
  */
 public record SettingDef(String key, String group, String type, String label, String defaultValue,

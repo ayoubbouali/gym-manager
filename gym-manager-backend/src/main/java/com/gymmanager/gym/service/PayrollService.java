@@ -91,7 +91,7 @@ public class PayrollService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
             return new PayrollRow(s, c.amount(), paid, Rules.balance(c.amount(), paid), Rules.paymentStatus(c.amount(), paid), c.detail(), pays);
         }).toList();
-        Rules.DateWindow w = Rules.salaryWindow(ym.atDay(1), st.cfg().salaryStartDay(), st.cfg().salaryEndDay());
+        Rules.DateWindow w = Rules.newRegistrationWindow(ym, st.cfg().salaryCutoffDay());
         return new PayrollMonth(ym.toString(), w.from(), w.to(), ym.equals(YearMonth.from(st.today())), rows,
                 rows.stream().filter(r -> r.staff().active()).map(PayrollRow::due).reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP),
                 rows.stream().map(PayrollRow::paid).reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP),

@@ -67,7 +67,7 @@ export class ApiService {
   members = () => this.get<M.MemberView[]>('/members');
   memberCard = (code: string) => this.get<M.MemberCard>(`/members/by-code/${encodeURIComponent(code)}`);
   memberNotes = (id: Id, notes: string) => this.patch<M.MemberView>(`/members/${id}/notes`, { notes });
-  memberPreview = (body: { packId: Id | null; discountId: Id | null; registrationDate: string | null }) =>
+  memberPreview = (body: { packId: Id | null; discountId: Id | null; registrationDate: string | null; customAmount?: number | null }) =>
     this.post<M.MemberPreview | null>('/members/preview', body);
   packs = () => this.get<M.PackView[]>('/packs');
   discounts = () => this.get<M.DiscountView[]>('/discounts');
@@ -86,4 +86,5 @@ export class ApiService {
   payroll = (month?: string) => this.get<M.PayrollMonth>('/payroll', month ? { month } : undefined);
   salaryHistory = (staffId: number) => this.get<M.SalaryPaymentView[]>(`/payroll/staff/${staffId}/history`);
   users = () => this.get<M.User[]>('/users');
+  roles = () => this.get<M.UserRoleView[]>('/roles');
 }

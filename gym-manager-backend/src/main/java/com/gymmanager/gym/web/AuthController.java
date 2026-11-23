@@ -1,6 +1,7 @@
 package com.gymmanager.gym.web;
 
 import com.gymmanager.gym.common.ApiException;
+import com.gymmanager.gym.common.FileStorage;
 import com.gymmanager.gym.security.PasswordResetService;
 import com.gymmanager.gym.security.UserService;
 import com.gymmanager.gym.security.UserService.UserView;
@@ -11,6 +12,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -22,6 +24,7 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.security.Principal;
 
@@ -33,6 +36,7 @@ public class AuthController {
     private final SecurityContextRepository contextRepository;
     private final UserService users;
     private final PasswordResetService passwordReset;
+    private final FileStorage files;
 
     @PostMapping("/login")
     public UserView login(@RequestBody LoginRequest r, HttpServletRequest req, HttpServletResponse res) {
@@ -88,7 +92,22 @@ public class AuthController {
 
     @PutMapping("/me")
     public UserView updateMe(@RequestBody AccountUpdateRequest r, Principal principal) {
-        return users.updateOwnEmail(principal.getName(), r.email());
+        return users.updateOwnAccount(principal.getName(), r);
+    }
+
+    @GetMapping("/me/photo")
+    public ResponseEntity<Resource> photo(Principal principal) {
+        return AdminController.image(files, users.photoName(principal.getName()));
+    }
+
+    @PostMapping("/me/photo")
+    public UserView uploadPhoto(@RequestParam("file") MultipartFile file, Principal principal) {
+        return users.setOwnPhoto(principal.getName(), file);
+    }
+
+    @DeleteMapping("/me/photo")
+    public UserView deletePhoto(Principal principal) {
+        return users.deleteOwnPhoto(principal.getName());
     }
 
     @PostMapping("/change-password")

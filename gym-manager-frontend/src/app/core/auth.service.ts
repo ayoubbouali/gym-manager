@@ -38,9 +38,28 @@ export class AuthService {
     this.user.set(await this.api.post<User>('/auth/change-password', { currentPassword, newPassword }));
   }
 
-  async updateEmail(email: string): Promise<void> {
-    this.user.set(await this.api.put<User>('/auth/me', { email }));
+  /** Reloads the account from the server: it may have been changed elsewhere (Paramètres › Utilisateurs). */
+  async refresh(): Promise<void> {
+    this.user.set(await this.api.get<User>('/auth/me'));
   }
+
+  /** Null fields are left unchanged; a blank value removes it. */
+  async updateAccount(body: { email?: string; phone?: string; phoneCountry?: string | null }): Promise<void> {
+    this.user.set(await this.api.put<User>('/auth/me', body));
+  }
+
+  async uploadPhoto(file: File): Promise<void> {
+    this.user.set(await this.api.upload<User>('/auth/me/photo', file));
+    this.photoVersion.set(Date.now());
+  }
+
+  async deletePhoto(): Promise<void> {
+    this.user.set(await this.api.delete<User>('/auth/me/photo'));
+  }
+
+  /** Cache-busting suffix of the profile photo URL, bumped on each upload. */
+  readonly photoVersion = signal(Date.now());
+  readonly photoUrl = computed(() => (this.user()?.hasPhoto ? `/api/auth/me/photo?v=${this.photoVersion()}` : null));
 
   async logout(): Promise<void> {
     try {

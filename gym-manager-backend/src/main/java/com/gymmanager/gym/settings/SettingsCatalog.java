@@ -74,8 +74,8 @@ public final class SettingsCatalog {
                 "Bonjour {prenom} {nom}, votre abonnement se termine dans {jours} jour(s). Pensez à le renouveler."));
 
         l.add(SettingDef.required("salary.share", "salary", "share", "Part du CA reversée au coach (mode commission)", "1/3"));
-        l.add(SettingDef.integer("salary.startDay", "salary", "Jour de début de la fenêtre de calcul", "1", 1, 31));
-        l.add(SettingDef.integer("salary.endDay", "salary", "Jour de fin de la fenêtre de calcul", "23", 1, 31));
+        l.add(SettingDef.integer("salary.cutoffDay", "salary",
+                "Jour limite d'inscription : inscrit ce jour ou après, l'adhérent compte à partir du mois suivant", "25", 1, 31));
         l.add(SettingDef.choice("salary.multiCoach", "salary", "Si plusieurs coachs encadrent un sport", "FULL",
                 new Option("FULL", "Chacun touche la part entière"), new Option("SPLIT", "Partage à parts égales")));
 

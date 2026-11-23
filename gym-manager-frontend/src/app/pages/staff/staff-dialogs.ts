@@ -39,7 +39,7 @@ import { PhoneInput, PhoneValue } from '../../shared/phone-input';
         @if (v.payMode === 'FIXED') {
           <mat-form-field><mat-label>Salaire fixe mensuel</mat-label><input matInput type="number" min="0" step="0.01" name="fixed" [(ngModel)]="v.fixedSalary" required /></mat-form-field>
         } @else {
-          <p class="muted small">Salaire = part du CA des adhérents inscrits dans ses sports pendant la fenêtre du mois (Paramètres › Salaire).</p>
+          <p class="muted small">Salaire = part du prix mensuel des adhérents en cours dans ses sports ; un inscrit à partir du jour limite du mois compte le mois suivant (Paramètres › Salaire).</p>
         }
       </form>
       @if (error()) {<p class="form-error" role="alert">{{ error() }}</p>}
@@ -84,22 +84,26 @@ export class StaffFormDialog {
   }
 }
 
-/** Makes a commission salary verifiable: members counted, prices, share, window. */
+/** Makes a commission salary verifiable: members counted, monthly prices, share, cut-off day. */
 @Component({
   selector: 'app-salary-detail',
   imports: [MatDialogModule, MatButtonModule, MoneyPipe, FrDatePipe],
   template: `
-    <h2 mat-dialog-title>Détail du salaire — {{ s.name }} · {{ month }} (du {{ s.salaryDetail.from.slice(8) }} au {{ s.salaryDetail.to.slice(8) }})</h2>
+    <h2 mat-dialog-title>Détail du salaire — {{ s.name }} · {{ month }}</h2>
     <mat-dialog-content>
       <p class="muted">Sports encadrés : {{ sportNames || 'aucun' }} · plusieurs coachs : {{ s.salaryDetail.multiCoach === 'SPLIT' ? 'partage égal' : 'part entière chacun' }}</p>
+      <p class="muted">Adhérents dont l'abonnement est en cours en {{ month }}, au prix mensuel. Un inscrit à partir du
+        {{ s.salaryDetail.cutoffDay }} du mois compte à partir du mois suivant : les nouveaux inscrits comptés ce mois-ci
+        sont ceux du {{ s.salaryDetail.from | frDate }} au {{ s.salaryDetail.to | frDate }}.</p>
       <table class="table compact">
-        <thead><tr><th>Adhérent</th><th>Pack</th><th>Inscrit le</th><th class="num">Prix</th>@if (split) {<th class="num">Part</th>}</tr></thead>
+        <thead><tr><th>Adhérent</th><th>Pack</th><th>Début</th><th class="num">Prix / mois</th>@if (split) {<th class="num">Part</th>}</tr></thead>
         <tbody>
           @for (l of s.salaryDetail.lines; track l.memberId) {
             <tr><td><span class="code">{{ l.code }}</span> {{ l.name }}</td><td>{{ l.pack }}</td><td>{{ l.registrationDate | frDate }}</td>
-              <td class="num">{{ l.price | money }}</td>@if (split) {<td class="num">× {{ l.factor }}</td>}</tr>
+              <td class="num">{{ l.price | money }}@if (l.months > 1) {<div class="muted small">{{ l.periodAmount | money }} ÷ {{ l.months }}</div>}</td>
+              @if (split) {<td class="num">× {{ l.factor }}</td>}</tr>
           } @empty {
-            <tr><td colspan="5" class="empty">Aucun adhérent inscrit dans la fenêtre de calcul.</td></tr>
+            <tr><td colspan="5" class="empty">Aucun adhérent en cours ce mois-ci.</td></tr>
           }
         </tbody>
       </table>
@@ -110,7 +114,7 @@ export class StaffFormDialog {
 })
 export class SalaryDetailDialog {
   s = inject<StaffView>(MAT_DIALOG_DATA);
-  month = monthName(this.s.salaryDetail.from);
+  month = monthName(this.s.salaryDetail.month);
   split = this.s.salaryDetail.multiCoach === 'SPLIT';
   pct = formatAmount(this.s.salaryDetail.sharePercent);
   sportNames = this.s.sports.map((x) => x.name).join(', ');

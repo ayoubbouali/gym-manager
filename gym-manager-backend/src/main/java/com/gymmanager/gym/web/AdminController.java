@@ -14,6 +14,9 @@ import com.gymmanager.gym.common.CodeService;
 import com.gymmanager.gym.web.dto.Requests.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -107,6 +110,40 @@ public class AdminController {
     @PutMapping("/users/{id}")
     public UserView updateUser(@PathVariable Long id, @RequestBody UserUpdateRequest r, Principal p) {
         return users.update(id, r, p.getName());
+    }
+
+    @GetMapping("/users/{id}/photo")
+    public ResponseEntity<Resource> userPhoto(@PathVariable Long id) {
+        return image(files, users.photoName(id));
+    }
+
+    /** Uploaded image, never cached by shared caches; 404 when absent. */
+    static ResponseEntity<Resource> image(FileStorage files, String name) {
+        return files.find(name)
+                .<ResponseEntity<Resource>>map(p -> ResponseEntity.ok().contentType(FileStorage.mediaType(name))
+                        .cacheControl(CacheControl.noCache().cachePrivate()).body(new FileSystemResource(p)))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/roles")
+    public List<UserService.RoleView> listRoles() {
+        return users.roles();
+    }
+
+    @PostMapping("/roles")
+    public UserService.RoleView createRole(@RequestBody UserRoleRequest r, Principal p) {
+        return users.saveRole(null, r, p.getName());
+    }
+
+    @PutMapping("/roles/{id}")
+    public UserService.RoleView updateRole(@PathVariable Long id, @RequestBody UserRoleRequest r, Principal p) {
+        return users.saveRole(id, r, p.getName());
+    }
+
+    @DeleteMapping("/roles/{id}")
+    public ResponseEntity<Void> deleteRole(@PathVariable Long id) {
+        users.deleteRole(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/users/{id}/reset-password")

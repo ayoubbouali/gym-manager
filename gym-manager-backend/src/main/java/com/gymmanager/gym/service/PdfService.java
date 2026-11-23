@@ -119,10 +119,11 @@ public class PdfService {
             doc.add(m);
             if (s.payMode() == com.gymmanager.gym.domain.PayMode.COMMISSION) {
                 SalaryDetail det = d.detail();
-                doc.add(new Paragraph("Commission : " + det.shareRaw() + " (" + det.sharePercent().toPlainString().replace('.', ',') + " %) du CA des adhérents inscrits du "
-                        + date(det.from()) + " au " + date(det.to()), LABEL));
+                doc.add(new Paragraph("Commission : " + det.shareRaw() + " (" + det.sharePercent().toPlainString().replace('.', ',')
+                        + " %) du prix mensuel des adhérents dont l'abonnement est en cours ce mois-ci. Un adhérent inscrit à partir du "
+                        + det.cutoffDay() + " du mois ne compte qu'à partir du mois suivant.", LABEL));
                 PdfPTable t = table(new float[]{2.6f, 2.2f, 1.2f, 1.4f});
-                header(t, "Adhérent", "Pack", "Inscrit le", "Prix");
+                header(t, "Adhérent", "Pack", "Début", "Prix / mois");
                 for (SalaryLineView l : det.lines()) {
                     cell(t, l.code() + " " + l.name(), NORMAL, Element.ALIGN_LEFT);
                     cell(t, l.pack(), NORMAL, Element.ALIGN_LEFT);
@@ -130,7 +131,7 @@ public class PdfService {
                     cell(t, money(l.price(), cfg.currency()), NORMAL, Element.ALIGN_RIGHT);
                 }
                 if (det.lines().isEmpty()) {
-                    PdfPCell c = new PdfPCell(new Phrase("Aucun adhérent inscrit dans la fenêtre de calcul.", LABEL));
+                    PdfPCell c = new PdfPCell(new Phrase("Aucun adhérent en cours ce mois-ci.", LABEL));
                     c.setColspan(4);
                     c.setBorderColor(LINE);
                     c.setPadding(5);

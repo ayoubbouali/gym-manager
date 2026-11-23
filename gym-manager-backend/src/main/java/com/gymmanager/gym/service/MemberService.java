@@ -66,6 +66,7 @@ public class MemberService {
         }
         Pack pack = null;
         Discount disc = null;
+        BigDecimal custom = null;
         if (!withoutSubscription) {
             pack = packs.findById(Check.required(r.packId(), "packId", "Type d'abonnement"))
                     .orElseThrow(() -> ApiException.invalid("packId", "Pack introuvable."));
@@ -73,10 +74,16 @@ public class MemberService {
             if (!sportIds.contains(pack.getSportId())) {
                 throw ApiException.invalid("packId", "Le pack choisi ne correspond à aucun des sports sélectionnés.");
             }
-            disc = r.discountId() == null
-                    ? discounts.findFirstBySystemTrue().orElseThrow()
-                    : discounts.findById(r.discountId()).orElseThrow(() -> ApiException.invalid("discountId", "Remise introuvable."));
-            Check.activeOrUnchanged(disc.isActive(), disc.getId(), currentDiscount, "discountId", "Cette remise est inactive.");
+            custom = customAmount(r.customAmount(), pack, cfg);
+            if (custom != null) {
+                // a typed price replaces any discount: the period keeps the neutral one
+                disc = discounts.findFirstBySystemTrue().orElseThrow();
+            } else {
+                disc = r.discountId() == null
+                        ? discounts.findFirstBySystemTrue().orElseThrow()
+                        : discounts.findById(r.discountId()).orElseThrow(() -> ApiException.invalid("discountId", "Remise introuvable."));
+                Check.activeOrUnchanged(disc.isActive(), disc.getId(), currentDiscount, "discountId", "Cette remise est inactive.");
+            }
         }
 
         // an unchanged number is tolerated so that duplicates predating this rule do not block other edits
@@ -118,15 +125,38 @@ public class MemberService {
         sub.setPackId(pack.getId());
         sub.setDiscountId(disc.getId());
         sub.setMonths(dur.getMonths());
-        sub.setAmount(price(pack, dur, disc, cfg));
+        sub.setCustomAmount(custom);
+        sub.setAmount(price(pack, dur, disc, custom, cfg));
         subscriptions.save(sub);
         return saved;
     }
 
-    /** RG-PRIX for a pack and a member discount (frozen in the period). */
-    BigDecimal price(Pack pack, Duration dur, Discount memberDiscount, ClubConfig cfg) {
+    /** RG-PRIX for a pack and a member discount (frozen in the period), unless a price was typed by hand. */
+    BigDecimal price(Pack pack, Duration dur, Discount memberDiscount, BigDecimal customAmount, ClubConfig cfg) {
+        if (customAmount != null) return customAmount;
         BigDecimal packPct = discounts.findById(pack.getDiscountId()).map(Discount::getPercent).orElse(BigDecimal.ZERO);
         return Rules.memberPrice(pack.getMonthlyPrice(), dur.getMonths(), packPct, memberDiscount.getPercent(), cfg.cumulative(), cfg.rounding());
+    }
+
+    /** Validates a price typed by hand: a discount, so between 0 and the pack price. Null = none typed. */
+    private BigDecimal customAmount(BigDecimal amount, Pack pack, ClubConfig cfg) {
+        if (amount == null) return null;
+        if (amount.signum() < 0) throw ApiException.invalid("customAmount", "Le montant ne peut pas être négatif.");
+        if (amount.stripTrailingZeros().scale() > 2) {
+            throw ApiException.invalid("customAmount", "Le montant ne peut pas avoir plus de deux décimales.");
+        }
+        BigDecimal total = packTotal(pack, cfg);
+        if (amount.compareTo(total) > 0) {
+            throw ApiException.invalid("customAmount", "Le montant ne peut pas dépasser le prix du type d'abonnement ("
+                    + total.toPlainString() + ").");
+        }
+        return amount.setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal packTotal(Pack pack, ClubConfig cfg) {
+        Duration dur = durations.findById(pack.getDurationId()).orElseThrow();
+        BigDecimal packPct = discounts.findById(pack.getDiscountId()).map(Discount::getPercent).orElse(BigDecimal.ZERO);
+        return Rules.packTotal(pack.getMonthlyPrice(), dur.getMonths(), packPct, cfg.rounding());
     }
 
     public record Preview(BigDecimal price, LocalDate endDate, long remainingDays, Rules.Situation situation) {
@@ -142,7 +172,8 @@ public class MemberService {
         BigDecimal memberPct = r.discountId() == null ? BigDecimal.ZERO
                 : discounts.findById(r.discountId()).map(Discount::getPercent).orElse(BigDecimal.ZERO);
         ClubConfig cfg = settings.config();
-        BigDecimal price = Rules.memberPrice(pack.getMonthlyPrice(), dur.getMonths(), packPct, memberPct, cfg.cumulative(), cfg.rounding());
+        BigDecimal price = r.customAmount() != null ? customAmount(r.customAmount(), pack, cfg)
+                : Rules.memberPrice(pack.getMonthlyPrice(), dur.getMonths(), packPct, memberPct, cfg.cumulative(), cfg.rounding());
         LocalDate end = Rules.subscriptionEnd(r.registrationDate(), dur.getMonths());
         long remaining = Rules.remainingDays(end, cfg.today());
         return new Preview(price, end, remaining, Rules.situation(remaining, cfg.soonThreshold(), cfg.followThreshold()));

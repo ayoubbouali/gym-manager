@@ -74,6 +74,9 @@ public class DemoDataSeeder implements ApplicationRunner {
     @org.springframework.beans.factory.annotation.Autowired
     private com.gymmanager.gym.importer.BaseDataService baseData;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.gymmanager.gym.repository.UserRoleRepository roleRepo;
+
     @Override
     public void run(ApplicationArguments args) {
         if (users.count() > 0) {
@@ -175,7 +178,7 @@ public class DemoDataSeeder implements ApplicationRunner {
         Map<String, Long> mb = new HashMap<>();
         for (String[] m : memberRows) {
             Long id = members.save(null, new MemberRequest(m[0], m[1], m[2], d(m[3]), d(m[5]), List.of(sp.get(m[4])),
-                    pk.get(m[6]), disc.get(m[7]), Insurance.valueOf(m[8]), "", null), "admin").getId();
+                    pk.get(m[6]), disc.get(m[7]), Insurance.valueOf(m[8]), "", null, null), "admin").getId();
             mb.put(m[1] + " " + m[0], id);
         }
 
@@ -235,7 +238,7 @@ public class DemoDataSeeder implements ApplicationRunner {
             AppUser user = new AppUser();
             user.setUsername(u[0]);
             user.setPasswordHash(encoder.encode(u[1]));
-            user.setRole(Role.valueOf(u[2]));
+            user.setUserRole(roleRepo.findFirstByAccessLevelOrderByIdAsc(Role.valueOf(u[2])).orElseThrow());
             user.setMustChangePassword(true);
             users.save(user);
         }

@@ -44,9 +44,13 @@ import { NAV } from './nav';
             <lucide-icon [name]="dark() ? 'sun' : 'moon'" [size]="18" />
           </button>
           <button class="user-chip" [matMenuTriggerFor]="userMenu" aria-label="Menu utilisateur">
-            <span class="avatar sm">{{ (auth.user()?.username ?? '?').slice(0, 1).toUpperCase() }}</span>
+            @if (auth.photoUrl(); as url) {
+              <img class="avatar sm" [src]="url" alt="" />
+            } @else {
+              <span class="avatar sm">{{ (auth.user()?.username ?? '?').slice(0, 1).toUpperCase() }}</span>
+            }
             <span class="user-name">{{ auth.user()?.username }}</span>
-            <span class="badge" [class.info]="auth.isAdmin()" [class.warn]="!auth.isAdmin()">{{ auth.user()?.role }}</span>
+            <span class="badge" [class.info]="auth.isAdmin()" [class.warn]="!auth.isAdmin()">{{ auth.user()?.roleName }}</span>
           </button>
           <mat-menu #userMenu="matMenu" xPosition="before">
             <button mat-menu-item routerLink="/mon-compte"><lucide-icon name="user-round" [size]="16" /> Mon compte</button>

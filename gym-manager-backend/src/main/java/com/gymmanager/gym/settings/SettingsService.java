@@ -70,7 +70,7 @@ public class SettingsService {
                 Integer.parseInt(s.get("alerts.soonDays")), Integer.parseInt(s.get("alerts.followDays")),
                 s.get("alerts.expiredTemplate"), s.get("alerts.soonTemplate"),
                 s.get("salary.share"), share != null ? share : Rules.parseShare("1/3"),
-                Integer.parseInt(s.get("salary.startDay")), Integer.parseInt(s.get("salary.endDay")),
+                Integer.parseInt(s.get("salary.cutoffDay")),
                 Rules.MultiCoach.valueOf(s.get("salary.multiCoach")),
                 s.get("documents.receiptPrefix"), s.get("documents.payslipPrefix"), s.get("documents.footer"),
                 Integer.parseInt(s.get("display.pageSize")), clock);
@@ -140,9 +140,6 @@ public class SettingsService {
         if (toSave.containsKey(SettingsCatalog.CLUB_PHONE)) {
             String field = SettingsCatalog.CLUB_PHONE;
             toSave.put(field, Check.phone(values.get(field), before.get(field), phoneCountries.get(field), country, field, false));
-        }
-        if (Integer.parseInt(merged.get("salary.startDay")) > Integer.parseInt(merged.get("salary.endDay"))) {
-            throw ApiException.invalid("salary.endDay", "Le jour de fin de la fenêtre doit être supérieur ou égal au jour de début.");
         }
         if (Integer.parseInt(merged.get("alerts.soonDays")) > Integer.parseInt(merged.get("alerts.followDays"))) {
             throw ApiException.invalid("alerts.followDays", "Le seuil « À suivre » doit être supérieur ou égal au seuil « Expire bientôt ».");

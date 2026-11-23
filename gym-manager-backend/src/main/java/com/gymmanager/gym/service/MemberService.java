@@ -79,10 +79,17 @@ public class MemberService {
             Check.activeOrUnchanged(disc.isActive(), disc.getId(), currentDiscount, "discountId", "Cette remise est inactive.");
         }
 
-        String key = Rules.normalize(last) + "|" + Rules.normalize(first) + "|" + phone;
-        boolean duplicate = members.findAll().stream().anyMatch(o -> !Objects.equals(o.getId(), id)
-                && (Rules.normalize(o.getLastName()) + "|" + Rules.normalize(o.getFirstName()) + "|" + o.getPhone()).equals(key));
-        if (duplicate) throw ApiException.invalid("lastName", "Un adhérent avec ce nom, ce prénom et ce téléphone existe déjà.");
+        // an unchanged number is tolerated so that duplicates predating this rule do not block other edits
+        if (!phone.equals(m.getPhone())) {
+            String digits = phone.replaceAll("[\\s.-]", "");
+            members.findAll().stream()
+                    .filter(o -> !Objects.equals(o.getId(), id) && o.getPhone() != null && o.getPhone().replaceAll("[\\s.-]", "").equals(digits))
+                    .findFirst()
+                    .ifPresent(o -> {
+                        throw ApiException.invalid("phone", "Ce numéro de téléphone est déjà utilisé par l'adhérent "
+                                + o.getCode() + " (" + o.getFirstName() + " " + o.getLastName() + ").");
+                    });
+        }
 
         if (id == null) m.setCode(codes.next("member"));
         m.setLastName(last);

@@ -1,5 +1,6 @@
 import { Component, computed, input } from '@angular/core';
-import { SITUATION_LABELS } from '../core/format';
+import { MEMBER_STATE_LABELS, MoneyPipe, SITUATION_LABELS } from '../core/format';
+import { MemberView } from '../core/models';
 
 @Component({
   selector: 'app-sport-chip',
@@ -29,6 +30,26 @@ export class SituationBadge {
   value = input.required<string>();
   label = computed(() => SITUATION_LABELS[this.value()] ?? this.value());
   cls = computed(() => 'badge ' + ({ EXPIRED: 'ko', SOON: 'warn', FOLLOW: 'info', OK: 'ok', NONE: 'neutral' } as Record<string, string>)[this.value()]);
+}
+
+/** Member state badge followed by its detail: days since expiry, days left, amount still due. */
+@Component({
+  selector: 'app-state-badge',
+  imports: [MoneyPipe],
+  template: `@let m = member();
+    <span [class]="cls()">{{ label() }}</span>
+    @switch (m.state) {
+      @case ('EXPIRED') {<span class="state-detail">depuis {{ -(m.remainingDays ?? 0) }} j</span>}
+      @case ('SOON') {<span class="state-detail">J-{{ m.remainingDays }}</span>}
+    }
+    @if (m.state !== 'NONE' && m.balance > 0) {
+      <span class="state-detail" [class.red]="m.state === 'EXPIRED' || m.state === 'UNPAID'" [class.state-due]="m.state === 'SOON' || m.state === 'UP_TO_DATE'">reste {{ m.balance | money }}</span>
+    }`,
+})
+export class StateBadge {
+  member = input.required<Pick<MemberView, 'state' | 'remainingDays' | 'balance'>>();
+  label = computed(() => MEMBER_STATE_LABELS[this.member().state] ?? this.member().state);
+  cls = computed(() => 'badge ' + ({ EXPIRED: 'ko', UNPAID: 'ko', SOON: 'warn', UP_TO_DATE: 'ok', NONE: 'neutral' } as Record<string, string>)[this.member().state]);
 }
 
 @Component({

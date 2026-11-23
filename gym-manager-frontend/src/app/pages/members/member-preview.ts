@@ -1,12 +1,12 @@
 import { Component, computed, input, signal } from '@angular/core';
 import { FrDatePipe, MoneyPipe } from '../../core/format';
 import { MemberView } from '../../core/models';
-import { DaysLeft, PaidBadge, SituationBadge, SportChip } from '../../shared/badges';
+import { DaysLeft, PaidBadge, SportChip, StateBadge } from '../../shared/badges';
 
 /** Read-only summary card shown when hovering or focusing a member ID. */
 @Component({
   selector: 'app-member-preview',
-  imports: [SituationBadge, PaidBadge, DaysLeft, SportChip, MoneyPipe, FrDatePipe],
+  imports: [StateBadge, PaidBadge, DaysLeft, SportChip, MoneyPipe, FrDatePipe],
   host: { class: 'member-preview', role: 'tooltip' },
   template: `
     @let m = member();
@@ -22,7 +22,7 @@ import { DaysLeft, PaidBadge, SituationBadge, SportChip } from '../../shared/bad
         <div class="mp-tags">
           <span class="mp-code">{{ m.code }}</span>
           @if (!m.active) {<span class="badge neutral mp-inactive">Inactif</span>}
-          <app-situation-badge [value]="m.situation" />
+          <app-state-badge [member]="m" />
         </div>
       </div>
     </div>

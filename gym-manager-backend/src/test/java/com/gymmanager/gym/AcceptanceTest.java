@@ -442,7 +442,8 @@ class AcceptanceTest {
         long sub = ((Number) read(send(admin, "POST", "/api/members/" + a002 + "/renew", Map.of("packId", pack)), "$.id")).longValue();
         // A002 has no payment at all: the latest period already started (this renewal, from today) is the reference
         get(admin, "/api/members/by-code/A002").andExpect(jsonPath("$.member.remainingDays").value(30))
-                .andExpect(jsonPath("$.member.situation").value("FOLLOW"));
+                .andExpect(jsonPath("$.member.situation").value("FOLLOW"))
+                .andExpect(jsonPath("$.member.state").value("UNPAID"));
         send(admin, "DELETE", "/api/subscriptions/" + sub, null).andExpect(status().isNoContent());
         get(admin, "/api/members/by-code/A002").andExpect(jsonPath("$.subscriptions.length()").value(1));
         // a pack of another sport is refused
@@ -486,6 +487,7 @@ class AcceptanceTest {
                 .andExpect(jsonPath("$.subscriptions.length()").value(0))
                 .andExpect(jsonPath("$.renewalStart").value("2026-11-18"))
                 .andExpect(jsonPath("$.member.situation").value("NONE"))
+                .andExpect(jsonPath("$.member.state").value("NONE"))
                 .andExpect(jsonPath("$.member.periodCount").value(0))
                 .andExpect(jsonPath("$.member.pack").doesNotExist())
                 .andExpect(jsonPath("$.member.endDate").doesNotExist())
@@ -519,7 +521,8 @@ class AcceptanceTest {
                 .andExpect(jsonPath("$.paymentStatus").value("PARTIEL"));
         get(admin, "/api/members/by-code/" + code).andExpect(jsonPath("$.subscriptions.length()").value(1))
                 .andExpect(jsonPath("$.member.pack.name").value("Karaté - Mensuel"))
-                .andExpect(jsonPath("$.member.situation").value(org.hamcrest.Matchers.not("NONE")));
+                .andExpect(jsonPath("$.member.situation").value(org.hamcrest.Matchers.not("NONE")))
+                .andExpect(jsonPath("$.member.state").value("UP_TO_DATE"));
         // the new subscription starts today, not on the registration date: a form save keeps its start
         send(admin, "PUT", "/api/members/" + m, member("Sans", "Abonnement", "0612000010", karate, karatePack, null, "2026-11-01"))
                 .andExpect(status().isOk());

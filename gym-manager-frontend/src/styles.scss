@@ -281,6 +281,8 @@ a.kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 .badge.ok { background: var(--ok-bg); color: var(--ok); } .badge.ko { background: var(--ko-bg); color: var(--ko); }
 .badge.warn { background: var(--warn-bg); color: var(--warn); } .badge.info { background: var(--info-bg); color: var(--info); }
 .badge.neutral { background: var(--neutral-bg); color: var(--muted); }
+app-state-badge { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.state-detail { font-size: 12px; color: var(--muted); } .state-detail.state-due { color: var(--warn); font-weight: 600; } .state-detail.red { color: var(--ko); }
 .chip { display: inline-flex; align-items: center; border: 1px solid var(--line-strong); border-radius: 999px; padding: 1px 9px; font-size: 12px; margin: 1px 4px 1px 0; background: var(--card); color: var(--ink); }
 .chip-inactive { opacity: .5; text-decoration: line-through; }
 .chip-btn { cursor: pointer; font-family: ui-monospace, Menlo, monospace; }

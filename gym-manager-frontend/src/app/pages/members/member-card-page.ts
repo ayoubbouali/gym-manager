@@ -13,7 +13,7 @@ import { FrDatePipe, FrDateTimePipe, MoneyPipe, formatDate, norm } from '../../c
 import { ActivityView, MemberCard, MemberView } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ConfirmService } from '../../shared/confirm.service';
-import { DaysLeft, PaidBadge, SituationBadge, SportChip } from '../../shared/badges';
+import { DaysLeft, PaidBadge, SportChip, StateBadge } from '../../shared/badges';
 import { openMemberForm } from './member-form-dialog';
 import { AuthService } from '../../core/auth.service';
 import { openPdf } from '../../core/format';
@@ -23,7 +23,7 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
 @Component({
   selector: 'app-member-card',
   imports: [RouterLink, FormsModule, MatAutocompleteModule, MatButtonModule, MatFormFieldModule, MatSelectModule, MatTooltipModule,
-    LucideAngularModule, SportChip, PaidBadge, SituationBadge, DaysLeft, MoneyPipe, FrDatePipe, FrDateTimePipe],
+    LucideAngularModule, SportChip, PaidBadge, StateBadge, DaysLeft, MoneyPipe, FrDatePipe, FrDateTimePipe],
   template: `
     <div class="toolbar">
       <label class="search grow max-480">
@@ -91,7 +91,7 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
               <dt>Déjà payé</dt><dd>{{ c.member.paid | money }}</dd>
               <dt>Reste à payer</dt><dd [class.red]="c.member.balance > 0">{{ c.member.balance | money }}</dd>
               <dt>Reste de jours</dt><dd><app-days [days]="c.member.remainingDays" /></dd>
-              <dt>Situation</dt><dd><app-situation-badge [value]="c.member.situation" /></dd>
+              <dt>État</dt><dd><app-state-badge [member]="c.member" /></dd>
               <dt>Assurance</dt><dd><app-paid-badge [value]="c.member.insurance" /></dd>
             </dl>
             @if (c.member.notes) {<h4>Notes</h4><p class="notes">{{ c.member.notes }}</p>}

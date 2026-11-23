@@ -47,6 +47,9 @@ public final class Rules {
     /** NONE: the member has no subscription period at all. */
     public enum Situation { EXPIRED, SOON, FOLLOW, OK, NONE }
 
+    /** Member state shown to the admin: remaining days of the paid period combined with the payment status. */
+    public enum MemberState { EXPIRED, UNPAID, SOON, UP_TO_DATE, NONE }
+
     public enum MultiCoach { FULL, SPLIT }
 
     /** P(arrondi): 2 decimals or whole unit. */
@@ -175,8 +178,20 @@ public final class Rules {
         return Situation.OK;
     }
 
+    /**
+     * RG-ETAT: first matching case wins. "Soon" is strictly below the threshold (a 7-day threshold means 0 to 6 days),
+     * unlike {@link #situation}, which keeps driving the alerts.
+     */
+    public static MemberState memberState(long remainingDays, PaymentStatus paymentStatus, int soonThreshold) {
+        if (remainingDays < 0) return MemberState.EXPIRED;
+        if (paymentStatus == PaymentStatus.IMPAYE) return MemberState.UNPAID;
+        if (remainingDays < soonThreshold) return MemberState.SOON;
+        return MemberState.UP_TO_DATE;
+    }
+
     public record MemberComputed(BigDecimal price, LocalDate endDate, long remainingDays, BigDecimal paid, BigDecimal balance,
-                                 PaymentStatus paymentStatus, boolean active, Situation situation) {
+                                 PaymentStatus paymentStatus, boolean active, Situation situation,
+                                 MemberState state) {
     }
 
     public record PricingSettings(boolean cumulative, Rounding rounding, int soonThreshold, int followThreshold) {
@@ -195,8 +210,10 @@ public final class Rules {
         LocalDate end = subscriptionEnd(periodStart, months);
         long remaining = remainingDays(end, today);
         BigDecimal p = (totalPaid == null ? BigDecimal.ZERO : totalPaid).setScale(2, RoundingMode.HALF_UP);
-        return new MemberComputed(periodPrice, end, remaining, p, balance(totalDue, p), paymentStatus(totalDue, p),
-                isMemberActive(enabled, remaining), situation(remaining, s.soonThreshold(), s.followThreshold()));
+        PaymentStatus status = paymentStatus(totalDue, p);
+        return new MemberComputed(periodPrice, end, remaining, p, balance(totalDue, p), status,
+                isMemberActive(enabled, remaining), situation(remaining, s.soonThreshold(), s.followThreshold()),
+                memberState(remaining, status, s.soonThreshold()));
     }
 
     // ------------------------------------------------------------------ messages

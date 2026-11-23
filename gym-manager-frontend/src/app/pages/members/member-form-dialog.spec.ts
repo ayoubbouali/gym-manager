@@ -75,7 +75,7 @@ describe('popup adhérent : adhérent sans abonnement', () => {
   let api: Record<string, ReturnType<typeof vi.fn>>;
   const member = {
     id: 9, code: 'A009', lastName: 'Bennis', firstName: 'Lina', phone: '0740123456', birthDate: null, registrationDate: '2026-11-01',
-    sportIds: [1], packId: null, pack: null, discountId: null, discount: null, insurance: 'PAYE', notes: '', situation: 'NONE',
+    sportIds: [1], packId: null, pack: null, discountId: null, discount: null, insurance: 'PAYE', notes: '', situation: 'NONE', state: 'NONE',
   } as unknown as MemberView;
 
   beforeEach(() => {

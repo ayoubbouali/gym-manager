@@ -158,7 +158,7 @@ public class ClubStateService {
                     pack.id(), new PackRef(pack.id(), pack.code(), pack.name(), pack.active(), cur.getMonths(), pack.total()),
                     disc.id(), disc, m.getInsurance(), m.getPhoto() != null, m.getNotes(), m.isActive(),
                     activitiesByMember.getOrDefault(m.getId(), List.of()),
-                    c.price(), c.endDate(), c.remainingDays(), c.paid(), c.balance(), c.paymentStatus(), c.active(), c.situation());
+                    c.price(), c.endDate(), c.remainingDays(), c.paid(), c.balance(), c.paymentStatus(), c.active(), c.situation(), c.state());
         }).toList();
         Map<Long, MemberView> memberById = byId(members, MemberView::id);
         Map<Long, Subscription> subById = byId(subRows, Subscription::getId);
@@ -238,7 +238,7 @@ public class ClubStateService {
                 sportIds.stream().map(sportRef).filter(Objects::nonNull).toList(),
                 null, null, 0, null, null, null, null, m.getInsurance(), m.getPhoto() != null, m.getNotes(), m.isActive(),
                 activitiesByMember.getOrDefault(m.getId(), List.of()),
-                null, null, null, zero, zero, null, false, Rules.Situation.NONE);
+                null, null, null, zero, zero, null, false, Rules.Situation.NONE, Rules.MemberState.NONE);
     }
 
     /** Detached copy of a period priced with the current rules (RG-PRIX) — used while nothing has been paid. */

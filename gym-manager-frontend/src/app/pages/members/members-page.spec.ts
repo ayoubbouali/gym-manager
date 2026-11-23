@@ -22,7 +22,7 @@ function member(id: number, over: Partial<MemberView> = {}): MemberView {
     registrationDate: '2026-11-01', sportIds: [1], sports: [], subscriptionId: id, periodStart: '2026-11-01', periodCount: 1,
     packId: 1, pack: { id: 1, name: 'Pack' }, discountId: 1, discount: { name: 'Aucune' }, insurance: 'PAYE', hasPhoto: false,
     notes: '', active: true, activityIds: [], price: 100, endDate: '2026-12-01', remainingDays: 9, paid: 100, balance: 0,
-    paymentStatus: 'PAYE', activeMember: true, situation: 'OK',
+    paymentStatus: 'PAYE', activeMember: true, situation: 'OK', state: 'UP_TO_DATE',
     ...over,
   } as unknown as MemberView;
 }
@@ -183,12 +183,12 @@ describe('page Adhérents', () => {
       return [...document.querySelectorAll('.columns-menu [role="menuitemcheckbox"]')] as HTMLButtonElement[];
     };
     const TODAY = ['ID', 'Nom', 'Prénom', 'Téléphone', 'Naissance', 'Sport(s)', 'Inscription', 'Abonnement', 'Prix', 'Remise', 'Statut',
-      'Reste à payer', 'Reste jours', 'Assurance', 'Note', 'Actions'];
+      'Reste à payer', 'Reste jours', 'État', 'Assurance', 'Note', 'Actions'];
 
     it('par défaut, les colonnes et leur ordre sont ceux du tableau actuel', async () => {
       const f = await render();
       expect(headers(f)).toEqual(TODAY);
-      expect(f.nativeElement.querySelectorAll('thead th[cdkdrag], thead th.cdk-drag').length).toBe(15);
+      expect(f.nativeElement.querySelectorAll('thead th[cdkdrag], thead th.cdk-drag').length).toBe(16);
     });
 
     it('déposer Téléphone avant Nom déplace l’en-tête et les cellules de toutes les lignes, et sauvegarde', async () => {
@@ -233,24 +233,31 @@ describe('page Adhérents', () => {
       item('ID').click();
       f.detectChanges();
       expect(headers(f)[0]).toBe('ID');
-      expect(JSON.parse(localStorage.getItem(MEMBER_COLUMNS_KEY)!).hidden.sort()).toEqual(['discount', 'situation']);
+      expect(JSON.parse(localStorage.getItem(MEMBER_COLUMNS_KEY)!).hidden.sort()).toEqual(['discount']);
     });
 
-    it('la colonne Situation affiche le badge et se trie par urgence, Déjà payé par montant', async () => {
-      // Alphabetical order of the codes (EXPIRED, FOLLOW, OK, SOON) differs from the urgency order.
+    it('la colonne État, visible par défaut, affiche le détail et se trie par urgence, Déjà payé par montant', async () => {
+      // Alphabetical order of the codes differs from the urgency order.
       api.members.mockResolvedValue([
-        member(1, { situation: 'OK', paid: 50 }), member(2, { situation: 'FOLLOW', paid: 300 }),
-        member(3, { situation: 'SOON', paid: 0 }), member(4, { situation: 'EXPIRED', paid: 120 }),
+        member(1, { state: 'UP_TO_DATE', balance: 0, paid: 50 }), member(2, { state: 'UP_TO_DATE', balance: 150, paid: 300 }),
+        member(3, { state: 'SOON', remainingDays: 3, paid: 0 }), member(4, { state: 'EXPIRED', remainingDays: -12, paid: 120 }),
+        member(5, { state: 'NONE', paid: 10 }), member(6, { state: 'UNPAID', balance: 300, paid: 5 }),
       ]);
       const f = await render();
       const page = f.componentInstance;
-      page.toggleColumn('situation');
-      f.detectChanges();
-      expect(f.nativeElement.querySelector('tbody app-situation-badge')).not.toBeNull();
-      page.t.toggleSort('situation');
-      expect(page.t.filtered().map((m) => m.situation)).toEqual(['EXPIRED', 'SOON', 'FOLLOW', 'OK']);
+      const cell = (code: string) => {
+        const row = [...f.nativeElement.querySelectorAll('tbody tr')].find((r) => (r as HTMLElement).textContent!.includes(code)) as HTMLElement;
+        return [...row.querySelector('app-state-badge')!.children].map((e) => e.textContent!.trim()).join(' ');
+      };
+      expect(cell('A001')).toBe('À jour');
+      expect(cell('A002')).toBe('À jour reste 150,00 DH');
+      expect(cell('A003')).toBe('Expire bientôt J-3');
+      expect(cell('A004')).toBe('Expiré depuis 12 j');
+      expect(cell('A006')).toBe('En attente de paiement reste 300,00 DH');
+      page.t.toggleSort('state');
+      expect(page.t.filtered().map((m) => m.id)).toEqual([4, 6, 3, 2, 1, 5]);
       page.t.toggleSort('paid');
-      expect(page.t.filtered().map((m) => m.paid)).toEqual([0, 50, 120, 300]);
+      expect(page.t.filtered().map((m) => m.paid)).toEqual([0, 5, 10, 50, 120, 300]);
     });
 
     it('masquer la colonne triée remet le tri par défaut (ID croissant)', async () => {
@@ -305,11 +312,11 @@ describe('page Adhérents', () => {
       api.members.mockResolvedValue([]);
       const f = await render();
       const colspan = () => f.nativeElement.querySelector('td.empty').getAttribute('colspan');
-      expect(colspan()).toBe('16');
+      expect(colspan()).toBe('17');
       f.componentInstance.cols.toggle('discount');
       f.componentInstance.cols.toggle('note');
       f.detectChanges();
-      expect(colspan()).toBe('14');
+      expect(colspan()).toBe('15');
     });
 
     it('la carte d’aperçu fonctionne toujours quand l’ID est déplacé', async () => {

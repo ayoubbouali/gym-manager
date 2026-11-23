@@ -3,7 +3,7 @@ import { moveItemInArray } from '@angular/cdk/drag-drop';
 
 export type MemberColumnId =
   | 'code' | 'lastName' | 'firstName' | 'phone' | 'birthDate' | 'sports' | 'registrationDate' | 'pack' | 'price'
-  | 'discount' | 'status' | 'balance' | 'days' | 'insurance' | 'note' | 'paid' | 'situation';
+  | 'discount' | 'status' | 'balance' | 'days' | 'insurance' | 'note' | 'paid' | 'state';
 
 export interface MemberColumn {
   id: MemberColumnId;
@@ -32,7 +32,7 @@ export const MEMBER_COLUMNS: readonly MemberColumn[] = [
   { id: 'paid', label: 'Déjà payé', sort: 'paid', num: true, defaultVisible: false, hideable: true },
   { id: 'balance', label: 'Reste à payer', sort: 'balance', num: true, defaultVisible: true, hideable: true },
   { id: 'days', label: 'Reste jours', sort: 'days', defaultVisible: true, hideable: true },
-  { id: 'situation', label: 'Situation', sort: 'situation', defaultVisible: false, hideable: true },
+  { id: 'state', label: 'État', sort: 'state', defaultVisible: true, hideable: true },
   { id: 'insurance', label: 'Assurance', sort: 'insurance', defaultVisible: true, hideable: true },
   { id: 'note', label: 'Note', defaultVisible: true, hideable: true },
 ];

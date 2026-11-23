@@ -43,7 +43,7 @@ public final class Views {
      * A member with their current (latest) subscription period. {@code price} is the price of that period;
      * {@code paid}, {@code balance} and {@code paymentStatus} cover all periods (arrears included).
      * Without any period, the subscription fields (period, pack, discount, price, end, remaining days)
-     * and the payment status are null: situation NONE.
+     * and the payment status are null: situation and state NONE.
      */
     public record MemberView(Long id, String code, String lastName, String firstName, String phone,
                              LocalDate birthDate, LocalDate registrationDate,
@@ -53,7 +53,8 @@ public final class Views {
                              Insurance insurance, boolean hasPhoto, String notes, boolean active, List<Long> activityIds,
                              BigDecimal price, LocalDate endDate, Long remainingDays,
                              BigDecimal paid, BigDecimal balance,
-                             Rules.PaymentStatus paymentStatus, boolean activeMember, Rules.Situation situation) {
+                             Rules.PaymentStatus paymentStatus, boolean activeMember, Rules.Situation situation,
+                             Rules.MemberState state) {
         public String fullName() {
             return firstName + " " + lastName;
         }

@@ -87,27 +87,32 @@ class SettingsCatalogTest {
     }
 
     @Test
-    @DisplayName("Onglet Régional : code devise MAD, symbole DH, plus de format de téléphone par expression régulière")
+    @DisplayName("Onglet Régional : pays MA, ville facultative, devise MAD, symbole DH en lecture seule, plus de fuseau ni d'indicatif")
     void regionalGroup() {
         assertThat(SettingsCatalog.ALL.stream().filter(d -> d.group().equals("regional")).map(SettingDef::key))
-                .containsExactly("regional.currencyCode", "regional.currency", "regional.timezone", "regional.dialCode");
+                .containsExactly("regional.country", "regional.city", "regional.currencyCode", "regional.currency");
+        assertThat(def("regional.country").defaultValue()).isEqualTo("MA");
+        assertThat(def("regional.city").defaultValue()).isEmpty();
+        assertThat(def("regional.city").required()).isFalse();
         assertThat(def("regional.currencyCode").defaultValue()).isEqualTo("MAD");
         assertThat(def("regional.currency").defaultValue()).isEqualTo("DH");
         assertThat(def("regional.currency").label()).isEqualTo("Symbole affiché");
+        assertThat(def("regional.currency").type()).isEqualTo("readonly");
+        assertThat(def("club.phone").type()).isEqualTo("phone");
+        assertThat(SettingsCatalog.find("regional.timezone")).isEmpty();
+        assertThat(SettingsCatalog.find("regional.dialCode")).isEmpty();
         assertThat(SettingsCatalog.find("regional.phoneRegex")).isEmpty();
-        assertThat(SettingsCatalog.ALL).extracting(SettingDef::type).doesNotContain("regex", "digits");
+        assertThat(SettingsCatalog.ALL).extracting(SettingDef::type).doesNotContain("regex", "digits", "timezone", "dialCode");
     }
 
     @Test
-    @DisplayName("Onglet Régional : devise, fuseau et indicatif limités aux listes officielles, message nommant le champ")
+    @DisplayName("Onglet Régional : pays et devise limités aux listes officielles, message nommant le champ")
     void regionalLists() {
         assertThat(error("regional.currencyCode", "EUR")).isNull();
-        assertThat(error("regional.timezone", "Europe/Paris")).isNull();
-        assertThat(error("regional.timezone", "UTC")).isNull();
-        assertThat(error("regional.dialCode", "33")).isNull();
+        assertThat(error("regional.country", "FR")).isNull();
         assertThat(error("regional.currencyCode", "XYZ")).startsWith("« Devise »").contains("XYZ");
-        assertThat(error("regional.timezone", "Mars/Base")).startsWith("« Fuseau horaire »").contains("Mars/Base");
-        assertThat(error("regional.dialCode", "999")).startsWith("« Indicatif téléphonique international »").contains("+999");
-        assertThat(error("regional.dialCode", "")).contains("obligatoire");
+        assertThat(error("regional.country", "XX")).startsWith("« Pays »").contains("XX");
+        assertThat(error("regional.country", "")).contains("obligatoire");
+        assertThat(error("regional.city", "")).isNull();
     }
 }

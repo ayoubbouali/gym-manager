@@ -8,9 +8,19 @@ import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
 import { provideFrDates } from '../../core/date-adapter';
 import { APP_ICONS } from '../../core/icons';
-import { MemberView } from '../../core/models';
+import { MemberView, PhoneCountry } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { MemberFormDialog } from './member-form-dialog';
+
+const COUNTRIES: PhoneCountry[] = [
+  { code: 'FR', label: 'France', dialCode: '33', example: '06 12 34 56 78', primary: true },
+  { code: 'MA', label: 'Maroc', dialCode: '212', example: '06 50 12 34 56', primary: true },
+];
+
+function config() {
+  return { config: signal({ today: '2026-11-22' }), country: signal('MA'), phoneCountries: signal(COUNTRIES),
+    loadPhoneCountries: vi.fn().mockResolvedValue(undefined), currency: signal('DH') };
+}
 
 describe('popup adhérent : message d’erreur', () => {
   let api: Record<string, ReturnType<typeof vi.fn>>;
@@ -37,7 +47,7 @@ describe('popup adhérent : message d’erreur', () => {
         { provide: MatDialogRef, useValue: { close: vi.fn() } },
         { provide: MAT_DIALOG_DATA, useValue: {} },
         { provide: NotifyService, useValue: { success: vi.fn(), error: vi.fn() } },
-        { provide: ConfigService, useValue: { config: signal({ today: '2026-11-22' }), phoneExample: signal('06 50 12 34 56'), currency: signal('DH') } },
+        { provide: ConfigService, useValue: config() },
       ],
     });
   });
@@ -58,7 +68,7 @@ describe('popup adhérent : message d’erreur', () => {
 
   it('affiche aussi en haut l’erreur renvoyée par le serveur', async () => {
     const f = await create();
-    f.componentInstance.form.patchValue({ lastName: 'Bennis', firstName: 'Lina', phone: '0740123456', sportIds: [1], packId: 1 });
+    f.componentInstance.form.patchValue({ lastName: 'Bennis', firstName: 'Lina', phone: { country: 'MA', number: '0740123456' }, sportIds: [1], packId: 1 });
     api['save'].mockRejectedValue(new HttpErrorResponse({ status: 400, error: { message: 'Numéro de téléphone invalide pour l’indicatif +212.', field: 'phone' } }));
     const content = f.nativeElement.querySelector('mat-dialog-content') as HTMLElement;
     content.scrollTop = 200;
@@ -92,7 +102,7 @@ describe('popup adhérent : adhérent sans abonnement', () => {
         { provide: MatDialogRef, useValue: { close: vi.fn() } },
         { provide: MAT_DIALOG_DATA, useValue: { member } },
         { provide: NotifyService, useValue: { success: vi.fn(), error: vi.fn() } },
-        { provide: ConfigService, useValue: { config: signal({ today: '2026-11-22' }), phoneExample: signal('06 50 12 34 56'), currency: signal('DH') } },
+        { provide: ConfigService, useValue: config() },
       ],
     });
   });
@@ -107,6 +117,35 @@ describe('popup adhérent : adhérent sans abonnement', () => {
     expect(el.querySelector('.computed-box')).toBeNull();
     expect(el.textContent).toContain('Nouvel abonnement');
     await f.componentInstance.save();
-    expect(api['save']).toHaveBeenCalledWith('members', 9, expect.objectContaining({ packId: null }));
+    expect(api['save']).toHaveBeenCalledWith('members', 9, expect.objectContaining({ packId: null, phone: '0740123456', phoneCountry: null }));
+  });
+});
+
+describe('popup adhérent : téléphone avec choix du pays', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [MemberFormDialog],
+      providers: [
+        provideFrDates(),
+        importProvidersFrom(LucideAngularModule.pick(APP_ICONS)),
+        { provide: ApiService, useValue: { sports: vi.fn().mockResolvedValue([]), packs: vi.fn().mockResolvedValue([]),
+          discounts: vi.fn().mockResolvedValue([]), memberPreview: vi.fn().mockResolvedValue(null), save: vi.fn() } },
+        { provide: MatDialogRef, useValue: { close: vi.fn() } },
+        { provide: MAT_DIALOG_DATA, useValue: {} },
+        { provide: NotifyService, useValue: { success: vi.fn(), error: vi.fn() } },
+        { provide: ConfigService, useValue: config() },
+      ],
+    });
+  });
+
+  it('« Nouvel adhérent » : drapeau et indicatif du club à gauche, exemple du pays en placeholder', async () => {
+    const f = TestBed.createComponent(MemberFormDialog);
+    f.detectChanges();
+    await f.whenStable();
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('.phone-country .fi-ma')).not.toBeNull();
+    expect(el.querySelector('.phone-country')!.textContent).toContain('+212');
+    expect((el.querySelector('app-phone-input input[type="tel"]') as HTMLInputElement).placeholder).toBe('06 50 12 34 56');
   });
 });

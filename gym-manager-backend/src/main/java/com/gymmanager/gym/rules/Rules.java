@@ -235,15 +235,16 @@ public final class Rules {
     }
 
     /**
-     * https://wa.me/{international number}?text={encoded message}. The trunk prefix of the stored national number is
-     * not always a single 0 (8 for 7, 06 for 36): libphonenumber strips it; "dial code + number without the leading 0"
-     * is the fallback when the number cannot be parsed.
+     * https://wa.me/{international number}?text={encoded message}. A number stored in E.164 (+33…, foreign country)
+     * already is international. The trunk prefix of a stored national number is not always a single 0 (8 for 7, 06 for
+     * 36): libphonenumber strips it; "dial code + number without the leading 0" is the fallback when it cannot be parsed.
      */
     public static String whatsappLink(String dialCode, String phone, String message) {
         String national = phone == null ? "" : phone.replaceAll("\\D", "");
         String code = dialCode == null ? "" : dialCode.replaceAll("\\D", "");
         String text = URLEncoder.encode(message == null ? "" : message, StandardCharsets.UTF_8).replace("+", "%20");
-        return "https://wa.me/" + internationalDigits(code, national) + "?text=" + text;
+        String number = phone != null && phone.strip().startsWith("+") ? national : internationalDigits(code, national);
+        return "https://wa.me/" + number + "?text=" + text;
     }
 
     private static String internationalDigits(String code, String national) {

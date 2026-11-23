@@ -8,10 +8,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Map;
 
-/** Typed, immutable view of all settings at a given moment. */
+/** Typed, immutable view of all settings at a given moment. {@code timezone} and {@code dialCode} derive from the country and city. */
 public record ClubConfig(
         String clubName, String clubAddress, String clubPhone,
-        String currency, String currencyCode, ZoneId timezone, String dialCode,
+        String currency, String currencyCode, String country, String city, ZoneId timezone, String dialCode,
         Map<String, CodeFormat> codes,
         boolean cumulative, Rules.Rounding rounding,
         int soonThreshold, int followThreshold, String expiredTemplate, String soonTemplate,

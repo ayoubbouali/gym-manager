@@ -39,8 +39,9 @@ public final class Requests {
                                List<Long> coachIds, List<SlotRequest> schedules) {
     }
 
+    /** {@code phoneCountry}: ISO country chosen in the phone field, null = the club's country. */
     public record StaffRequest(String lastName, String firstName, String phone, Long functionId, List<Long> sportIds,
-                               PayMode payMode, BigDecimal fixedSalary) {
+                               PayMode payMode, BigDecimal fixedSalary, String phoneCountry) {
     }
 
     public record PackRequest(String name, Long sportId, Long durationId, BigDecimal monthlyPrice, Long discountId) {
@@ -55,8 +56,10 @@ public final class Requests {
     public record GeneratePacksRequest(Long sportId, List<GenerateItem> items) {
     }
 
+    /** {@code phoneCountry}: ISO country chosen in the phone field, null = the club's country. */
     public record MemberRequest(String lastName, String firstName, String phone, LocalDate birthDate, LocalDate registrationDate,
-                                List<Long> sportIds, Long packId, Long discountId, Insurance insurance, String notes) {
+                                List<Long> sportIds, Long packId, Long discountId, Insurance insurance, String notes,
+                                String phoneCountry) {
     }
 
     public record MemberPreviewRequest(Long packId, Long discountId, LocalDate registrationDate) {
@@ -110,6 +113,7 @@ public final class Requests {
     public record ResetPasswordRequest(String password) {
     }
 
-    public record SettingsUpdateRequest(Map<String, String> values) {
+    /** {@code phoneCountries}: per phone setting (club.phone), the ISO country chosen in the field; absent = the club's country. */
+    public record SettingsUpdateRequest(Map<String, String> values, Map<String, String> phoneCountries) {
     }
 }

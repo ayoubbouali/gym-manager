@@ -17,6 +17,7 @@ import { FunctionView, SettingDef, SettingsPayload, User } from '../../core/mode
 import { NotifyService, apiError, errorMessage } from '../../core/notify.service';
 import { ActiveBadge } from '../../shared/badges';
 import { ConfirmService } from '../../shared/confirm.service';
+import { PhoneInput, PhoneValue } from '../../shared/phone-input';
 import { openSimpleForm } from '../../shared/simple-form-dialog';
 import { DataImport } from './data-import';
 import { ListPicker, PickOption } from './list-picker';
@@ -30,7 +31,7 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
 @Component({
   selector: 'app-settings',
   imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatRadioModule, MatSelectModule, MatSlideToggleModule,
-    MatTabsModule, MatTooltipModule, LucideAngularModule, ActiveBadge, DataImport, ListPicker],
+    MatTabsModule, MatTooltipModule, LucideAngularModule, ActiveBadge, DataImport, ListPicker, PhoneInput],
   template: `
     @if (payload(); as p) {
       <section class="card no-pad">
@@ -108,17 +109,26 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                               <mat-hint>{{ p.secretsSet[d.key] ? 'Une clé est enregistrée ; elle n’est jamais réaffichée. Saisir une nouvelle clé pour la remplacer.' : 'Laisser vide pour utiliser la variable BREVO_API_KEY du serveur.' }}</mat-hint>
                             </mat-form-field>
                           }
+                          @case ('country') {
+                            <app-list-picker [inputId]="d.key" [ariaLabel]="d.label" [options]="countryOptions()" [value]="values[d.key]"
+                              (valueChange)="setRegional(d.key, $event)" hint="Choisir un pays renseigne sa devise. Les téléphones s’ouvrent sur ce pays." />
+                          }
+                          @case ('city') {
+                            <app-list-picker [inputId]="d.key" [ariaLabel]="d.label" [options]="cityOptions()" [value]="values[d.key]"
+                              (valueChange)="setRegional(d.key, $event)" hint="Facultative : à préciser si l’heure du club diffère de celle de la capitale." />
+                          }
                           @case ('currency') {
                             <app-list-picker [inputId]="d.key" [ariaLabel]="d.label" [options]="currencyOptions()" [value]="values[d.key]"
-                              (valueChange)="setRegional(d.key, $event)" hint="Choisir une devise renseigne le symbole affiché, qui reste modifiable." />
+                              (valueChange)="setRegional(d.key, $event)" hint="Choisir une devise renseigne le symbole affiché." />
                           }
-                          @case ('timezone') {
-                            <app-list-picker [inputId]="d.key" [ariaLabel]="d.label" [options]="timezoneOptions()" [value]="values[d.key]"
-                              (valueChange)="setRegional(d.key, $event)" hint="Choisir un fuseau renseigne l’indicatif, qui reste modifiable." />
+                          @case ('readonly') {
+                            <mat-form-field subscriptSizing="dynamic" class="w-140">
+                              <input matInput [id]="d.key" [value]="values[d.key]" disabled />
+                              <mat-hint>Symbole de la devise choisie.</mat-hint>
+                            </mat-form-field>
                           }
-                          @case ('dialCode') {
-                            <app-list-picker [inputId]="d.key" [ariaLabel]="d.label" [options]="dialCodeOptions()" [value]="values[d.key]"
-                              (valueChange)="setRegional(d.key, $event)" hint="Les téléphones des adhérents et du personnel sont vérifiés pour cet indicatif." />
+                          @case ('phone') {
+                            <app-phone-input class="max-480" [inputId]="d.key" subscriptSizing="dynamic" [ngModel]="clubPhone" (ngModelChange)="clubPhone = $event" />
                           }
                           @default {
                             <mat-form-field subscriptSizing="dynamic" class="w-full max-480">
@@ -229,9 +239,13 @@ export class SettingsPage {
   groupKeys = computed(() => Object.keys(this.payload()?.groups ?? {}));
   currencyOptions = computed<PickOption[]>(() =>
     (this.payload()?.regional.currencies ?? []).map((c) => ({ value: c.code, label: `${c.code} — ${c.label} (${c.symbol})` })));
-  timezoneOptions = computed<PickOption[]>(() => (this.payload()?.regional.timezones ?? []).map((z) => ({ value: z.id, label: z.id })));
-  dialCodeOptions = computed<PickOption[]>(() =>
-    (this.payload()?.regional.dialCodes ?? []).map((d) => ({ value: d.code, label: `+${d.code} — ${d.label}` })));
+  countryOptions = computed<PickOption[]>(() => (this.payload()?.regional.countries ?? []).map((c) => ({ value: c.code, label: c.label })));
+  /** Cities of the country currently chosen (not saved yet), most populous first. */
+  cities = signal<string[]>([]);
+  cityOptions = computed<PickOption[]>(() => [{ value: '', label: 'Non précisée' }, ...this.cities().map((c) => ({ value: c, label: c }))]);
+  private citiesOf = '';
+  /** Club phone with the country chosen in its field; `values['club.phone']` is only the stored number. */
+  clubPhone: PhoneValue = { country: null, number: '' };
 
   constructor() {
     this.load();
@@ -242,6 +256,22 @@ export class SettingsPage {
   private apply(p: SettingsPayload): void {
     this.payload.set(p);
     this.values = { ...p.values };
+    this.clubPhone = { country: null, number: p.values['club.phone'] ?? '' };
+    this.loadCities(this.values['regional.country']);
+  }
+
+  private async loadCities(country: string | undefined): Promise<void> {
+    if (!country || country === this.citiesOf) return;
+    this.citiesOf = country;
+    this.cities.set([]);
+    try {
+      const list = await this.api.get<string[]>('/admin/regional/cities', { country });
+      // a later choice wins over a slower answer
+      if (this.citiesOf === country) this.cities.set(list);
+    } catch (e) {
+      if (this.citiesOf === country) this.citiesOf = '';
+      this.notify.error(e);
+    }
   }
 
   async load(): Promise<void> {
@@ -265,7 +295,8 @@ export class SettingsPage {
   }
 
   setRegional(key: string, value: string): void {
-    applyRegional(this.values, key, value, this.payload()?.regional);
+    applyRegional(this.values, key, value, this.payload()?.regional, this.payload()?.values);
+    if (key === 'regional.country') this.loadCities(value);
   }
 
   render(template: string): string {
@@ -285,10 +316,15 @@ export class SettingsPage {
   async save(group: string): Promise<void> {
     const keys = (this.payload()?.definitions ?? []).filter((d) => d.group === group).map((d) => d.key);
     const values = Object.fromEntries(keys.map((k) => [k, String(this.values[k] ?? '')]));
+    const phoneCountries: Record<string, string> = {};
+    if (keys.includes('club.phone')) {
+      values['club.phone'] = this.clubPhone.number;
+      if (this.clubPhone.country) phoneCountries['club.phone'] = this.clubPhone.country;
+    }
     this.busy.set(true);
     this.fieldError.set(null);
     try {
-      this.apply(await this.api.put<SettingsPayload>('/settings', { values }));
+      this.apply(await this.api.put<SettingsPayload>('/settings', { values, phoneCountries }));
       await this.config.load();
       this.notify.success('Paramètres enregistrés.');
     } catch (e) {

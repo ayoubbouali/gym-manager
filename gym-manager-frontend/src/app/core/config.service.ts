@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { ApiService } from './api.service';
-import { AppConfig } from './models';
+import { AppConfig, PhoneCountry } from './models';
 
 /** UI configuration coming from the settings (club, currency, thresholds…). */
 @Injectable({ providedIn: 'root' })
@@ -8,9 +8,13 @@ export class ConfigService {
   private api = inject(ApiService);
   readonly config = signal<AppConfig | null>(null);
   readonly publicName = signal('Gym Manager');
+  /** Countries of the phone fields, loaded once. */
+  readonly phoneCountries = signal<PhoneCountry[]>([]);
+  private phoneCountriesLoad: Promise<void> | null = null;
 
   readonly currency = computed(() => this.config()?.currency ?? 'DH');
   readonly phoneExample = computed(() => this.config()?.phoneExample ?? '');
+  readonly country = computed(() => this.config()?.country ?? 'MA');
   readonly clubName = computed(() => this.config()?.clubName ?? this.publicName());
   readonly pageSize = computed(() => this.config()?.pageSize ?? 20);
   /** Uploaded logo (Paramètres › Club), if any. */
@@ -26,6 +30,17 @@ export class ConfigService {
 
   async load(): Promise<void> {
     this.config.set(await this.api.get<AppConfig>('/config'));
+  }
+
+  /** Loads the phone countries on first use; a failure leaves the list empty and is retried next time. */
+  loadPhoneCountries(): Promise<void> {
+    this.phoneCountriesLoad ??= this.api.get<PhoneCountry[]>('/regional/countries').then(
+      (list) => this.phoneCountries.set(list),
+      () => {
+        this.phoneCountriesLoad = null;
+      },
+    );
+    return this.phoneCountriesLoad;
   }
 
   async loadPublic(): Promise<void> {

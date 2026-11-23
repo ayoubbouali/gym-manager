@@ -205,6 +205,22 @@ a.kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 .toolbar > .date-field, .filters > .date-field { width: 180px; }
 .mat-datepicker-toggle lucide-icon { color: var(--muted); }
 .mat-datepicker-toggle-active lucide-icon, .date-field .mat-focused .mat-datepicker-toggle lucide-icon { color: var(--brand); }
+
+/* ---------- phone field (app-phone-input) ---------- */
+.phone-input { display: block; min-width: 0; }
+.phone-country { display: inline-flex; align-items: center; gap: 6px; margin: 0 8px 0 4px; padding: 4px 6px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
+.phone-country:hover, .phone-country:focus-visible { background: var(--hover); }
+.phone-country:disabled { cursor: default; opacity: .6; }
+.phone-country .fi, .phone-country-menu .fi { width: 1.333em; line-height: 1em; border-radius: 2px; flex: none; }
+.phone-country lucide-icon { color: var(--muted); }
+.phone-country-menu.mat-mdc-menu-panel { max-height: 360px; min-width: 280px; }
+.phone-country-menu .mat-mdc-menu-item-text { display: flex; align-items: center; gap: 10px; }
+.phone-country-name { flex: 1; }
+.phone-country-search { position: sticky; top: 0; z-index: 1; padding: 8px 12px; background: var(--mat-menu-container-color, var(--card)); }
+.phone-country-search input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px;
+  background: transparent; color: var(--ink); font: inherit; }
+.phone-country-empty { padding: 8px 16px; margin: 0; }
 .app-datepicker.mat-datepicker-content { border: 1px solid var(--line); }
 .app-datepicker .mat-calendar-header { padding-top: 10px; }
 .app-datepicker .mat-calendar-body-today:not(.mat-calendar-body-selected) { font-weight: 700; color: var(--brand); }

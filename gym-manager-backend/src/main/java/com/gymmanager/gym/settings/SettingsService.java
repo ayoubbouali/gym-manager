@@ -1,6 +1,7 @@
 package com.gymmanager.gym.settings;
 
 import com.gymmanager.gym.common.ApiException;
+import com.gymmanager.gym.common.Check;
 import com.gymmanager.gym.domain.AppSetting;
 import com.gymmanager.gym.repository.SettingRepository;
 import com.gymmanager.gym.rules.Rules;
@@ -8,9 +9,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Reads settings (DB value or catalogue default) and updates them. Changes apply immediately. */
@@ -26,17 +27,35 @@ public class SettingsService {
 
     @Transactional(readOnly = true)
     public Map<String, String> raw() {
+        Map<String, String> stored = new HashMap<>();
+        repo.findAll().forEach(s -> stored.put(s.getKey(), s.getValue()));
         Map<String, String> map = new LinkedHashMap<>();
-        SettingsCatalog.ALL.forEach(d -> map.put(d.key(), d.defaultValue()));
-        repo.findAll().forEach(s -> {
-            if (map.containsKey(s.getKey())) map.put(s.getKey(), s.getValue());
-        });
+        SettingsCatalog.ALL.forEach(d -> map.put(d.key(), stored.getOrDefault(d.key(), d.defaultValue())));
+        if (!stored.containsKey(SettingsCatalog.COUNTRY)) migrateRegional(stored, map);
         return map;
+    }
+
+    /**
+     * Database or backup from before the country setting: the country comes from the former time zone (zone.tab), else
+     * the former dial code, else stays the default. A zone other than the country's official one is kept through a city.
+     */
+    private static void migrateRegional(Map<String, String> stored, Map<String, String> map) {
+        String zone = stored.get(SettingsCatalog.LEGACY_TIMEZONE);
+        String country = RegionalCatalog.countryOfTimezone(zone);
+        if (country == null) country = RegionalCatalog.countryOfDialCode(stored.get(SettingsCatalog.LEGACY_DIAL_CODE));
+        if (country == null) return;
+        map.put(SettingsCatalog.COUNTRY, country);
+        if (!stored.containsKey(SettingsCatalog.CITY) && !RegionalCatalog.timezone(country, null).getId().equals(zone)) {
+            String city = RegionalCatalog.cityInZone(country, zone);
+            if (city != null) map.put(SettingsCatalog.CITY, city);
+        }
     }
 
     @Transactional(readOnly = true)
     public ClubConfig config() {
         Map<String, String> s = raw();
+        String country = s.get(SettingsCatalog.COUNTRY);
+        String city = s.get(SettingsCatalog.CITY);
         Map<String, ClubConfig.CodeFormat> codes = new HashMap<>();
         for (String e : SettingsCatalog.CODE_ENTITIES) {
             codes.put(e, new ClubConfig.CodeFormat(s.get("codes." + e + ".prefix"), Integer.parseInt(s.get("codes." + e + ".digits"))));
@@ -44,7 +63,8 @@ public class SettingsService {
         Rules.Share share = Rules.parseShare(s.get("salary.share"));
         return new ClubConfig(
                 s.get("club.name"), s.get("club.address"), s.get("club.phone"),
-                s.get("regional.currency"), s.get("regional.currencyCode"), ZoneId.of(s.get("regional.timezone")), s.get("regional.dialCode"),
+                s.get(SettingsCatalog.CURRENCY_SYMBOL), s.get(SettingsCatalog.CURRENCY_CODE), country, city,
+                RegionalCatalog.timezone(country, city), RegionalCatalog.dialCode(country),
                 codes,
                 Boolean.parseBoolean(s.get("subscription.cumulative")), Rules.Rounding.fromSetting(s.get("subscription.rounding")),
                 Integer.parseInt(s.get("alerts.soonDays")), Integer.parseInt(s.get("alerts.followDays")),
@@ -81,19 +101,45 @@ public class SettingsService {
         return s;
     }
 
-    /** Validates all values first, then saves them atomically. An empty secret keeps the stored one. */
+    /**
+     * Validates all values first, then saves them atomically. An empty secret keeps the stored one; a read-only value
+     * is ignored. {@code phoneCountries}: country chosen in each phone field, absent = the club's country.
+     */
     @Transactional
-    public void update(Map<String, String> values) {
-        Map<String, String> merged = raw();
+    public void update(Map<String, String> values, Map<String, String> phoneCountries) {
+        Map<String, String> before = raw();
+        Map<String, String> merged = new LinkedHashMap<>(before);
         Map<String, String> toSave = new LinkedHashMap<>();
         for (var e : values.entrySet()) {
             SettingDef d = SettingsCatalog.find(e.getKey())
                     .orElseThrow(() -> ApiException.badRequest("Paramètre inconnu : " + e.getKey()));
             if (SettingsCatalog.isSecret(d) && (e.getValue() == null || e.getValue().isBlank())) continue;
+            if ("readonly".equals(d.type())) continue;
             String err = SettingsCatalog.validate(d, e.getValue());
             if (err != null) throw ApiException.invalid(d.key(), err);
             merged.put(d.key(), SettingsCatalog.normalize(d, e.getValue()));
             toSave.put(d.key(), merged.get(d.key()));
+        }
+        String country = merged.get(SettingsCatalog.COUNTRY);
+        if (toSave.containsKey(SettingsCatalog.COUNTRY) || toSave.containsKey(SettingsCatalog.CITY)) {
+            String city = merged.get(SettingsCatalog.CITY);
+            if (!city.isEmpty() && !RegionalCatalog.isCity(country, city)) {
+                if (toSave.containsKey(SettingsCatalog.CITY)) {
+                    RegionalCatalog.CountryOption o = RegionalCatalog.country(country);
+                    throw ApiException.invalid(SettingsCatalog.CITY, "« Ville » : ville inconnue pour "
+                            + (o == null ? country : o.label()) + " (" + city + ").");
+                }
+                // the country changed alone: the stored city belongs to the former one
+                toSave.put(SettingsCatalog.CITY, "");
+            }
+        }
+        String code = merged.get(SettingsCatalog.CURRENCY_CODE);
+        if (!code.equals(before.get(SettingsCatalog.CURRENCY_CODE))) {
+            toSave.put(SettingsCatalog.CURRENCY_SYMBOL, RegionalCatalog.currencySymbol(code));
+        }
+        if (toSave.containsKey(SettingsCatalog.CLUB_PHONE)) {
+            String field = SettingsCatalog.CLUB_PHONE;
+            toSave.put(field, Check.phone(values.get(field), before.get(field), phoneCountries.get(field), country, field, false));
         }
         if (Integer.parseInt(merged.get("salary.startDay")) > Integer.parseInt(merged.get("salary.endDay"))) {
             throw ApiException.invalid("salary.endDay", "Le jour de fin de la fenêtre doit être supérieur ou égal au jour de début.");
@@ -109,5 +155,7 @@ public class SettingsService {
     public void reset(String group) {
         if (!SettingsCatalog.GROUPS.containsKey(group)) throw ApiException.badRequest("Groupe de paramètres inconnu.");
         SettingsCatalog.ALL.stream().filter(d -> d.group().equals(group)).forEach(d -> repo.deleteById(d.key()));
+        // otherwise the default country would be migrated from them again
+        if ("regional".equals(group)) List.of(SettingsCatalog.LEGACY_TIMEZONE, SettingsCatalog.LEGACY_DIAL_CODE).forEach(repo::deleteById);
     }
 }

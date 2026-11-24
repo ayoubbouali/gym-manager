@@ -367,7 +367,9 @@ class AcceptanceTest {
         send(accueil, "PUT", "/api/payments/" + pay, Map.of("amount", 50, "method", "ESPECES", "paidOn", "2026-11-18")).andExpect(status().isForbidden());
         send(accueil, "POST", "/api/payments/" + pay + "/cancel", Map.of("reason", "x")).andExpect(status().isForbidden());
         send(accueil, "DELETE", "/api/payments/" + pay, null).andExpect(status().isForbidden());
-        send(accueil, "POST", "/api/payroll/payments", Map.of("staffId", 1, "period", "2026-11", "amount", 10, "method", "ESPECES")).andExpect(status().isForbidden());
+        send(accueil, "POST", "/api/payroll/payments", Map.of("staffId", 1, "period", "2026-11", "method", "ESPECES")).andExpect(status().isForbidden());
+        send(accueil, "PUT", "/api/payroll/bonus", Map.of("staffId", 1, "period", "2026-11", "amount", 10)).andExpect(status().isForbidden());
+        send(accueil, "DELETE", "/api/payroll/staff/1/months/2026-10", null).andExpect(status().isForbidden());
     }
 
     @Test
@@ -710,29 +712,114 @@ class AcceptanceTest {
     }
 
     @Test
-    @DisplayName("Paie : salaire dû, acomptes, reçus de salaire, mois précédents")
+    @DisplayName("Paie : salaire + prime versés en une fois, une seule facture, annulation qui remet le mois à zéro")
     void payroll() throws Exception {
         get(admin, "/api/payroll?month=2026-10").andExpect(jsonPath("$.rows[?(@.staff.code=='E006')].status").value("PAYE"));
         String e006 = "$.rows[?(@.staff.code=='E006')]";
         get(admin, "/api/payroll?month=2026-11").andExpect(jsonPath(e006 + ".due").value(4500.0)).andExpect(jsonPath(e006 + ".status").value("IMPAYE"))
+                .andExpect(jsonPath(e006 + ".salary").value(4500.0)).andExpect(jsonPath(e006 + ".bonus").value(0.0))
+                .andExpect(jsonPath(e006 + ".paidOn").value(org.hamcrest.Matchers.contains(org.hamcrest.Matchers.nullValue())))
                 .andExpect(jsonPath("$.rows[?(@.staff.code=='E002')].due").value(83.33))  // Oumaima: 1/3 × 250 (renewal on 10/11)
                 .andExpect(jsonPath("$.currentMonth").value(true));
         long bouzid = id("/api/staff", "$.rows[?(@.code=='E006')].id");
-        var r = send(admin, "POST", "/api/payroll/payments", Map.of("staffId", bouzid, "period", "2026-11", "amount", 2000, "method", "ESPECES", "note", "Acompte"))
+
+        // bonus: added, changed, refused when not positive, removed
+        send(admin, "PUT", "/api/payroll/bonus", Map.of("staffId", bouzid, "period", "2026-11", "amount", 0))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("amount"));
+        send(admin, "PUT", "/api/payroll/bonus", Map.of("staffId", bouzid, "period", "2026-11", "amount", -5)).andExpect(status().isBadRequest());
+        send(admin, "PUT", "/api/payroll/bonus", Map.of("staffId", bouzid, "period", "2026-11", "amount", 150, "note", "Ancienneté"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.bonus").value(150.0)).andExpect(jsonPath("$.due").value(4650.0));
+        send(admin, "PUT", "/api/payroll/bonus", Map.of("staffId", bouzid, "period", "2026-11", "amount", 200)).andExpect(status().isOk());
+        get(admin, "/api/payroll?month=2026-11").andExpect(jsonPath(e006 + ".bonus").value(200.0)).andExpect(jsonPath(e006 + ".due").value(4700.0))
+                .andExpect(jsonPath(e006 + ".salary").value(4500.0));
+        var noBonus = new java.util.HashMap<String, Object>(Map.of("staffId", bouzid, "period", "2026-11"));
+        noBonus.put("amount", null);
+        send(admin, "PUT", "/api/payroll/bonus", noBonus).andExpect(status().isOk()).andExpect(jsonPath("$.bonus").value(0.0));
+        send(admin, "PUT", "/api/payroll/bonus", Map.of("staffId", bouzid, "period", "2026-11", "amount", 200)).andExpect(status().isOk());
+
+        // one payment = salary + bonus, amount computed by the server; a second one is refused
+        var r = send(admin, "POST", "/api/payroll/payments", Map.of("staffId", bouzid, "period", "2026-11", "amount", 1, "method", "ESPECES", "paidOn", "2026-11-17"))
                 .andExpect(status().isOk());
         assertThat((String) read(r, "$.slipNumber")).isEqualTo("SAL-2026-0006");
+        assertThat(((Number) read(r, "$.amount")).doubleValue()).isEqualTo(4700.0);
         long slip = ((Number) read(r, "$.id")).longValue();
-        get(admin, "/api/payroll?month=2026-11").andExpect(jsonPath(e006 + ".status").value("PARTIEL")).andExpect(jsonPath(e006 + ".balance").value(2500.0));
-        send(admin, "POST", "/api/payroll/payments", Map.of("staffId", bouzid, "period", "2026-11", "amount", 3000, "method", "ESPECES"))
-                .andExpect(status().isBadRequest());
-        send(admin, "POST", "/api/payroll/payments", Map.of("staffId", bouzid, "period", "2026-12", "amount", 10, "method", "ESPECES"))
-                .andExpect(status().isBadRequest());
+        get(admin, "/api/payroll?month=2026-11").andExpect(jsonPath(e006 + ".status").value("PAYE")).andExpect(jsonPath(e006 + ".balance").value(0.0))
+                .andExpect(jsonPath(e006 + ".paidOn").value("2026-11-17"));
+        send(admin, "POST", "/api/payroll/payments", Map.of("staffId", bouzid, "period", "2026-11", "method", "ESPECES")).andExpect(status().isBadRequest());
+        send(admin, "POST", "/api/payroll/payments", Map.of("staffId", bouzid, "period", "2026-12", "method", "ESPECES")).andExpect(status().isBadRequest());
+        // the bonus of a paid month is frozen
+        send(admin, "PUT", "/api/payroll/bonus", Map.of("staffId", bouzid, "period", "2026-11", "amount", 300)).andExpect(status().isBadRequest());
+        send(admin, "PUT", "/api/payroll/bonus", noBonus).andExpect(status().isBadRequest());
+
         var pdf = get(admin, "/api/payroll/payments/" + slip + "/receipt.pdf").andExpect(status().isOk()).andReturn().getResponse();
         assertThat(new String(pdf.getContentAsByteArray(), 0, 5)).isEqualTo("%PDF-");
         assertThat((List<Object>) read(get(admin, "/api/payroll/staff/" + bouzid + "/history"), "$[*].period")).containsExactly("2026-11", "2026-10");
-        send(admin, "POST", "/api/payroll/payments/" + slip + "/cancel", Map.of("reason", "Erreur")).andExpect(status().isOk());
-        get(admin, "/api/payroll?month=2026-11").andExpect(jsonPath(e006 + ".status").value("IMPAYE"));
+
+        // cancel = the slip and the bonus are deleted, the month is unpaid again; the slip number is not reused
+        send(admin, "DELETE", "/api/payroll/staff/" + bouzid + "/months/2026-11", null).andExpect(status().isNoContent());
+        get(admin, "/api/payroll?month=2026-11").andExpect(jsonPath(e006 + ".status").value("IMPAYE")).andExpect(jsonPath(e006 + ".bonus").value(0.0))
+                .andExpect(jsonPath(e006 + ".due").value(4500.0)).andExpect(jsonPath(e006 + ".payments.length()").value(0));
+        get(admin, "/api/payroll/payments/" + slip + "/receipt.pdf").andExpect(status().isNotFound());
+        assertThat((List<Object>) read(get(admin, "/api/payroll/staff/" + bouzid + "/history"), "$[*].period")).containsExactly("2026-10");
+        assertThat(body(get(admin, "/api/payroll/stats?from=2026-11&to=2026-11"))).doesNotContain("SAL-2026-0006");
+        send(admin, "DELETE", "/api/payroll/staff/" + bouzid + "/months/2026-11", null).andExpect(status().isNotFound());
+        send(admin, "DELETE", "/api/payroll/staff/999999/months/2026-11", null).andExpect(status().isNotFound());
+        assertThat((String) read(send(admin, "POST", "/api/payroll/payments", Map.of("staffId", bouzid, "period", "2026-11", "method", "ESPECES"))
+                .andExpect(status().isOk()), "$.slipNumber")).isEqualTo("SAL-2026-0007");
+        // a month with only cancelled (legacy) payments is unpaid: cancelling it is refused and keeps its pending bonus
+        jdbc.update("UPDATE salary_payments SET cancelled = TRUE WHERE staff_id = ? AND period = '2026-10'", bouzid);
+        send(admin, "PUT", "/api/payroll/bonus", Map.of("staffId", bouzid, "period", "2026-10", "amount", 50)).andExpect(status().isOk());
+        send(admin, "DELETE", "/api/payroll/staff/" + bouzid + "/months/2026-10", null).andExpect(status().isNotFound());
+        get(admin, "/api/payroll?month=2026-10").andExpect(jsonPath(e006 + ".bonus").value(50.0));
         send(admin, "DELETE", "/api/staff/" + bouzid, null).andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("Paie : un mois hérité avec acomptes et versement annulé — factures actives listées, annulation qui supprime tout")
+    void payrollLegacyAdvances() throws Exception {
+        String e006 = "$.rows[?(@.staff.code=='E006')]";
+        long bouzid = id("/api/staff", "$.rows[?(@.code=='E006')].id");
+        // legacy data from before one-payment-per-month: two advances and a cancelled payment
+        String insert = "INSERT INTO salary_payments (slip_number, staff_id, period, amount, method, paid_on, created_at, created_by, cancelled) "
+                + "VALUES (?, ?, '2026-11', ?, 'ESPECES', ?, CURRENT_TIMESTAMP, 'admin', ?)";
+        jdbc.update(insert, "OLD-1", bouzid, 1000, java.sql.Date.valueOf("2026-11-03"), false);
+        jdbc.update(insert, "OLD-2", bouzid, 500, java.sql.Date.valueOf("2026-11-05"), true);
+        jdbc.update(insert, "OLD-3", bouzid, 2000, java.sql.Date.valueOf("2026-11-10"), false);
+
+        get(admin, "/api/payroll?month=2026-11").andExpect(jsonPath(e006 + ".paid").value(3000.0))
+                .andExpect(jsonPath(e006 + ".paidOn").value("2026-11-10")).andExpect(jsonPath(e006 + ".payments.length()").value(3));
+        // still a paid month: no new payment, no bonus change until it is cancelled
+        send(admin, "POST", "/api/payroll/payments", Map.of("staffId", bouzid, "period", "2026-11", "method", "ESPECES")).andExpect(status().isBadRequest());
+        send(admin, "PUT", "/api/payroll/bonus", Map.of("staffId", bouzid, "period", "2026-11", "amount", 50)).andExpect(status().isBadRequest());
+
+        send(admin, "DELETE", "/api/payroll/staff/" + bouzid + "/months/2026-11", null).andExpect(status().isNoContent());
+        get(admin, "/api/payroll?month=2026-11").andExpect(jsonPath(e006 + ".status").value("IMPAYE"))
+                .andExpect(jsonPath(e006 + ".payments.length()").value(0));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM salary_payments WHERE slip_number LIKE 'OLD-%'", Integer.class)).isZero();
+    }
+
+    @Test
+    @DisplayName("Paie : recettes du sport encaissées dans le mois sur les sports coachés, « Rien à verser »")
+    void payrollRevenue() throws Exception {
+        String month = body(get(admin, "/api/payroll?month=2026-11"));
+        // Oumaima coaches aerobics only: her revenue is the aerobics revenue of the month
+        var stats = get(admin, "/api/stats?from=2026-11-01&to=2026-11-30");
+        double aerobics = ((Number) ((List<Object>) read(stats, "$.bySport[?(@.name=='Aérobic')].amount")).getFirst()).doubleValue();
+        assertThat(aerobics).isGreaterThanOrEqualTo(250.0);
+        assertThat(((Number) ((List<Object>) JsonPath.read(month, "$.rows[?(@.staff.code=='E002')].revenue")).getFirst()).doubleValue()).isEqualTo(aerobics);
+        // no coached sport: no revenue
+        assertThat((List<Object>) JsonPath.read(month, "$.rows[?(@.staff.code=='E006')].revenue")).containsExactly((Object) null);
+        // a payment counts once for a coach of several of the member's sports
+        var sale = new com.gymmanager.gym.rules.Rules.Sale(java.time.LocalDate.of(2026, 11, 5), new java.math.BigDecimal("100"), java.util.Set.of(1L, 2L));
+        assertThat(com.gymmanager.gym.rules.Rules.revenueForSports(List.of(sale), java.util.Set.of(1L, 2L, 3L),
+                java.time.LocalDate.of(2026, 11, 1), java.time.LocalDate.of(2026, 11, 30))).isEqualByComparingTo("100");
+
+        // nothing due (commission coach without sport): the payment is refused
+        long coachFn = id("/api/functions", "$[?(@.label=='Coach')].id");
+        long nadia = ((Number) read(send(admin, "POST", "/api/staff", Map.of("lastName", "Coach", "firstName", "Nadia", "functionId", coachFn,
+                "payMode", "COMMISSION", "sportIds", List.of())).andExpect(status().isOk()), "$.id")).longValue();
+        get(admin, "/api/payroll?month=2026-11").andExpect(jsonPath("$.rows[?(@.staff.id==" + nadia + ")].due").value(0.0));
+        send(admin, "POST", "/api/payroll/payments", Map.of("staffId", nadia, "period", "2026-11", "method", "ESPECES")).andExpect(status().isBadRequest());
     }
 
     @Test

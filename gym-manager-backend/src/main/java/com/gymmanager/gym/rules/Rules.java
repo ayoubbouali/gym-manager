@@ -17,6 +17,7 @@ import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -483,6 +484,11 @@ public final class Rules {
     /** CA per sport: a multi-sport member counts fully in each of their sports. */
     public static BigDecimal revenueForSport(Collection<Sale> sales, long sportId, LocalDate from, LocalDate to) {
         return revenue(sales, from, to, s -> s.sportIds().contains(sportId));
+    }
+
+    /** CA of a set of sports (a coach's): a member practising several of them counts once. */
+    public static BigDecimal revenueForSports(Collection<Sale> sales, Set<Long> sportIds, LocalDate from, LocalDate to) {
+        return revenue(sales, from, to, s -> !Collections.disjoint(s.sportIds(), sportIds));
     }
 
     // ------------------------------------------------------------------ misc

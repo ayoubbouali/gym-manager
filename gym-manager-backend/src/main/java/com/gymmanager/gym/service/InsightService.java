@@ -37,7 +37,7 @@ public class InsightService {
     }
 
     /** Cashed amounts (non-cancelled payments) as revenue entries. */
-    private static List<Rules.Sale> sales(ClubState st) {
+    public static List<Rules.Sale> sales(ClubState st) {
         java.util.Map<Long, MemberView> byId = new java.util.HashMap<>();
         st.members().forEach(m -> byId.put(m.id(), m));
         return st.payments().stream().filter(p -> !p.cancelled())

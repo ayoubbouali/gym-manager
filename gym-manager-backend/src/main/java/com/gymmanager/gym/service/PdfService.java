@@ -103,12 +103,13 @@ public class PdfService {
 
     // ---------------------------------------------------------------- salary receipts
 
-    public record SalaryReceiptData(SalaryPaymentView payment, StaffView staff, BigDecimal due, BigDecimal paidUpToThis, SalaryDetail detail) {
+    /** {@code due} = {@code salary} + {@code bonus}: the month is paid in one go. */
+    public record SalaryReceiptData(SalaryPaymentView payment, StaffView staff, BigDecimal salary, BigDecimal bonus, String bonusNote,
+                                    BigDecimal due, SalaryDetail detail) {
     }
 
     public byte[] salaryReceipt(SalaryReceiptData d, ClubConfig cfg) {
         SalaryPaymentView p = d.payment();
-        BigDecimal remaining = d.due().subtract(d.paidUpToThis()).max(BigDecimal.ZERO);
         return render(cfg, "REÇU DE SALAIRE", p.slipNumber(), p.paidOn(), p.cancelled(), p.cancelReason(), doc -> {
             StaffView s = d.staff();
             doc.add(parties("Bénéficiaire", s.code() + " — " + s.name(),
@@ -138,16 +139,17 @@ public class PdfService {
                     t.addCell(c);
                 }
                 doc.add(t);
-                doc.add(new Paragraph(money(det.base(), cfg.currency()) + " × " + det.shareRaw() + " = " + money(d.due(), cfg.currency()), BOLD));
+                doc.add(new Paragraph(money(det.base(), cfg.currency()) + " × " + det.shareRaw() + " = " + money(d.salary(), cfg.currency()), BOLD));
             } else {
                 doc.add(new Paragraph("Salaire fixe mensuel", LABEL));
             }
 
             PdfPTable sum = summary();
-            sumRow(sum, "Salaire du mois", money(d.due(), cfg.currency()), NORMAL);
-            sumRow(sum, "Total versé (ce reçu inclus)", money(d.paidUpToThis(), cfg.currency()), NORMAL);
-            sumRow(sum, "Reste à verser", money(remaining, cfg.currency()), remaining.signum() > 0 ? BOLD : NORMAL);
+            sumRow(sum, "Salaire du mois", money(d.salary(), cfg.currency()), NORMAL);
+            sumRow(sum, "Prime", money(d.bonus(), cfg.currency()), NORMAL);
+            sumRow(sum, "Total", money(d.due(), cfg.currency()), BOLD);
             doc.add(sum);
+            if (d.bonusNote() != null && !d.bonusNote().isBlank()) doc.add(new Paragraph("Prime : " + d.bonusNote(), LABEL));
 
             Paragraph paid = new Paragraph("Montant versé : " + money(p.amount(), cfg.currency()) + " · " + p.methodLabel(), BIG);
             paid.setSpacingBefore(10);

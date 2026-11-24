@@ -20,6 +20,7 @@ export const routes: Routes = [
       { path: 'sports', loadComponent: () => import('./pages/sports/sports-page').then((m) => m.SportsPage), data: { title: 'Sports' } },
       { path: 'activites', loadComponent: () => import('./pages/activities/activities-page').then((m) => m.ActivitiesPage), data: { title: 'Activités' } },
       { path: 'personnel', canActivate: [adminGuard], loadComponent: () => import('./pages/staff/staff-page').then((m) => m.StaffPage), data: { title: 'Personnel & coachs' } },
+      { path: 'personnel/fiche/:code', canActivate: [adminGuard], loadComponent: () => import('./pages/staff/staff-card-page').then((m) => m.StaffCardPage), data: { title: 'Fiche personnel' } },
       { path: 'paiements', loadComponent: () => import('./pages/payments/payments-page').then((m) => m.PaymentsPage), data: { title: 'Paiements' } },
       { path: 'paie', canActivate: [adminGuard], loadComponent: () => import('./pages/payroll/payroll-page').then((m) => m.PayrollPage), data: { title: 'Paie du personnel' } },
       { path: 'alertes', loadComponent: () => import('./pages/alerts/alerts-page').then((m) => m.AlertsPage), data: { title: 'Alertes paiements' } },

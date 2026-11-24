@@ -504,6 +504,11 @@ input[type=password]::-ms-reveal, input[type=password]::-ms-clear { display: non
 
 .table td.slips { min-width: 0; }
 .receipt-chip { white-space: nowrap; }
+/* payroll: Verser and Annuler share one size, so the column does not jump when a month is paid or cancelled */
+.mdc-button.pay-action { min-width: 84px; }
+.bonus-cell { display: inline-flex; align-items: center; gap: 4px; }
+.pay-recap { grid-template-columns: auto 1fr; gap: 4px 16px; margin: 0 0 14px; }
+.pay-recap dd { text-align: right; }
 
 /* ---------- data (backup / restore) ---------- */
 .data-section { max-width: 1100px; margin-bottom: 26px; }

@@ -1,4 +1,7 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { CdkConnectedOverlay } from '@angular/cdk/overlay';
+import { CdkScrollable } from '@angular/cdk/scrolling';
+import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -17,12 +20,14 @@ import { NotifyService } from '../../core/notify.service';
 import { ActiveBadge, SportChip } from '../../shared/badges';
 import { ConfirmService } from '../../shared/confirm.service';
 import { Pager, SortHeader, TableState } from '../../shared/table';
+import { PREVIEW_DELAY_MS, PREVIEW_POSITIONS } from '../members/members-page';
 import { SalaryDetailDialog, StaffFormDialog } from './staff-dialogs';
+import { StaffPreview } from './staff-preview';
 
 @Component({
   selector: 'app-staff',
-  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatSelectModule, MatSlideToggleModule, MatTooltipModule, LucideAngularModule,
-    SortHeader, Pager, SportChip, ActiveBadge, MoneyPipe],
+  imports: [FormsModule, RouterLink, CdkConnectedOverlay, CdkScrollable, MatButtonModule, MatFormFieldModule, MatSelectModule, MatSlideToggleModule, MatTooltipModule, LucideAngularModule,
+    SortHeader, Pager, SportChip, ActiveBadge, MoneyPipe, StaffPreview],
   template: `
     <div class="toolbar">
       <label class="search grow"><lucide-icon name="search" [size]="18" />
@@ -37,7 +42,7 @@ import { SalaryDetailDialog, StaffFormDialog } from './staff-dialogs';
       <button mat-stroked-button (click)="csv()"><lucide-icon name="download" [size]="16" /> CSV</button>
       <button mat-flat-button (click)="edit()"><lucide-icon name="plus" [size]="16" /> Ajouter</button>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap" cdkScrollable>
       <table class="table">
         <thead><tr>
           <th [attr.aria-sort]="t.ariaSort('code')"><app-sort [table]="t" key="code">ID</app-sort></th>
@@ -53,7 +58,9 @@ import { SalaryDetailDialog, StaffFormDialog } from './staff-dialogs';
         <tbody>
           @for (s of t.page(); track s.id) {
             <tr [class.inactive]="!s.active">
-              <td class="code">{{ s.code }}</td><td class="strong">{{ s.lastName }}</td><td>{{ s.firstName || '—' }}</td><td>{{ s.phone || '—' }}</td>
+              <td><a class="code-link" [routerLink]="['/personnel/fiche', s.code]" [attr.aria-describedby]="preview()?.staff?.id === s.id ? previewId : null"
+                     (mouseenter)="openPreview(s, $event)" (focus)="openPreview(s, $event)" (mouseleave)="closePreview()" (blur)="closePreview()" (keydown.escape)="closePreview()">{{ s.code }}</a></td>
+              <td class="strong">{{ s.lastName }}</td><td>{{ s.firstName || '—' }}</td><td>{{ s.phone || '—' }}</td>
               <td>{{ s.function?.label ?? '—' }}</td>
               <td>@for (x of s.sports; track x.id) {<app-sport-chip [name]="x.name" [color]="x.color" [inactive]="!x.active" />} @empty {<span class="muted">—</span>}</td>
               <td><span class="badge" [class.info]="s.payMode === 'FIXED'" [class.warn]="s.payMode === 'COMMISSION'">{{ s.payMode === 'FIXED' ? 'Fixe' : 'Commission' }}</span></td>
@@ -80,6 +87,13 @@ import { SalaryDetailDialog, StaffFormDialog } from './staff-dialogs';
       </table>
     </div>
     <app-pager [table]="t" />
+    @if (preview(); as p) {
+      <ng-template cdkConnectedOverlay [cdkConnectedOverlayOpen]="true" [cdkConnectedOverlayOrigin]="p.origin"
+                   [cdkConnectedOverlayPositions]="previewPositions" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="8"
+                   cdkConnectedOverlayPanelClass="member-preview-pane" (detach)="closePreview()">
+        <app-staff-preview [id]="previewId" [staff]="p.staff" />
+      </ng-template>
+    }
   `,
 })
 export class StaffPage {
@@ -105,8 +119,32 @@ export class StaffPage {
     pageSize: computed(() => this.config.pageSize()),
   });
 
+  readonly previewId = 'staff-preview';
+  readonly previewPositions = PREVIEW_POSITIONS;
+  preview = signal<{ staff: StaffView; origin: HTMLElement } | null>(null);
+  private previewTimer: ReturnType<typeof setTimeout> | undefined;
+
   constructor() {
+    // A row that disappears under the pointer (search, paging, reload) never fires mouseleave.
+    effect(() => {
+      this.t.page();
+      untracked(() => this.closePreview());
+    });
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.previewTimer));
     this.load();
+  }
+
+  openPreview(s: StaffView, event: Event): void {
+    const origin = event.currentTarget as HTMLElement;
+    clearTimeout(this.previewTimer);
+    // On focus, open at once so screen readers announce the description.
+    if (event.type === 'focus') this.preview.set({ staff: s, origin });
+    else this.previewTimer = setTimeout(() => this.preview.set({ staff: s, origin }), PREVIEW_DELAY_MS);
+  }
+
+  closePreview(): void {
+    clearTimeout(this.previewTimer);
+    this.preview.set(null);
   }
 
   async load(): Promise<void> {

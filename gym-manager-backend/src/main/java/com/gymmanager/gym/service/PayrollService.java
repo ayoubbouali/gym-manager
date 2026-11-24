@@ -30,7 +30,7 @@ import java.util.*;
 
 /**
  * Staff payroll: salary due per month (RG-SALAIRE) plus an optional bonus, paid in one go with a numbered pay slip.
- * Cancelling a month deletes its payments and bonus; slip numbers are never reused.
+ * Cancelling a month deletes its payments but keeps its bonus; slip numbers are never reused.
  */
 @Service
 @RequiredArgsConstructor
@@ -263,14 +263,13 @@ public class PayrollService {
         return row(ym, staffId);
     }
 
-    /** Cancels a month: its payments (cancelled legacy ones included) and its bonus are deleted for good. */
+    /** Cancels a month: its payments (cancelled legacy ones included) are deleted for good; its bonus stays pending. */
     public void reset(Long staffId, String period) {
         YearMonth ym = parsePeriod(period);
         if (!staffRepo.existsById(staffId)) throw ApiException.notFound("Membre du personnel introuvable.");
         List<SalaryPayment> pays = salaryPayments.findByStaffIdAndPeriod(staffId, ym.toString());
         if (pays.stream().allMatch(SalaryPayment::isCancelled)) throw ApiException.notFound("Aucun versement à annuler pour ce mois.");
         salaryPayments.deleteAll(pays);
-        salaryBonuses.deleteByStaffIdAndPeriod(staffId, ym.toString());
     }
 
     @Transactional(readOnly = true)

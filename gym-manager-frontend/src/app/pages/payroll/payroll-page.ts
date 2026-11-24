@@ -146,35 +146,6 @@ export class SalaryPayDialog {
   }
 }
 
-/** All salary payments of one staff member. */
-@Component({
-  selector: 'app-salary-history',
-  imports: [MatDialogModule, MatButtonModule, MatTooltipModule, LucideAngularModule, MoneyPipe, FrDatePipe],
-  template: `
-    <h2 mat-dialog-title>Historique des factures — {{ d.name }}</h2>
-    <mat-dialog-content>
-      <table class="table compact">
-        <thead><tr><th>Mois</th><th>Facture</th><th>Date</th><th>Mode</th><th class="num">Montant</th><th></th></tr></thead>
-        <tbody>
-          @for (p of d.rows; track p.id) {
-            <tr [class.cancelled]="p.cancelled">
-              <td>{{ month(p.period) }}</td><td class="code">{{ p.slipNumber }}</td><td>{{ p.paidOn | frDate }}</td><td>{{ p.methodLabel }}</td>
-              <td class="num strong">{{ p.amount | money }} @if (p.cancelled) {<span class="badge ko">annulé</span>}</td>
-              <td class="actions"><button class="icon-btn" (click)="open(p)" matTooltip="Facture (PDF)" [attr.aria-label]="'Facture ' + p.slipNumber"><lucide-icon name="file-text" [size]="16" /></button></td>
-            </tr>
-          } @empty {<tr><td colspan="6" class="empty">Aucun versement enregistré.</td></tr>}
-        </tbody>
-      </table>
-    </mat-dialog-content>
-    <mat-dialog-actions align="end"><button mat-flat-button mat-dialog-close>Fermer</button></mat-dialog-actions>
-  `,
-})
-export class SalaryHistoryDialog {
-  d = inject<{ name: string; rows: SalaryPaymentView[] }>(MAT_DIALOG_DATA);
-  month = (p: string) => monthName(p);
-  open = (p: SalaryPaymentView) => openPdf(salaryReceiptUrl(p));
-}
-
 @Component({
   selector: 'app-payroll',
   imports: [FormsModule, RouterLink, MatButtonModule, MatFormFieldModule, MatInputModule, MatTooltipModule, LucideAngularModule, CdkConnectedOverlay,
@@ -203,7 +174,7 @@ export class SalaryHistoryDialog {
       <div class="table-wrap">
         <table class="table compact">
           <thead><tr>
-            <th>ID</th><th>Personnel</th><th class="num">Recettes du sport</th><th class="num">Salaire du personnel</th><th class="num">Prime</th>
+            <th>ID</th><th>Personnel</th><th class="num">Salaire du personnel</th><th class="num">Prime</th>
             <th>Statut</th><th>Date de paiement</th><th>Facture</th><th><span class="sr-only">Actions</span></th>
           </tr></thead>
           <tbody>
@@ -212,7 +183,6 @@ export class SalaryHistoryDialog {
                 <td><a class="code-link" [routerLink]="['/personnel/fiche', r.staff.code]" [attr.aria-describedby]="preview()?.row?.staff?.id === r.staff.id ? previewId : null"
                        (mouseenter)="openPreview(r, $event)" (focus)="openPreview(r, $event)" (mouseleave)="closePreview()" (blur)="closePreview()" (keydown.escape)="closePreview()">{{ r.staff.code }}</a></td>
                 <td class="strong">{{ r.staff.name }} @if (!r.staff.active) {<app-active-badge [active]="false" />}<div class="muted small">{{ r.staff.function?.label }}</div></td>
-                <td class="num">@if (r.revenue !== null) {<span>{{ r.revenue | money }}</span>} @else {<span class="muted">—</span>}</td>
                 <td class="num">
                   @if (r.staff.payMode === 'COMMISSION') {
                     <button class="link-btn strong" (click)="detail(r)" matTooltip="Détail du calcul" [attr.aria-label]="'Détail du salaire de ' + r.staff.name">{{ r.salary | money }} <lucide-icon name="info" [size]="14" /></button>
@@ -237,7 +207,6 @@ export class SalaryHistoryDialog {
                   } @empty {<span class="muted">—</span>}
                 </td>
                 <td class="actions">
-                  <button class="icon-btn" (click)="history(r)" matTooltip="Historique" [attr.aria-label]="'Historique de ' + r.staff.name"><lucide-icon name="history" [size]="16" /></button>
                   @if (paid(r)) {
                     <button mat-stroked-button class="sm pay-action btn-outline-danger" (click)="cancel(r)" [attr.aria-label]="'Annuler le versement de ' + r.staff.name">Annuler</button>
                   } @else {
@@ -245,7 +214,7 @@ export class SalaryHistoryDialog {
                   }
                 </td>
               </tr>
-            } @empty {<tr><td colspan="9" class="empty">Aucun membre du personnel actif.</td></tr>}
+            } @empty {<tr><td colspan="8" class="empty">Aucun membre du personnel actif.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -348,7 +317,7 @@ export class PayrollPage {
     const numbers = activeSlips(r).map((p) => p.slipNumber).join(', ');
     const ok = await this.confirm.confirm({
       title: `Annuler le versement de ${monthName(this.month())} — ${r.staff.name} ?`,
-      message: `La facture ${numbers}${r.bonus > 0 ? ' et la prime du mois' : ''} seront supprimées définitivement : le mois redevient impayé. `
+      message: `La facture ${numbers} sera supprimée définitivement : le mois redevient impayé${r.bonus > 0 ? ', la prime est conservée' : ''}. `
         + 'Le numéro de facture ne sera pas réutilisé.',
       confirmLabel: 'Annuler le versement', danger: true,
     });
@@ -362,11 +331,6 @@ export class PayrollPage {
     }
   }
 
-  async history(r: PayrollRow): Promise<void> {
-    const rows = await this.api.salaryHistory(r.staff.id);
-    this.dialog.open(SalaryHistoryDialog, { data: { name: r.staff.name, rows }, width: '720px', maxWidth: '96vw' });
-  }
-
   open(p: SalaryPaymentView): void {
     openPdf(salaryReceiptUrl(p));
   }
@@ -375,7 +339,6 @@ export class PayrollPage {
     exportCsv(`paie-${this.month()}`, [
       { header: 'ID', value: (r) => r.staff.code }, { header: 'Personnel', value: (r) => r.staff.name },
       { header: 'Fonction', value: (r) => r.staff.function?.label ?? '' },
-      { header: 'Recettes du sport', value: (r) => (r.revenue === null ? '' : csvNumber(r.revenue)) },
       { header: 'Salaire du personnel', value: (r) => csvNumber(r.salary) }, { header: 'Prime', value: (r) => csvNumber(r.bonus) },
       { header: 'Total', value: (r) => csvNumber(r.due) }, { header: 'Statut', value: (r) => (r.due === 0 && !isPaid(r) ? 'Rien à verser' : PAYMENT_STATUS_LABELS[r.status]) },
       { header: 'Date de paiement', value: (r) => (r.paidOn ? formatDate(r.paidOn) : '') },

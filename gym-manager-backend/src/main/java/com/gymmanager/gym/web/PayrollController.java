@@ -44,7 +44,7 @@ public class PayrollController {
         return payroll.setBonus(r, user.getName());
     }
 
-    /** Cancels the month of a staff member: its pay slips and bonus are deleted. */
+    /** Cancels the month of a staff member: its pay slips are deleted, its bonus is kept. */
     @DeleteMapping("/staff/{staffId}/months/{period}")
     public ResponseEntity<Void> reset(@PathVariable Long staffId, @PathVariable String period) {
         payroll.reset(staffId, period);

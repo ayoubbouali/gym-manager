@@ -712,7 +712,7 @@ class AcceptanceTest {
     }
 
     @Test
-    @DisplayName("Paie : salaire + prime versés en une fois, une seule facture, annulation qui remet le mois à zéro")
+    @DisplayName("Paie : salaire + prime versés en une fois, une seule facture, annulation qui garde la prime")
     void payroll() throws Exception {
         get(admin, "/api/payroll?month=2026-10").andExpect(jsonPath("$.rows[?(@.staff.code=='E006')].status").value("PAYE"));
         String e006 = "$.rows[?(@.staff.code=='E006')]";
@@ -755,10 +755,10 @@ class AcceptanceTest {
         assertThat(new String(pdf.getContentAsByteArray(), 0, 5)).isEqualTo("%PDF-");
         assertThat((List<Object>) read(get(admin, "/api/payroll/staff/" + bouzid + "/history"), "$[*].period")).containsExactly("2026-11", "2026-10");
 
-        // cancel = the slip and the bonus are deleted, the month is unpaid again; the slip number is not reused
+        // cancel = the slip is deleted, the bonus is kept, the month is unpaid again; the slip number is not reused
         send(admin, "DELETE", "/api/payroll/staff/" + bouzid + "/months/2026-11", null).andExpect(status().isNoContent());
-        get(admin, "/api/payroll?month=2026-11").andExpect(jsonPath(e006 + ".status").value("IMPAYE")).andExpect(jsonPath(e006 + ".bonus").value(0.0))
-                .andExpect(jsonPath(e006 + ".due").value(4500.0)).andExpect(jsonPath(e006 + ".payments.length()").value(0));
+        get(admin, "/api/payroll?month=2026-11").andExpect(jsonPath(e006 + ".status").value("IMPAYE")).andExpect(jsonPath(e006 + ".bonus").value(200.0))
+                .andExpect(jsonPath(e006 + ".due").value(4700.0)).andExpect(jsonPath(e006 + ".payments.length()").value(0));
         get(admin, "/api/payroll/payments/" + slip + "/receipt.pdf").andExpect(status().isNotFound());
         assertThat((List<Object>) read(get(admin, "/api/payroll/staff/" + bouzid + "/history"), "$[*].period")).containsExactly("2026-10");
         assertThat(body(get(admin, "/api/payroll/stats?from=2026-11&to=2026-11"))).doesNotContain("SAL-2026-0006");

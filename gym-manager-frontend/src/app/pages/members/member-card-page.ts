@@ -12,6 +12,7 @@ import { ApiService } from '../../core/api.service';
 import { FrDatePipe, FrDateTimePipe, MoneyPipe, formatDate, norm } from '../../core/format';
 import { ActivityView, MemberCard, MemberView } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
+import { ConfigService } from '../../core/config.service';
 import { ConfirmService } from '../../shared/confirm.service';
 import { DaysLeft, PaidBadge, SportChip, StateBadge } from '../../shared/badges';
 import { openMemberForm } from './member-form-dialog';
@@ -88,9 +89,27 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
             <h4>État</h4>
             <dl>
               <dt>Statut paiement</dt><dd><app-paid-badge [value]="c.member.paymentStatus" /></dd>
-              <dt>Déjà payé</dt><dd>{{ c.member.paid | money }}</dd>
               <dt>Reste à payer</dt><dd [class.red]="c.member.balance > 0">{{ c.member.balance | money }}</dd>
-              <dt>Reste de jours</dt><dd><app-days [days]="c.member.remainingDays" /></dd>
+              <dt>Reste de jours</dt>
+              <dd>
+                <app-days [days]="c.member.remainingDays" />
+                @if (daysDetail(); as d) {
+                  <ul class="days-detail muted small">
+                    @for (p of d.periods; track p.id) {
+                      <li>« {{ p.packName }} » du {{ p.startDate | frDate }} au {{ p.endDate | frDate }} :
+                        <b>{{ p.countedDays }} j</b>@if (p.startDate < d.today) { (à partir d'aujourd'hui)}
+                      </li>
+                    }
+                    @if (d.days > 0) {
+                      <li>Total : <b>{{ d.days }} j</b>, jusqu'au {{ d.end | frDate }}</li>
+                    } @else if (d.anyPaid) {
+                      <li>Plus aucun jour payé : couverture terminée le {{ d.end | frDate }}{{ d.days < 0 ? ', expiré depuis ' + -d.days + ' j' : '' }}</li>
+                    } @else {
+                      <li>Aucune période payée : {{ d.days < 0 ? 'expiré depuis le début, le ' : 'débute le ' }}{{ d.end | frDate }}</li>
+                    }
+                  </ul>
+                }
+              </dd>
               <dt>État</dt><dd><app-state-badge [member]="c.member" /></dd>
               <dt>Assurance</dt><dd><app-paid-badge [value]="c.member.insurance" /></dd>
             </dl>
@@ -207,6 +226,7 @@ export class MemberCardPage {
   private dialog = inject(MatDialog);
   private confirm = inject(ConfirmService);
   private notify = inject(NotifyService);
+  private config = inject(ConfigService);
   admin = inject(AuthService).isAdmin;
 
   members = signal<MemberView[]>([]);
@@ -226,6 +246,19 @@ export class MemberCardPage {
   availableActivities = computed(() => {
     const taken = this.card()?.member.activityIds ?? [];
     return this.allActivities().filter((a) => a.active && !taken.includes(a.id));
+  });
+
+  /** Breakdown of "Reste de jours" (RG-JOURS): only the periods that still add days, as computed by the server. */
+  daysDetail = computed(() => {
+    const c = this.card();
+    const m = c?.member;
+    if (!m || m.endDate === null || m.remainingDays === null) return null;
+    return {
+      end: m.endDate, days: m.remainingDays,
+      today: this.config.config()?.today ?? new Date().toISOString().slice(0, 10),
+      anyPaid: c.subscriptions.some((s) => s.paymentStatus !== 'IMPAYE' || s.amount === 0),
+      periods: c.subscriptions.filter((s) => s.countedDays > 0).sort((x, y) => x.startDate.localeCompare(y.startDate) || x.id - y.id),
+    };
   });
 
   constructor() {

@@ -17,6 +17,7 @@ import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -115,28 +116,38 @@ public final class Rules {
         return registrationDate.plusMonths(months);
     }
 
-    public record PeriodSpan(LocalDate start, int months, BigDecimal amount) {
+    public record PeriodSpan(LocalDate start, int months, BigDecimal amount, BigDecimal paid) {
+        public LocalDate end() {
+            return subscriptionEnd(start, months);
+        }
+    }
+
+    /** RG-JOURS: only a period paid at least in part gives days; a free period counts as paid. */
+    public static boolean countsForDays(BigDecimal amount, BigDecimal paid) {
+        return amount.signum() == 0 || (paid != null && paid.signum() > 0);
+    }
+
+    /** RG-JOURS: days of a period from today (included) to its end; past days and unpaid periods give nothing. */
+    public static long countedDays(PeriodSpan p, LocalDate today) {
+        if (!countsForDays(p.amount(), p.paid())) return 0;
+        LocalDate from = p.start().isAfter(today) ? p.start() : today;
+        return Math.max(0, ChronoUnit.DAYS.between(from, p.end()));
     }
 
     /**
-     * RG-JOURS reference period, in a list sorted by start. Payments are pooled, like RG-STATUT: the total paid fills
-     * the periods in order, and the latest period it reaches is the reference — so a payment imputed on arrears still
-     * counts, while an unpaid renewal does not extend the member's days. Without any payment, the latest period
-     * already started, else the first one.
+     * @param endDate       end of the latest counted period; without any, the first start (nothing is covered)
+     * @param remainingDays Σ counted days; when that is 0, min(0, endDate − today): expired since endDate
      */
-    public static int referencePeriod(List<PeriodSpan> periods, BigDecimal totalPaid, LocalDate today) {
-        BigDecimal left = totalPaid == null ? BigDecimal.ZERO : totalPaid;
-        int ref = -1;
-        for (int i = 0; i < periods.size() && left.signum() >= 0; i++) {
-            BigDecimal amount = periods.get(i).amount();
-            if (left.signum() > 0 || amount.signum() == 0) ref = i;
-            left = left.subtract(amount);
-        }
-        if (ref >= 0) return ref;
-        for (int i = periods.size() - 1; i >= 0; i--) {
-            if (!periods.get(i).start().isAfter(today)) return i;
-        }
-        return 0;
+    public record Coverage(LocalDate endDate, long remainingDays) {
+    }
+
+    /** RG-JOURS over all the periods of a member (non-empty list). */
+    public static Coverage coverage(List<PeriodSpan> periods, LocalDate today) {
+        long sum = periods.stream().mapToLong(p -> countedDays(p, today)).sum();
+        LocalDate lastEnd = periods.stream().filter(p -> countsForDays(p.amount(), p.paid())).map(PeriodSpan::end)
+                .max(Comparator.naturalOrder())
+                .orElseGet(() -> periods.stream().map(PeriodSpan::start).min(Comparator.naturalOrder()).orElseThrow());
+        return new Coverage(lastEnd, sum > 0 ? sum : Math.min(0, remainingDays(lastEnd, today)));
     }
 
     /** RG-JOURS: end − today in whole days, may be negative. */
@@ -206,16 +217,15 @@ public final class Rules {
 
     /**
      * All computed values of a member.
-     * @param periodStart start of the reference period (see {@link #referencePeriod})
-     * @param months      duration of that period
+     * @param coverage    RG-JOURS result (see {@link #coverage})
      * @param periodPrice frozen price of the latest period (RG-PRIX when it was created)
      * @param totalDue    Σ prices of all the member's periods (arrears included)
      * @param totalPaid   Σ non-cancelled payments of the member
      */
-    public static MemberComputed computeMember(LocalDate periodStart, int months, BigDecimal periodPrice, BigDecimal totalDue,
-                                               BigDecimal totalPaid, boolean enabled, PricingSettings s, LocalDate today) {
-        LocalDate end = subscriptionEnd(periodStart, months);
-        long remaining = remainingDays(end, today);
+    public static MemberComputed computeMember(Coverage coverage, BigDecimal periodPrice, BigDecimal totalDue,
+                                               BigDecimal totalPaid, boolean enabled, PricingSettings s) {
+        LocalDate end = coverage.endDate();
+        long remaining = coverage.remainingDays();
         BigDecimal p = (totalPaid == null ? BigDecimal.ZERO : totalPaid).setScale(2, RoundingMode.HALF_UP);
         PaymentStatus status = paymentStatus(totalDue, p);
         return new MemberComputed(periodPrice, end, remaining, p, balance(totalDue, p), status,

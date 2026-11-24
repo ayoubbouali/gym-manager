@@ -96,7 +96,9 @@ export interface PaymentView {
 export interface SubscriptionView {
   id: number; memberId: number; packId: number; packName: string; discountId: number; discountName: string;
   startDate: string; endDate: string; months: number; amount: number; paid: number; balance: number;
-  paymentStatus: PaymentStatus; current: boolean; createdAt: string; createdBy: string; payments: PaymentView[];
+  paymentStatus: PaymentStatus; current: boolean;
+  /** RG-JOURS: days this period adds to "Reste de jours" (from today, 0 when unpaid). */
+  countedDays: number; createdAt: string; createdBy: string; payments: PaymentView[];
 }
 
 export interface SalaryPaymentView {

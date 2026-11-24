@@ -220,11 +220,13 @@ class AcceptanceTest {
 
         assertThat((List<Object>) read(get(admin, "/api/members"), "$[?(@.code=='A017')].sports[0].name")).containsExactly("Natation");
         assertThat((List<Object>) read(get(admin, "/api/staff"), "$.rows[?(@.name=='Nadia Coach')].sports[0].name")).containsExactly("Natation");
-        assertThat((List<Object>) read(get(admin, "/api/dashboard"), "$.bySport[?(@.name=='Natation')].count")).containsExactly(1);
+        // RG-JOURS: unpaid days do not count, so the member is not active until the first payment
+        assertThat((List<Object>) read(get(admin, "/api/dashboard"), "$.bySport[?(@.name=='Natation')].count")).containsExactly(0);
         // CA per sport = cashed amounts: nothing until the member pays
         assertThat((List<Object>) read(get(admin, "/api/stats"), "$.bySport[?(@.name=='Natation')].amount")).containsExactly(0.0);
         long a017 = id("/api/members", "$[?(@.code=='A017')].id");
         send(admin, "POST", "/api/payments", Map.of("memberId", a017, "amount", 500, "method", "CARTE", "paidOn", "2026-11-10")).andExpect(status().isOk());
+        assertThat((List<Object>) read(get(admin, "/api/dashboard"), "$.bySport[?(@.name=='Natation')].count")).containsExactly(1);
         assertThat((List<Object>) read(get(admin, "/api/stats"), "$.bySport[?(@.name=='Natation')].amount")).containsExactly(500.0);
         // salary = 1/3 × 500
         assertThat((List<Object>) read(get(admin, "/api/staff"), "$.rows[?(@.name=='Nadia Coach')].salary")).containsExactly(166.67);
@@ -286,7 +288,9 @@ class AcceptanceTest {
         long pack = id("/api/packs", "$[?(@.name=='Karaté - Trimestriel')].id");
         long r10 = id("/api/discounts", "$[?(@.name=='Remise 10%')].id");
         send(admin, "POST", "/api/members", member("Prix", "Test", "0612000005", karate, pack, r10, "2026-11-18"))
-                .andExpect(jsonPath("$.price").value(729.0)).andExpect(jsonPath("$.endDate").value("2027-02-18"));
+                .andExpect(jsonPath("$.price").value(729.0))
+                // RG-JOURS: nothing paid yet, so nothing is covered
+                .andExpect(jsonPath("$.endDate").value("2026-11-18")).andExpect(jsonPath("$.remainingDays").value(0));
         setting("subscription.cumulative", "false");
         assertThat((List<Object>) read(get(admin, "/api/members"), "$[?(@.lastName=='Prix')].price")).containsExactly(810.0);
     }
@@ -470,10 +474,11 @@ class AcceptanceTest {
         long a002 = id("/api/members", "$[?(@.code=='A002')].id");
         long pack = id("/api/packs", "$[?(@.name=='Aérobic - Mensuel')].id");
         long sub = ((Number) read(send(admin, "POST", "/api/members/" + a002 + "/renew", Map.of("packId", pack)), "$.id")).longValue();
-        // A002 has no payment at all: the latest period already started (this renewal, from today) is the reference
-        get(admin, "/api/members/by-code/A002").andExpect(jsonPath("$.member.remainingDays").value(30))
-                .andExpect(jsonPath("$.member.situation").value("FOLLOW"))
-                .andExpect(jsonPath("$.member.state").value("UNPAID"));
+        // A002 has no payment at all: no day counts, expired since the start of its first period, renewal included
+        get(admin, "/api/members/by-code/A002").andExpect(jsonPath("$.member.remainingDays").value(-194))
+                .andExpect(jsonPath("$.subscriptions[?(@.id==" + sub + ")].countedDays").value(org.hamcrest.Matchers.contains(0)))
+                .andExpect(jsonPath("$.member.situation").value("EXPIRED"))
+                .andExpect(jsonPath("$.member.state").value("EXPIRED"));
         send(admin, "DELETE", "/api/subscriptions/" + sub, null).andExpect(status().isNoContent());
         get(admin, "/api/members/by-code/A002").andExpect(jsonPath("$.subscriptions.length()").value(1));
         // a pack of another sport is refused

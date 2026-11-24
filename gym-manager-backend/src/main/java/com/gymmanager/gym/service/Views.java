@@ -70,7 +70,7 @@ public final class Views {
     public record SubscriptionView(Long id, Long memberId, Long packId, String packName, Long discountId, String discountName,
                                    LocalDate startDate, LocalDate endDate, int months, BigDecimal amount,
                                    BigDecimal paid, BigDecimal balance, Rules.PaymentStatus paymentStatus, boolean current,
-                                   LocalDateTime createdAt, String createdBy, List<PaymentView> payments) {
+                                   long countedDays, LocalDateTime createdAt, String createdBy, List<PaymentView> payments) {
     }
 
     public record SalaryPaymentView(Long id, String slipNumber, Long staffId, String staffCode, String staffName, String period,

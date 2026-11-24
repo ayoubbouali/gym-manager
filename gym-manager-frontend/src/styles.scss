@@ -385,6 +385,10 @@ dd { margin: 0; font-weight: 500; }
 .form-grid .span-2 { grid-column: span 2; }
 .field-block { display: flex; flex-direction: column; gap: 4px; padding-bottom: 14px; }
 .field-label { color: var(--muted); font-size: 13px; }
+/* Toggles with their label above, lined up with a form field of the same row (which gets .below-field-label). */
+.field-block.aligned { --mat-standard-button-toggle-height: calc(var(--mat-form-field-container-height, 52px) - 2px); }
+.field-block.aligned .field-label { line-height: 18px; }
+.form-grid .below-field-label { margin-top: 22px; }
 .color-field { flex-direction: row; align-items: center; gap: 10px; }
 .color-field input[type='color'] { width: 44px; height: 36px; border: 1px solid var(--line-strong); border-radius: 8px; background: none; padding: 2px; cursor: pointer; }
 .computed-box { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--card-2); border: 1px dashed var(--line-strong); border-radius: 12px; padding: 12px 14px; margin-top: 4px; }

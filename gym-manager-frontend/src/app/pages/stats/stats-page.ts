@@ -4,6 +4,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { LucideAngularModule } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
@@ -14,11 +16,13 @@ import { NotifyService } from '../../core/notify.service';
 import { DateField } from '../../shared/date-field';
 import { SportChip } from '../../shared/badges';
 import { ChartComponent, barChart, cssColor } from '../../shared/chart';
+import { StaffPayStats } from './staff-pay-stats';
 
 type Period = 'LAST12' | 'YEAR' | 'CUSTOM';
 
+/** Club revenue statistics (members' payments). */
 @Component({
-  selector: 'app-stats',
+  selector: 'app-club-stats',
   imports: [FormsModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, LucideAngularModule, DateField,
     ChartComponent, SportChip, MoneyPipe, FrDatePipe],
   template: `
@@ -102,7 +106,7 @@ type Period = 'LAST12' | 'YEAR' | 'CUSTOM';
     }
   `,
 })
-export class StatsPage {
+export class ClubStats {
   private api = inject(ApiService);
   private notify = inject(NotifyService);
   private config = inject(ConfigService);
@@ -148,5 +152,37 @@ export class StatsPage {
 
   csvMonthly(): void {
     exportCsv('ca-mensuel', [{ header: 'Mois', value: (m) => formatMonth(m.month, true) }, { header: "Chiffre d'affaires", value: (m) => csvNumber(m.amount) }], this.s()?.monthly ?? []);
+  }
+}
+
+const HIDE_FIGURES_KEY = 'stats.hideFigures';
+
+@Component({
+  selector: 'app-stats',
+  imports: [MatTabsModule, MatTooltipModule, LucideAngularModule, StaffPayStats, ClubStats],
+  template: `
+    <div class="stats-shell" [class.figures-hidden]="hidden()">
+      <button type="button" class="figures-toggle" [class.on]="hidden()" (click)="toggle()" [attr.aria-pressed]="hidden()"
+              [matTooltip]="hidden() ? 'Afficher les montants et les chiffres' : 'Masquer les montants et les chiffres'">
+        <span class="figures-toggle-icon"><lucide-icon [name]="hidden() ? 'eye-off' : 'eye'" [size]="16" /></span>
+        <span>{{ hidden() ? 'Chiffres masqués' : 'Chiffres visibles' }}</span>
+        <span class="figures-toggle-switch" aria-hidden="true"><i></i></span>
+      </button>
+      <mat-tab-group [selectedIndex]="tab()" (selectedIndexChange)="tab.set($event)" animationDuration="0ms" mat-stretch-tabs="false">
+        <mat-tab label="Paiements du personnel"><ng-template matTabContent><div class="stats-tab"><app-staff-pay-stats /></div></ng-template></mat-tab>
+        <mat-tab label="Paiements du club"><ng-template matTabContent><div class="stats-tab"><app-club-stats /></div></ng-template></mat-tab>
+      </mat-tab-group>
+    </div>
+  `,
+  styles: `.stats-tab { padding-top: 18px; }`,
+})
+export class StatsPage {
+  tab = signal(0);
+  /** Hides every figure of both tabs (e.g. when the screen is shared); remembered on this browser. */
+  hidden = signal(localStorage.getItem(HIDE_FIGURES_KEY) === '1');
+
+  toggle(): void {
+    this.hidden.update((v) => !v);
+    localStorage.setItem(HIDE_FIGURES_KEY, this.hidden() ? '1' : '0');
   }
 }

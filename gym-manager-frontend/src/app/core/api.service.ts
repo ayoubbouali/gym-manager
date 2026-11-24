@@ -84,6 +84,8 @@ export class ApiService {
   settings = () => this.get<M.SettingsPayload>('/settings');
   payments = (from?: string, to?: string) => this.get<M.PaymentView[]>('/payments', from && to ? { from, to } : undefined);
   payroll = (month?: string) => this.get<M.PayrollMonth>('/payroll', month ? { month } : undefined);
+  payrollStats = (from?: string, to?: string, staffId?: number | null) =>
+    this.get<M.PayrollStats>('/payroll/stats', { ...(from && to ? { from, to } : {}), ...(staffId ? { staffId: String(staffId) } : {}) });
   salaryHistory = (staffId: number) => this.get<M.SalaryPaymentView[]>(`/payroll/staff/${staffId}/history`);
   users = () => this.get<M.User[]>('/users');
   roles = () => this.get<M.UserRoleView[]>('/roles');

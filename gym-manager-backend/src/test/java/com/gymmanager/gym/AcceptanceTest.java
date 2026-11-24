@@ -736,6 +736,26 @@ class AcceptanceTest {
     }
 
     @Test
+    @DisplayName("Statistiques de paie : dû, versé et reste par mois et par membre du personnel")
+    void payrollStats() throws Exception {
+        long bouzid = id("/api/staff", "$.rows[?(@.code=='E006')].id");
+        get(admin, "/api/payroll/stats").andExpect(status().isOk())
+                .andExpect(jsonPath("$.from").value("2025-12")).andExpect(jsonPath("$.to").value("2026-11"))
+                .andExpect(jsonPath("$.monthly.length()").value(12));
+        String month = body(get(admin, "/api/payroll?month=2026-10"));
+        var oct = get(admin, "/api/payroll/stats?from=2026-10&to=2026-10").andExpect(status().isOk());
+        assertThat(((Number) read(oct, "$.totalPaid")).doubleValue()).isEqualTo(((Number) com.jayway.jsonpath.JsonPath.read(month, "$.totalPaid")).doubleValue());
+        assertThat(((Number) read(oct, "$.totalDue")).doubleValue()).isEqualTo(((Number) com.jayway.jsonpath.JsonPath.read(month, "$.totalDue")).doubleValue());
+        get(admin, "/api/payroll/stats?from=2026-10&to=2026-10&staffId=" + bouzid)
+                .andExpect(jsonPath("$.byStaff.length()").value(1)).andExpect(jsonPath("$.byStaff[0].code").value("E006"))
+                .andExpect(jsonPath("$.byStaff[0].balance").value(0.0)).andExpect(jsonPath("$.payments[*].staffCode").value(org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.is("E006"))));
+        get(admin, "/api/payroll/stats?from=2026-10&to=2027-03").andExpect(jsonPath("$.to").value("2026-11"));
+        get(admin, "/api/payroll/stats?from=2026-11&to=2026-10").andExpect(status().isBadRequest());
+        get(admin, "/api/payroll/stats?from=2010-01&to=2026-11").andExpect(status().isBadRequest());
+        get(admin, "/api/payroll/stats?staffId=999999").andExpect(status().isNotFound());
+    }
+
+    @Test
     @DisplayName("Critère 10 : bouton WhatsApp de 0695822412")
     void whatsappLink() throws Exception {
         List<String> links = read(get(admin, "/api/alerts"), "$.rows[?(@.code=='A001')].whatsappLink");

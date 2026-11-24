@@ -181,6 +181,15 @@ export interface AlertRow {
 
 export interface Alerts { alertCount: number; soonThreshold: number; followThreshold: number; rows: AlertRow[]; }
 
+export interface PayrollStats {
+  from: string; to: string; staffId: number | null;
+  totalDue: number; totalPaid: number; totalBalance: number; paymentCount: number;
+  monthly: { month: string; due: number; paid: number; balance: number }[];
+  byStaff: { staffId: number; code: string; name: string; function: string | null; payMode: PayMode; active: boolean;
+    due: number; paid: number; balance: number; paymentCount: number }[];
+  payments: SalaryPaymentView[];
+}
+
 export interface Stats {
   from: string; to: string;
   kpis: { revenue: number; unpaidAmount: number; unpaidInsuranceCount: number; activeMembers: number };

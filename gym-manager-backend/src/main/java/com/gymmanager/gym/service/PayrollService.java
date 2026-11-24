@@ -75,27 +75,94 @@ public class PayrollService {
                 sportNames, packNames, st.cfg(), month.atDay(1));
     }
 
+    /** Payroll rows of a month: active staff plus inactive staff with a payment for that month. */
+    private List<PayrollRow> rows(ClubState st, YearMonth ym, List<SalaryPayment> all, Map<Long, Staff> staffById, Long staffId) {
+        Map<Long, List<SalaryPaymentView>> byStaff = new HashMap<>();
+        all.stream().filter(p -> p.getPeriod().equals(ym.toString()))
+                .sorted(Comparator.comparing(SalaryPayment::getPaidOn).thenComparing(SalaryPayment::getId))
+                .forEach(p -> byStaff.computeIfAbsent(p.getStaffId(), k -> new ArrayList<>()).add(view(p, staffById)));
+        return st.staff().stream().filter(s -> (s.active() || byStaff.containsKey(s.id())) && (staffId == null || s.id().equals(staffId))).map(s -> {
+            var c = due(st, s, ym);
+            List<SalaryPaymentView> pays = byStaff.getOrDefault(s.id(), List.of());
+            BigDecimal paid = sum(pays.stream().filter(p -> !p.cancelled()).map(SalaryPaymentView::amount).toList());
+            return new PayrollRow(s, c.amount(), paid, Rules.balance(c.amount(), paid), Rules.paymentStatus(c.amount(), paid), c.detail(), pays);
+        }).toList();
+    }
+
+    private static BigDecimal sum(List<BigDecimal> amounts) {
+        return amounts.stream().reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
+    }
+
     @Transactional(readOnly = true)
     public PayrollMonth month(String period) {
         ClubState st = stateService.load();
         YearMonth ym = period == null || period.isBlank() ? YearMonth.from(st.today()) : parsePeriod(period);
-        Map<Long, Staff> staffById = staffById();
-        Map<Long, List<SalaryPaymentView>> byStaff = new HashMap<>();
-        salaryPayments.findAll().stream().filter(p -> p.getPeriod().equals(ym.toString()))
-                .sorted(Comparator.comparing(SalaryPayment::getPaidOn).thenComparing(SalaryPayment::getId))
-                .forEach(p -> byStaff.computeIfAbsent(p.getStaffId(), k -> new ArrayList<>()).add(view(p, staffById)));
-        List<PayrollRow> rows = st.staff().stream().filter(s -> s.active() || byStaff.containsKey(s.id())).map(s -> {
-            var c = due(st, s, ym);
-            List<SalaryPaymentView> pays = byStaff.getOrDefault(s.id(), List.of());
-            BigDecimal paid = pays.stream().filter(p -> !p.cancelled()).map(SalaryPaymentView::amount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
-            return new PayrollRow(s, c.amount(), paid, Rules.balance(c.amount(), paid), Rules.paymentStatus(c.amount(), paid), c.detail(), pays);
-        }).toList();
+        List<PayrollRow> rows = rows(st, ym, salaryPayments.findAll(), staffById(), null);
         Rules.DateWindow w = Rules.newRegistrationWindow(ym, st.cfg().salaryCutoffDay());
         return new PayrollMonth(ym.toString(), w.from(), w.to(), ym.equals(YearMonth.from(st.today())), rows,
-                rows.stream().filter(r -> r.staff().active()).map(PayrollRow::due).reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP),
-                rows.stream().map(PayrollRow::paid).reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP),
-                rows.stream().filter(r -> r.staff().active()).map(PayrollRow::balance).reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP));
+                sum(rows.stream().filter(r -> r.staff().active()).map(PayrollRow::due).toList()),
+                sum(rows.stream().map(PayrollRow::paid).toList()),
+                sum(rows.stream().filter(r -> r.staff().active()).map(PayrollRow::balance).toList()));
+    }
+
+    // ---------------------------------------------------------------- statistics
+
+    public record MonthDuePaid(String month, BigDecimal due, BigDecimal paid, BigDecimal balance) {
+    }
+
+    public record StaffAmount(Long staffId, String code, String name, String function, String payMode, boolean active,
+                              BigDecimal due, BigDecimal paid, BigDecimal balance, int paymentCount) {
+    }
+
+    public record PayrollStats(String from, String to, Long staffId, BigDecimal totalDue, BigDecimal totalPaid, BigDecimal totalBalance,
+                               int paymentCount, List<MonthDuePaid> monthly, List<StaffAmount> byStaff,
+                               List<SalaryPaymentView> payments) {
+    }
+
+    static final int MAX_STATS_MONTHS = 120;
+
+    /**
+     * Salary statistics over salary months [from, to] (default: the last 12 months), optionally for one staff member.
+     * Same rules as the monthly payroll: due and balance only count active staff, paid counts every non-cancelled payment.
+     */
+    @Transactional(readOnly = true)
+    public PayrollStats stats(String fromPeriod, String toPeriod, Long staffId) {
+        ClubState st = stateService.load();
+        YearMonth current = YearMonth.from(st.today());
+        boolean defaults = fromPeriod == null || fromPeriod.isBlank() || toPeriod == null || toPeriod.isBlank();
+        YearMonth from = defaults ? current.minusMonths(11) : parsePeriod(fromPeriod);
+        YearMonth to = defaults ? current : parsePeriod(toPeriod);
+        if (from.isAfter(to)) throw ApiException.badRequest("Le mois de début doit précéder le mois de fin.");
+        if (to.isAfter(current)) to = current;
+        if (from.isAfter(to)) throw ApiException.badRequest("La période ne peut pas être entièrement dans le futur.");
+        if (from.plusMonths(MAX_STATS_MONTHS - 1).isBefore(to)) throw ApiException.badRequest("Période trop longue (" + MAX_STATS_MONTHS / 12 + " ans maximum).");
+        Map<Long, Staff> staffById = staffById();
+        if (staffId != null && !staffById.containsKey(staffId)) throw ApiException.notFound("Membre du personnel introuvable.");
+
+        List<SalaryPayment> all = salaryPayments.findAll();
+        List<MonthDuePaid> monthly = new ArrayList<>();
+        Map<Long, List<PayrollRow>> rowsByStaff = new LinkedHashMap<>();
+        for (YearMonth ym = from; !ym.isAfter(to); ym = ym.plusMonths(1)) {
+            List<PayrollRow> rows = rows(st, ym, all, staffById, staffId);
+            rows.forEach(r -> rowsByStaff.computeIfAbsent(r.staff().id(), k -> new ArrayList<>()).add(r));
+            monthly.add(new MonthDuePaid(ym.toString(), sum(rows.stream().filter(r -> r.staff().active()).map(PayrollRow::due).toList()),
+                    sum(rows.stream().map(PayrollRow::paid).toList()),
+                    sum(rows.stream().filter(r -> r.staff().active()).map(PayrollRow::balance).toList())));
+        }
+        List<StaffAmount> byStaff = rowsByStaff.values().stream().map(rows -> {
+            StaffView s = rows.getFirst().staff();
+            List<PayrollRow> counted = s.active() ? rows : List.of();
+            return new StaffAmount(s.id(), s.code(), s.name(), s.function() == null ? null : s.function().label(), s.payMode().name(), s.active(),
+                    sum(counted.stream().map(PayrollRow::due).toList()), sum(rows.stream().map(PayrollRow::paid).toList()),
+                    sum(counted.stream().map(PayrollRow::balance).toList()),
+                    (int) rows.stream().flatMap(r -> r.payments().stream()).filter(p -> !p.cancelled()).count());
+        }).sorted(Comparator.comparing(StaffAmount::paid).reversed().thenComparing(StaffAmount::code)).toList();
+        List<SalaryPaymentView> payments = rowsByStaff.values().stream().flatMap(List::stream).flatMap(r -> r.payments().stream())
+                .sorted(Comparator.comparing(SalaryPaymentView::paidOn).reversed().thenComparing(SalaryPaymentView::id, Comparator.reverseOrder())).toList();
+        List<SalaryPaymentView> valid = payments.stream().filter(p -> !p.cancelled()).toList();
+        return new PayrollStats(from.toString(), to.toString(), staffId,
+                sum(monthly.stream().map(MonthDuePaid::due).toList()), sum(monthly.stream().map(MonthDuePaid::paid).toList()),
+                sum(monthly.stream().map(MonthDuePaid::balance).toList()), valid.size(), monthly, byStaff, payments);
     }
 
     /** Records a salary payment or an advance (≤ remaining amount of the month) and allocates its pay slip number. */

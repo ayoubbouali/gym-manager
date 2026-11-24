@@ -13,21 +13,20 @@ import { LucideAngularModule } from 'lucide-angular';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
-import { csvNumber, exportCsv } from '../../core/csv';
-import { MoneyPipe } from '../../core/format';
+import { exportCsv } from '../../core/csv';
 import { FunctionView, SportView, StaffList, StaffView } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ActiveBadge, SportChip } from '../../shared/badges';
 import { ConfirmService } from '../../shared/confirm.service';
 import { Pager, SortHeader, TableState } from '../../shared/table';
 import { PREVIEW_DELAY_MS, PREVIEW_POSITIONS } from '../members/members-page';
-import { SalaryDetailDialog, StaffFormDialog } from './staff-dialogs';
+import { StaffFormDialog } from './staff-dialogs';
 import { StaffPreview } from './staff-preview';
 
 @Component({
   selector: 'app-staff',
   imports: [FormsModule, RouterLink, CdkConnectedOverlay, CdkScrollable, MatButtonModule, MatFormFieldModule, MatSelectModule, MatSlideToggleModule, MatTooltipModule, LucideAngularModule,
-    SortHeader, Pager, SportChip, ActiveBadge, MoneyPipe, StaffPreview],
+    SortHeader, Pager, SportChip, ActiveBadge, StaffPreview],
   template: `
     <div class="toolbar">
       <label class="search grow"><lucide-icon name="search" [size]="18" />
@@ -52,7 +51,7 @@ import { StaffPreview } from './staff-preview';
           <th [attr.aria-sort]="t.ariaSort('fn')"><app-sort [table]="t" key="fn">Fonction</app-sort></th>
           <th>Sports encadrés</th>
           <th [attr.aria-sort]="t.ariaSort('mode')"><app-sort [table]="t" key="mode">Mode</app-sort></th>
-          <th class="num" [attr.aria-sort]="t.ariaSort('salary')"><app-sort [table]="t" key="salary">Salaire mensuel</app-sort></th>
+          <th class="num" [attr.aria-sort]="t.ariaSort('members')"><app-sort [table]="t" key="members">Inscrits actifs</app-sort></th>
           <th>Actif</th><th><span class="sr-only">Actions</span></th>
         </tr></thead>
         <tbody>
@@ -64,13 +63,7 @@ import { StaffPreview } from './staff-preview';
               <td>{{ s.function?.label ?? '—' }}</td>
               <td>@for (x of s.sports; track x.id) {<app-sport-chip [name]="x.name" [color]="x.color" [inactive]="!x.active" />} @empty {<span class="muted">—</span>}</td>
               <td><span class="badge" [class.info]="s.payMode === 'FIXED'" [class.warn]="s.payMode === 'COMMISSION'">{{ s.payMode === 'FIXED' ? 'Fixe' : 'Commission' }}</span></td>
-              <td class="num">
-                @if (s.payMode === 'COMMISSION') {
-                  <button class="link-btn strong" (click)="detail(s)" [attr.aria-label]="'Détail du calcul du salaire de ' + s.name" matTooltip="Détail du calcul">
-                    {{ s.salary | money }} <lucide-icon name="info" [size]="14" />
-                  </button>
-                } @else {<span class="strong">{{ s.salary | money }}</span>}
-              </td>
+              <td class="num">@if (s.activeMembers !== null) {<span class="strong">{{ s.activeMembers }}</span>} @else {<span class="muted">—</span>}</td>
               <td><app-active-badge [active]="s.active" /></td>
               <td class="actions">
                 <button class="icon-btn" (click)="edit(s)" matTooltip="Modifier" [attr.aria-label]="'Modifier ' + s.name"><lucide-icon name="pencil" [size]="16" /></button>
@@ -81,8 +74,7 @@ import { StaffPreview } from './staff-preview';
           } @empty {<tr><td colspan="10" class="empty">Aucun membre du personnel.</td></tr>}
         </tbody>
         <tfoot><tr>
-          <td colspan="7">Masse salariale mensuelle · Effectif actif : <b>{{ list()?.activeCount ?? 0 }}</b></td>
-          <td class="num strong">{{ list()?.payroll | money }}</td><td colspan="2"></td>
+          <td colspan="10">Effectif actif : <b>{{ list()?.activeCount ?? 0 }}</b></td>
         </tr></tfoot>
       </table>
     </div>
@@ -109,7 +101,7 @@ export class StaffPage {
 
   t = new TableState<StaffView>({
     searchText: (s) => `${s.code} ${s.name} ${s.phone} ${s.function?.label ?? ''} ${s.sports.map((x) => x.name).join(' ')}`,
-    sort: { code: (s) => s.code, last: (s) => s.lastName, first: (s) => s.firstName, fn: (s) => s.function?.label, mode: (s) => s.payMode, salary: (s) => s.salary },
+    sort: { code: (s) => s.code, last: (s) => s.lastName, first: (s) => s.firstName, fn: (s) => s.function?.label, mode: (s) => s.payMode, members: (s) => s.activeMembers ?? -1 },
     defaultSort: { key: 'code', dir: 'asc' },
     isActive: (s) => s.active,
     filter: () => {
@@ -159,10 +151,6 @@ export class StaffPage {
     }
   }
 
-  detail(s: StaffView): void {
-    this.dialog.open(SalaryDetailDialog, { data: s, width: '720px', maxWidth: '96vw' });
-  }
-
   async edit(staff?: StaffView): Promise<void> {
     const ok = await firstValueFrom(this.dialog.open(StaffFormDialog, {
       data: { staff, functions: this.functions(), sports: this.sports() }, width: '680px', maxWidth: '96vw',
@@ -201,7 +189,7 @@ export class StaffPage {
       { header: 'ID', value: (s) => s.code }, { header: 'Nom', value: (s) => s.lastName }, { header: 'Prénom', value: (s) => s.firstName },
       { header: 'Téléphone', value: (s) => s.phone }, { header: 'Fonction', value: (s) => s.function?.label ?? '' },
       { header: 'Sports encadrés', value: (s) => s.sports.map((x) => x.name).join(', ') },
-      { header: 'Mode', value: (s) => (s.payMode === 'FIXED' ? 'Fixe' : 'Commission') }, { header: 'Salaire mensuel', value: (s) => csvNumber(s.salary) },
+      { header: 'Mode', value: (s) => (s.payMode === 'FIXED' ? 'Fixe' : 'Commission') }, { header: 'Inscrits actifs', value: (s) => s.activeMembers ?? '' },
       { header: 'Actif', value: (s) => (s.active ? 'Oui' : 'Non') },
     ], this.t.filtered());
   }

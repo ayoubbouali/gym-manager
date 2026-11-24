@@ -36,7 +36,7 @@ describe('page Personnel', () => {
 
   beforeEach(() => {
     api = {
-      staff: vi.fn().mockResolvedValue({ rows: [staff(1), staff(2)], payroll: 8000, activeCount: 2 }),
+      staff: vi.fn().mockResolvedValue({ rows: [staff(1, { activeMembers: 12 }), staff(2, { activeMembers: null })], payroll: 8000, activeCount: 2 }),
       functions: vi.fn().mockResolvedValue([]),
       sports: vi.fn().mockResolvedValue([]),
     };
@@ -52,6 +52,17 @@ describe('page Personnel', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  it('affiche les inscrits actifs à la place du salaire mensuel, « — » sans sport encadré', async () => {
+    const f = await render();
+    const el = f.nativeElement as HTMLElement;
+    const headers = [...el.querySelectorAll('thead th')].map((h) => h.textContent!.trim());
+    expect(headers).toContain('Inscrits actifs');
+    expect(headers).not.toContain('Salaire mensuel');
+    const col = headers.indexOf('Inscrits actifs');
+    const cells = [...el.querySelectorAll('tbody tr')].map((r) => r.querySelectorAll('td')[col].textContent!.trim());
+    expect(cells).toEqual(['12', '—']);
+  });
 
   it('l’ID est un lien vers la fiche personnel', async () => {
     const f = await render();

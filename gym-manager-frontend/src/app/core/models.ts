@@ -146,6 +146,8 @@ export interface StaffView {
   id: number; code: string; lastName: string; firstName: string; name: string; phone: string;
   functionId: number; function: FunctionView | null; sportIds: number[]; sports: SportRef[];
   payMode: PayMode; fixedSalary: number | null; active: boolean; salary: number; salaryDetail: SalaryDetail;
+  /** Distinct active members with a paid or partial subscription in the coached sports; null when coaching none. */
+  activeMembers: number | null;
 }
 
 export interface StaffList { rows: StaffView[]; payroll: number; activeCount: number; }

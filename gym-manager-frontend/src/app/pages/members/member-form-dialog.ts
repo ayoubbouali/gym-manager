@@ -44,7 +44,7 @@ import { PhoneInput, PhoneValue } from '../../shared/phone-input';
               }
             </mat-select>
           </mat-form-field>
-          <div class="field-block">
+          <div class="field-block span-2">
             <span class="field-label">Remise</span>
             <mat-button-toggle-group formControlName="discountMode" aria-label="Type de remise">
               <mat-button-toggle value="LIST">Remise existante</mat-button-toggle>
@@ -52,7 +52,7 @@ import { PhoneInput, PhoneValue } from '../../shared/phone-input';
             </mat-button-toggle-group>
           </div>
           @if (values().discountMode === 'AMOUNT') {
-            <mat-form-field>
+            <mat-form-field class="span-2">
               <mat-label>Prix appliqué</mat-label>
               <input matInput type="number" min="0" step="0.01" formControlName="customAmount" required />
               <span matTextSuffix>&nbsp;{{ config.currency() }}</span>
@@ -60,7 +60,7 @@ import { PhoneInput, PhoneValue } from '../../shared/phone-input';
               <mat-error>{{ form.controls.customAmount.errors?.['server'] ?? 'Saisissez le prix à appliquer.' }}</mat-error>
             </mat-form-field>
           } @else {
-            <mat-form-field>
+            <mat-form-field class="span-2">
               <mat-label>Remise</mat-label>
               <mat-select formControlName="discountId">
                 @for (d of discountOptions(); track d.id) {
@@ -70,15 +70,15 @@ import { PhoneInput, PhoneValue } from '../../shared/phone-input';
             </mat-form-field>
           }
         }
-        <app-date-field label="Date d'inscription" formControlName="registrationDate" required />
-        <div class="field-block">
+        <app-date-field class="below-field-label" label="Date d'inscription" formControlName="registrationDate" required />
+        <div class="field-block aligned">
           <span class="field-label">Assurance</span>
           <mat-button-toggle-group formControlName="insurance" aria-label="Assurance">
             <mat-button-toggle value="PAYE">Payé</mat-button-toggle>
             <mat-button-toggle value="IMPAYE">Impayé</mat-button-toggle>
           </mat-button-toggle-group>
         </div>
-        <mat-form-field><mat-label>Notes</mat-label><textarea matInput formControlName="notes" rows="1"></textarea></mat-form-field>
+        <mat-form-field class="span-2"><mat-label>Notes</mat-label><textarea matInput formControlName="notes" rows="1"></textarea></mat-form-field>
       </form>
       @if (!withoutSubscription) {
         <div class="computed-box" aria-live="polite">

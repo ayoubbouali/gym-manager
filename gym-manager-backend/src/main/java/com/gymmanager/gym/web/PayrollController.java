@@ -30,6 +30,12 @@ public class PayrollController {
         return payroll.month(month);
     }
 
+    @GetMapping("/stats")
+    public PayrollService.PayrollStats stats(@RequestParam(required = false) String from, @RequestParam(required = false) String to,
+                                             @RequestParam(required = false) Long staffId) {
+        return payroll.stats(from, to, staffId);
+    }
+
     @PostMapping("/payments")
     public SalaryPaymentView pay(@RequestBody SalaryPaymentRequest r, Principal user) {
         return payroll.one(payroll.pay(r, user.getName()).getId());

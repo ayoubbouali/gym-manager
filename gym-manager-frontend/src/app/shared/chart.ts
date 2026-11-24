@@ -62,3 +62,16 @@ export function barChart(labels: string[], data: number[], colors: string | stri
     },
   };
 }
+
+/** Grouped bar chart (several series side by side, with a legend). */
+export function seriesChart(labels: string[], series: { label: string; data: number[]; color: string }[],
+                            format: (v: number) => string): ChartConfiguration<'bar'> {
+  const cfg = barChart(labels, [], '', format);
+  const text = cssColor('--muted', '#6b7280');
+  cfg.data.datasets = series.map((x) => ({ label: x.label, data: x.data, backgroundColor: x.color, borderRadius: 6, maxBarThickness: 28 }));
+  cfg.options!.plugins = {
+    legend: { display: true, labels: { color: text } },
+    tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label} : ${format(Number(ctx.parsed.y))}` } },
+  };
+  return cfg;
+}

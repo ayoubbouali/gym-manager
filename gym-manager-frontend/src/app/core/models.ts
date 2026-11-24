@@ -96,7 +96,9 @@ export interface PaymentView {
 export interface SubscriptionView {
   id: number; memberId: number; packId: number; packName: string; discountId: number; discountName: string;
   startDate: string; endDate: string; months: number; amount: number; paid: number; balance: number;
-  paymentStatus: PaymentStatus; current: boolean; createdAt: string; createdBy: string; payments: PaymentView[];
+  paymentStatus: PaymentStatus; current: boolean;
+  /** RG-JOURS: days this period adds to "Reste de jours" (from today, 0 when unpaid). */
+  countedDays: number; createdAt: string; createdBy: string; payments: PaymentView[];
 }
 
 export interface SalaryPaymentView {
@@ -178,6 +180,15 @@ export interface AlertRow {
 }
 
 export interface Alerts { alertCount: number; soonThreshold: number; followThreshold: number; rows: AlertRow[]; }
+
+export interface PayrollStats {
+  from: string; to: string; staffId: number | null;
+  totalDue: number; totalPaid: number; totalBalance: number; paymentCount: number;
+  monthly: { month: string; due: number; paid: number; balance: number }[];
+  byStaff: { staffId: number; code: string; name: string; function: string | null; payMode: PayMode; active: boolean;
+    due: number; paid: number; balance: number; paymentCount: number }[];
+  payments: SalaryPaymentView[];
+}
 
 export interface Stats {
   from: string; to: string;

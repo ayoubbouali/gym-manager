@@ -148,10 +148,8 @@ public class ClubStateService {
             DiscountView disc = shownDiscount(cur, pack, discById);
             BigDecimal totalDue = periods.stream().map(Subscription::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal totalPaid = periods.stream().map(x -> paidBySub.getOrDefault(x.getId(), BigDecimal.ZERO)).reduce(BigDecimal.ZERO, BigDecimal::add);
-            Subscription ref = periods.get(Rules.referencePeriod(periods.stream()
-                    .map(x -> new Rules.PeriodSpan(x.getStartDate(), x.getMonths(), x.getAmount())).toList(), totalPaid, today));
-            Rules.MemberComputed c = Rules.computeMember(ref.getStartDate(), ref.getMonths(), cur.getAmount(), totalDue, totalPaid,
-                    m.isActive(), cfg.pricing(), today);
+            Rules.Coverage coverage = Rules.coverage(periods.stream().map(x -> span(x, paidBySub)).toList(), today);
+            Rules.MemberComputed c = Rules.computeMember(coverage, cur.getAmount(), totalDue, totalPaid, m.isActive(), cfg.pricing());
             return new MemberView(m.getId(), m.getCode(), m.getLastName(), m.getFirstName(), m.getPhone(),
                     m.getBirthDate(), m.getRegistrationDate(), sportIds,
                     sportIds.stream().map(sportRef).filter(Objects::nonNull).toList(),
@@ -181,7 +179,7 @@ public class ClubStateService {
             return new SubscriptionView(x.getId(), x.getMemberId(), x.getPackId(), packById.get(x.getPackId()).name(),
                     d.id(), d.name(), x.getStartDate(), Rules.subscriptionEnd(x.getStartDate(), x.getMonths()), x.getMonths(),
                     x.getAmount(), paid, Rules.balance(x.getAmount(), paid), Rules.paymentStatus(x.getAmount(), paid),
-                    periods.getLast().getId().equals(x.getId()), x.getCreatedAt(), x.getCreatedBy(),
+                    periods.getLast().getId().equals(x.getId()), Rules.countedDays(span(x, paidBySub), today), x.getCreatedAt(), x.getCreatedBy(),
                     paymentsBySub.getOrDefault(x.getId(), List.of()));
         }).toList();
 
@@ -229,6 +227,10 @@ public class ClubStateService {
 
         return new ClubState(cfg, today, now, functions, durations, discounts, packs, members, sports, staff, activities, registrations,
                 subscriptions, payments, coachesBySport, subsByMember);
+    }
+
+    private static Rules.PeriodSpan span(Subscription x, Map<Long, BigDecimal> paidBySub) {
+        return new Rules.PeriodSpan(x.getStartDate(), x.getMonths(), x.getAmount(), paidBySub.getOrDefault(x.getId(), BigDecimal.ZERO));
     }
 
     private static MemberView withoutSubscription(Member m, List<Long> sportIds, Function<Long, SportRef> sportRef,

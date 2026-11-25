@@ -1,4 +1,5 @@
 # Deploys every push on develop to the production server (README, section 3 bis).
+# The first run also prepares a bare Ubuntu server: Docker, clone of the repository.
 # Skipped until the DEPLOY_HOST repository variable is set.
 name: Déploiement production
 
@@ -15,7 +16,11 @@ jobs:
   deploy:
     if: vars.DEPLOY_HOST != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
     steps:
       - name: Configure SSH
         env:
@@ -26,18 +31,41 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host prod\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_deploy\n  BatchMode yes\n' \
+            "$DEPLOY_HOST" "$DEPLOY_USER" > ~/.ssh/config
 
-      - name: Update and restart the application
-        env:
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      - name: Prepare the server and check out the pushed commit
         run: |
-          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_PATH" "$GITHUB_SHA" <<'EOF'
+          ssh prod bash -s -- "$DEPLOY_PATH" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" "$GITHUB_SHA" <<'EOF'
+          set -euo pipefail
+          command -v docker >/dev/null || curl -fsSL https://get.docker.com | sudo sh
+          if [ ! -d "$1/.git" ]; then
+            sudo install -d -o "$USER" -g "$USER" "$1"
+            git clone --quiet "$2" "$1"
+          fi
+          cd "$1"
+          git fetch --quiet origin
+          git reset --hard "$3"
+          EOF
+
+      # Secrets go through stdin, never on a command line.
+      - name: Write docker/.env
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          TUNNEL_TOKEN: ${{ secrets.TUNNEL_TOKEN }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+        run: |
+          printf 'DB_PASSWORD=%s\nTUNNEL_TOKEN=%s\nBREVO_API_KEY=%s\nMAIL_FROM=%s\n' \
+            "$DB_PASSWORD" "$TUNNEL_TOKEN" "$BREVO_API_KEY" "$MAIL_FROM" \
+            | ssh prod "umask 077 && cat > '$DEPLOY_PATH/docker/.env'"
+
+      - name: Rebuild and restart the application
+        run: |
+          ssh prod bash -s -- "$DEPLOY_PATH" <<'EOF'
           set -euo pipefail
           cd "$1"
-          git fetch --quiet origin develop
-          git reset --hard "$2"
-          docker compose -f docker/docker-compose.prod.yaml up -d --build --remove-orphans
-          docker image prune -f
+          sudo docker compose -f docker/docker-compose.prod.yaml up -d --build --remove-orphans
+          sudo docker image prune -f
+          sudo docker compose -f docker/docker-compose.prod.yaml ps
           EOF

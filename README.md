@@ -66,6 +66,42 @@ mvn clean verify                                                    # tous les t
 
 Variables utiles : `PORT`, `DATA_DIR` (dossier des fichiers téléversés), `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, et `BREVO_API_KEY` / `MAIL_FROM` pour l'envoi des e-mails (section 4 bis).
 
+## 3 bis. Mise en production (https://club-ali-sport.com)
+
+Architecture : un serveur **Oracle Cloud « Always Free »** fait tourner `docker/docker-compose.prod.yaml` (PostgreSQL, application, **cloudflared**). Cloudflare est devant : domaine, HTTPS, protection. Le **Cloudflare Tunnel** est une connexion sortante du serveur vers Cloudflare : aucun port web n'est ouvert sur le serveur, PostgreSQL et l'application ne sont pas joignables depuis Internet. Chaque push sur `develop` est déployé par `.github/workflows/deploy.yml`. Tout est gratuit.
+
+### Mise en place (une seule fois)
+
+1. **Serveur Oracle Cloud** : créer un compte sur https://www.oracle.com/cloud/free/ (carte bancaire demandée pour vérification, rien n'est débité). Conseillé : passer le compte en *Pay As You Go* (reste gratuit dans les limites *Always Free*), sinon Oracle peut récupérer un serveur gratuit presque inactif pendant 7 jours. Puis Compute › Instances › *Create instance* :
+   - image **Ubuntu 24.04**, forme **VM.Standard.A1.Flex** (Ampere, ARM) avec **2 OCPU et 12 Go** (limite gratuite : 4 OCPU et 24 Go au total) ;
+   - ajouter la clé SSH publique de déploiement (`ssh-keygen -t ed25519 -f deploy`), garder une IP publique. Seul le port 22 est ouvert par défaut : ne rien ouvrir de plus.
+   - Si Oracle répond *Out of capacity*, réessayer plus tard ou dans un autre *availability domain*.
+2. **Tunnel** : Cloudflare › *Zero Trust* › Networks › *Tunnels* › *Create a tunnel* › **Cloudflared**, nom `gym-manager`. Copier le jeton affiché dans la commande d'installation (la longue chaîne après `--token`) ; ne pas exécuter cette commande, le conteneur `cloudflared` s'en charge. Puis *Public hostnames* :
+   - domaine `club-ali-sport.com`, sous-domaine vide, service **HTTP** `app:8090` ;
+   - le même avec le sous-domaine `www`. Supprimer d'abord un éventuel enregistrement DNS `www` existant, sinon Cloudflare refuse de créer le sien.
+   Cloudflare crée lui-même les enregistrements DNS vers le tunnel.
+3. **GitHub** › Settings › *Secrets and variables* › *Actions* :
+
+   | Type | Nom | Valeur |
+   | --- | --- | --- |
+   | Variable | `DEPLOY_HOST` | IP publique du serveur Oracle |
+   | Variable | `DEPLOY_USER` | `ubuntu` |
+   | Variable | `DEPLOY_PATH` | `/opt/gym-manager` |
+   | Secret | `DEPLOY_SSH_KEY` | clé privée `deploy` de l'étape 1 |
+   | Secret | `DEPLOY_KNOWN_HOSTS` | sortie de `ssh-keyscan <IP du serveur>` |
+   | Secret | `DB_PASSWORD` | mot de passe long et aléatoire (`openssl rand -base64 32`). **Ne plus le changer** : la base est créée avec. |
+   | Secret | `TUNNEL_TOKEN` | jeton du tunnel, étape 2 |
+   | Secret / Variable | `BREVO_API_KEY` / `MAIL_FROM` | facultatifs, envoi d'e-mails (section 4 bis) |
+
+4. **Premier déploiement** : merger sur `develop`, ou onglet *Actions* › *Déploiement production* › *Run workflow*. Le premier passage installe Docker, clone le dépôt dans `DEPLOY_PATH`, écrit `docker/.env` à partir des secrets et construit l'image (une dizaine de minutes). Le tunnel passe à *Healthy* dans Cloudflare et le site répond sur https://club-ali-sport.com.
+5. **Sécuriser les comptes, tout de suite** : la base vide est initialisée avec les données de démonstration et les comptes `admin` / `accueil` de la section 4, joignables depuis Internet. Se connecter immédiatement en `admin` (nouveau mot de passe imposé), changer aussi celui d'`accueil` ou le désactiver, puis effacer la démo avec Paramètres › Données › **Réinitialiser les données** (section 5 bis).
+
+### Déploiement automatique
+
+Tant que `DEPLOY_HOST` n'est pas défini, le workflow est ignoré. Ensuite, chaque push sur `develop` (merge de PR compris) se connecte au serveur, se place sur le commit poussé (`git reset --hard` : ne rien modifier à la main dans le clone du serveur), réécrit `docker/.env` depuis les secrets GitHub, reconstruit l'image et redémarre l'application. Un lancement manuel est possible depuis l'onglet *Actions* (*Run workflow*).
+
+**Sauvegardes** : les données sont dans les volumes Docker `gymmanager-prod_gym-db` et `gymmanager-prod_gym-files`. Exporter régulièrement la base depuis Paramètres › Données (section 5 bis) et conserver l'archive hors du serveur.
+
 ## 4. Comptes par défaut
 
 | Identifiant | Mot de passe | Rôle |

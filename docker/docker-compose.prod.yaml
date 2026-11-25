@@ -1,0 +1,60 @@
+# Production: PostgreSQL + application + Cloudflare Tunnel. See README, section 3 bis.
+#   docker compose -f docker/docker-compose.prod.yaml up -d --build
+# Requires docker/.env (DB_PASSWORD, TUNNEL_TOKEN).
+# No published port: cloudflared opens an outbound connection to Cloudflare, which serves HTTPS.
+
+name: gymmanager-prod
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gym
+      POSTGRES_USER: gym
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in docker/.env}
+    volumes:
+      - gym-db:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U gym -d gym" ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: gymmanager/gym-manager:prod
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: gym
+      DB_USER: gym
+      DB_PASSWORD: ${DB_PASSWORD}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      # Requests only arrive through cloudflared: take the client IP from CF-Connecting-IP (password reset
+      # rate limit) and the scheme from X-Forwarded-Proto (secure session cookie).
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      SERVER_TOMCAT_REMOTEIP_REMOTE_IP_HEADER: CF-Connecting-IP
+    volumes:
+      - gym-files:/data   # uploaded photos and logo
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      - app
+    # Public hostnames (club-ali-sport.com -> http://app:8090) are configured on the tunnel in Cloudflare.
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN must be set in docker/.env}
+
+volumes:
+  gym-db:
+  gym-files:

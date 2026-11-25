@@ -13,8 +13,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 /**
- * On each API call: re-checks the account (still active, same role) and blocks everything
- * except /api/auth/** while the password change required at first login is pending.
+ * On each API call: re-checks that the account still exists and is active (its permissions are refreshed by
+ * {@link PermissionRefreshFilter}) and blocks everything except /api/auth/** while the password change required
+ * at first login is pending.
  */
 @Component
 public class SessionUserInterceptor implements HandlerInterceptor {
@@ -29,8 +30,7 @@ public class SessionUserInterceptor implements HandlerInterceptor {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) return true;
         AppUser u = users.findByUsernameIgnoreCase(auth.getName()).orElse(null);
-        boolean roleChanged = u != null && auth.getAuthorities().stream().noneMatch(a -> a.getAuthority().equals("ROLE_" + u.getRole().name()));
-        if (u == null || !u.isActive() || roleChanged) {
+        if (u == null || !u.isActive()) {
             HttpSession s = req.getSession(false);
             if (s != null) s.invalidate();
             SecurityContextHolder.clearContext();

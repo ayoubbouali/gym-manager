@@ -9,15 +9,7 @@ import { ApiService } from '../../core/api.service';
 import { User, UserRoleView } from '../../core/models';
 import { errorMessage } from '../../core/notify.service';
 import { PhoneInput, PhoneValue } from '../../shared/phone-input';
-
-export const ACCESS_LEVELS = [
-  { value: 'ACCUEIL', label: 'Accueil' },
-  { value: 'ADMIN', label: 'Administrateur' },
-] as const;
-
-export function accessLevelLabel(level: string): string {
-  return ACCESS_LEVELS.find((l) => l.value === level)?.label ?? level;
-}
+import { permissionSummary } from './role-form-dialog';
 
 /** Creates a user account, or edits its email and phone (the role is changed from the table). */
 @Component({
@@ -37,7 +29,7 @@ export function accessLevelLabel(level: string): string {
           </mat-form-field>
           <mat-form-field class="w-full"><mat-label>Rôle</mat-label>
             <mat-select name="role" [(ngModel)]="v.roleId" required>
-              @for (r of d.roles; track r.id) {<mat-option [value]="r.id">{{ r.name }} <span class="muted">· {{ levelLabel(r.accessLevel) }}</span></mat-option>}
+              @for (r of d.roles; track r.id) {<mat-option [value]="r.id">{{ r.name }} <span class="muted">· {{ summary(r.permissions) }}</span></mat-option>}
             </mat-select>
           </mat-form-field>
         }
@@ -62,13 +54,14 @@ export class UserFormDialog {
   v = {
     username: '',
     password: '',
-    roleId: this.d.user?.roleId ?? this.d.roles.find((r) => r.accessLevel === 'ACCUEIL')?.id ?? null,
+    // the role granting the fewest permissions, the safest default for a new account
+    roleId: this.d.user?.roleId ?? [...this.d.roles].sort((a, b) => a.permissions.length - b.permissions.length)[0]?.id ?? null,
     email: this.d.user?.email ?? '',
     phone: { country: null, number: this.d.user?.phone ?? '' } as PhoneValue,
   };
   busy = signal(false);
   error = signal('');
-  levelLabel = accessLevelLabel;
+  summary = permissionSummary;
 
   async save(): Promise<void> {
     this.busy.set(true);

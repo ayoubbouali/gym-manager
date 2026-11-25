@@ -27,7 +27,7 @@ import { GeneratePacksDialog, PackDialogData, PackFormDialog } from './pack-dial
         <input type="search" placeholder="Rechercher un pack" [ngModel]="t.search()" (ngModelChange)="t.setSearch($event)" aria-label="Rechercher un pack" /></label>
       <mat-slide-toggle [ngModel]="t.showInactive()" (ngModelChange)="t.showInactive.set($event)">Afficher les inactifs</mat-slide-toggle>
       <button mat-stroked-button (click)="csv()"><lucide-icon name="download" [size]="16" /> CSV</button>
-      @if (admin()) {
+      @if (canEdit()) {
         <button mat-stroked-button (click)="generate()"><lucide-icon name="zap" [size]="16" /> Générer les packs d'un sport</button>
         <button mat-flat-button (click)="edit()"><lucide-icon name="plus" [size]="16" /> Ajouter un pack</button>
       }
@@ -43,7 +43,7 @@ import { GeneratePacksDialog, PackDialogData, PackFormDialog } from './pack-dial
           <th>Remise vs mensuel</th>
           <th class="num" [attr.aria-sort]="t.ariaSort('total')"><app-sort [table]="t" key="total">Prix total</app-sort></th>
           <th>Actif</th>
-          @if (admin()) {<th><span class="sr-only">Actions</span></th>}
+          @if (canEdit()) {<th><span class="sr-only">Actions</span></th>}
         </tr></thead>
         <tbody>
           @for (p of t.page(); track p.id) {
@@ -55,7 +55,7 @@ import { GeneratePacksDialog, PackDialogData, PackFormDialog } from './pack-dial
               <td>{{ p.discount.name }}</td>
               <td class="num strong">{{ p.total | money }}</td>
               <td><app-active-badge [active]="p.active" /></td>
-              @if (admin()) {
+              @if (canEdit()) {
                 <td class="actions">
                   <button class="icon-btn" (click)="edit(p)" matTooltip="Modifier" [attr.aria-label]="'Modifier ' + p.name"><lucide-icon name="pencil" [size]="16" /></button>
                   <button class="icon-btn" (click)="toggle(p)" [matTooltip]="p.active ? 'Désactiver' : 'Réactiver'" [attr.aria-label]="(p.active ? 'Désactiver ' : 'Réactiver ') + p.name"><lucide-icon name="power" [size]="16" /></button>
@@ -76,7 +76,8 @@ export class PacksPage {
   private confirm = inject(ConfirmService);
   private notify = inject(NotifyService);
   private config = inject(ConfigService);
-  admin = inject(AuthService).isAdmin;
+  private auth = inject(AuthService);
+  canEdit = computed(() => this.auth.can('EDIT_REFERENTIALS'));
   sports = signal<SportView[]>([]);
   durations = signal<DurationView[]>([]);
   discounts = signal<DiscountView[]>([]);

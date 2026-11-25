@@ -90,7 +90,7 @@ type Period = 'MONTH' | 'LAST_MONTH' | 'YEAR' | 'CUSTOM';
               <td class="muted">{{ p.createdBy }} @if (p.cancelled) {<span class="badge ko" [matTooltip]="(p.cancelReason ?? '') + ' — ' + (p.cancelledBy ?? '')">annulé</span>}</td>
               <td class="actions">
                 <button class="icon-btn" (click)="open(p)" matTooltip="Voir le reçu (PDF)" [attr.aria-label]="'Reçu ' + p.receiptNumber"><lucide-icon name="file-text" [size]="16" /></button>
-                @if (admin() && !p.cancelled) {
+                @if (canManage() && !p.cancelled) {
                   <button class="icon-btn" (click)="edit(p)" matTooltip="Modifier" [attr.aria-label]="'Modifier ' + p.receiptNumber"><lucide-icon name="pencil" [size]="16" /></button>
                   <button class="icon-btn danger" (click)="cancel(p)" matTooltip="Annuler le paiement" [attr.aria-label]="'Annuler ' + p.receiptNumber"><lucide-icon name="ban" [size]="16" /></button>
                 }
@@ -108,7 +108,8 @@ export class PaymentsPage {
   private dialog = inject(MatDialog);
   private notify = inject(NotifyService);
   private config = inject(ConfigService);
-  admin = inject(AuthService).isAdmin;
+  private auth = inject(AuthService);
+  canManage = computed(() => this.auth.can('MANAGE_PAYMENTS'));
   methods = PAYMENT_METHODS;
   period = signal<Period>('MONTH');
   fMethod = signal<string | null>(null);

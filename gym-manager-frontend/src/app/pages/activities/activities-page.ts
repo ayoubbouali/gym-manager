@@ -37,7 +37,7 @@ import { ActivityFormDialog } from './activity-form-dialog';
             <mat-button-toggle value="UPCOMING">À venir</mat-button-toggle>
             <mat-button-toggle value="PAST">Passées</mat-button-toggle>
           </mat-button-toggle-group>
-          @if (admin()) {<button mat-flat-button (click)="edit()"><lucide-icon name="plus" [size]="16" /> Nouvelle activité</button>}
+          @if (canEdit()) {<button mat-flat-button (click)="edit()"><lucide-icon name="plus" [size]="16" /> Nouvelle activité</button>}
         </div>
         <div class="toolbar">
           <label class="search grow"><lucide-icon name="search" [size]="18" /><input type="search" placeholder="Rechercher une activité" [ngModel]="a.search()" (ngModelChange)="a.setSearch($event)" aria-label="Rechercher une activité" /></label>
@@ -54,7 +54,7 @@ import { ActivityFormDialog } from './activity-form-dialog';
               <th>Lieu</th>
               <th class="num" [attr.aria-sort]="a.ariaSort('count')"><app-sort [table]="a" key="count">Inscrits / places</app-sort></th>
               <th>Responsable</th><th>Actif</th>
-              @if (admin()) {<th><span class="sr-only">Actions</span></th>}
+              @if (canEdit()) {<th><span class="sr-only">Actions</span></th>}
             </tr></thead>
             <tbody>
               @for (x of a.page(); track x.id) {
@@ -68,7 +68,7 @@ import { ActivityFormDialog } from './activity-form-dialog';
                   <td class="num"><span [class.red]="x.full">{{ x.registrationCount }} / {{ x.maxPlaces ?? '–' }}</span></td>
                   <td>{{ x.manager?.name ?? '—' }}</td>
                   <td><app-active-badge [active]="x.active" /></td>
-                  @if (admin()) {
+                  @if (canEdit()) {
                     <td class="actions" (click)="$event.stopPropagation()">
                       <button class="icon-btn" (click)="edit(x)" matTooltip="Modifier" [attr.aria-label]="'Modifier ' + x.name"><lucide-icon name="pencil" [size]="16" /></button>
                       <button class="icon-btn" (click)="toggle(x)" [matTooltip]="x.active ? 'Désactiver' : 'Réactiver'" [attr.aria-label]="(x.active ? 'Désactiver ' : 'Réactiver ') + x.name"><lucide-icon name="power" [size]="16" /></button>
@@ -124,7 +124,8 @@ export class ActivitiesPage {
   private confirm = inject(ConfirmService);
   private notify = inject(NotifyService);
   private config = inject(ConfigService);
-  admin = inject(AuthService).isAdmin;
+  private auth = inject(AuthService);
+  canEdit = computed(() => this.auth.can('EDIT_REFERENTIALS'));
 
   activities = signal<ActivityView[]>([]);
   registrations = signal<RegistrationView[]>([]);

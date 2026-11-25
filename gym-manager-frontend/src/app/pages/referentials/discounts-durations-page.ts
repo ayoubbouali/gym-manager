@@ -25,7 +25,7 @@ import { Pager, SortHeader, TableState } from '../../shared/table';
         <div class="card-head">
           <h3>Remises</h3><span class="grow"></span>
           <button mat-stroked-button (click)="csvDiscounts()"><lucide-icon name="download" [size]="16" /> CSV</button>
-          @if (admin()) {<button mat-flat-button (click)="editDiscount()"><lucide-icon name="plus" [size]="16" /> Ajouter</button>}
+          @if (canEdit()) {<button mat-flat-button (click)="editDiscount()"><lucide-icon name="plus" [size]="16" /> Ajouter</button>}
         </div>
         <div class="toolbar">
           <label class="search grow"><lucide-icon name="search" [size]="18" /><input type="search" placeholder="Rechercher une remise" [ngModel]="d.search()" (ngModelChange)="d.setSearch($event)" aria-label="Rechercher une remise" /></label>
@@ -36,14 +36,14 @@ import { Pager, SortHeader, TableState } from '../../shared/table';
             <th [attr.aria-sort]="d.ariaSort('code')"><app-sort [table]="d" key="code">ID</app-sort></th>
             <th [attr.aria-sort]="d.ariaSort('name')"><app-sort [table]="d" key="name">Nom</app-sort></th>
             <th class="num" [attr.aria-sort]="d.ariaSort('percent')"><app-sort [table]="d" key="percent">%</app-sort></th>
-            <th>Actif</th>@if (admin()) {<th><span class="sr-only">Actions</span></th>}
+            <th>Actif</th>@if (canEdit()) {<th><span class="sr-only">Actions</span></th>}
           </tr></thead>
           <tbody>
             @for (x of d.page(); track x.id) {
               <tr [class.inactive]="!x.active">
                 <td class="code">{{ x.code }}</td><td class="strong">{{ x.name }}</td><td class="num">{{ x.percent }} %</td>
                 <td><app-active-badge [active]="x.active" /></td>
-                @if (admin()) {
+                @if (canEdit()) {
                   <td class="actions">
                     @if (x.system) {
                       <span class="muted" matTooltip="Remise par défaut : non supprimable"><lucide-icon name="lock" [size]="16" /></span>
@@ -65,7 +65,7 @@ import { Pager, SortHeader, TableState } from '../../shared/table';
         <div class="card-head">
           <h3>Durées</h3><span class="grow"></span>
           <button mat-stroked-button (click)="csvDurations()"><lucide-icon name="download" [size]="16" /> CSV</button>
-          @if (admin()) {<button mat-flat-button (click)="editDuration()"><lucide-icon name="plus" [size]="16" /> Ajouter</button>}
+          @if (canEdit()) {<button mat-flat-button (click)="editDuration()"><lucide-icon name="plus" [size]="16" /> Ajouter</button>}
         </div>
         <div class="toolbar">
           <label class="search grow"><lucide-icon name="search" [size]="18" /><input type="search" placeholder="Rechercher une durée" [ngModel]="u.search()" (ngModelChange)="u.setSearch($event)" aria-label="Rechercher une durée" /></label>
@@ -75,13 +75,13 @@ import { Pager, SortHeader, TableState } from '../../shared/table';
           <thead><tr>
             <th [attr.aria-sort]="u.ariaSort('label')"><app-sort [table]="u" key="label">Libellé</app-sort></th>
             <th class="num" [attr.aria-sort]="u.ariaSort('months')"><app-sort [table]="u" key="months">Mois</app-sort></th>
-            <th>Actif</th>@if (admin()) {<th><span class="sr-only">Actions</span></th>}
+            <th>Actif</th>@if (canEdit()) {<th><span class="sr-only">Actions</span></th>}
           </tr></thead>
           <tbody>
             @for (x of u.page(); track x.id) {
               <tr [class.inactive]="!x.active">
                 <td class="strong">{{ x.label }}</td><td class="num">{{ x.months }}</td><td><app-active-badge [active]="x.active" /></td>
-                @if (admin()) {
+                @if (canEdit()) {
                   <td class="actions">
                     <button class="icon-btn" (click)="editDuration(x)" matTooltip="Modifier" [attr.aria-label]="'Modifier ' + x.label"><lucide-icon name="pencil" [size]="16" /></button>
                     <button class="icon-btn" (click)="toggle('durations', x.id, x.label, x.active)" [matTooltip]="x.active ? 'Désactiver' : 'Réactiver'" [attr.aria-label]="(x.active ? 'Désactiver ' : 'Réactiver ') + x.label"><lucide-icon name="power" [size]="16" /></button>
@@ -103,7 +103,8 @@ export class DiscountsDurationsPage {
   private confirm = inject(ConfirmService);
   private notify = inject(NotifyService);
   private config = inject(ConfigService);
-  admin = inject(AuthService).isAdmin;
+  private auth = inject(AuthService);
+  canEdit = computed(() => this.auth.can('EDIT_REFERENTIALS'));
   private pageSize = computed(() => this.config.pageSize());
 
   d = new TableState<DiscountView>({

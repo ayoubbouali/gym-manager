@@ -33,9 +33,8 @@ public class AppUser {
     private String tempPasswordHash;
     private LocalDateTime tempPasswordExpiresAt;
 
-    /** Access level enforced by SecurityConfig. */
-    public Role getRole() {
-        return userRole.getAccessLevel();
+    public boolean can(Permission p) {
+        return userRole.grants(p);
     }
 
     public void clearTempPassword() {

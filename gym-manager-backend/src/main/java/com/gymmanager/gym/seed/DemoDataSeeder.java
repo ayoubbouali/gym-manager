@@ -237,7 +237,7 @@ public class DemoDataSeeder implements ApplicationRunner {
             AppUser user = new AppUser();
             user.setUsername(u[0]);
             user.setPasswordHash(encoder.encode(u[1]));
-            user.setUserRole(roleRepo.findFirstByAccessLevelOrderByIdAsc(Role.valueOf(u[2])).orElseThrow());
+            user.setUserRole(roleRepo.findByNameIgnoreCase(u[2]).orElseThrow());
             user.setMustChangePassword(true);
             users.save(user);
         }

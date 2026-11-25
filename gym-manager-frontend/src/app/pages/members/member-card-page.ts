@@ -142,7 +142,7 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
                 <small class="muted">payé {{ s.paid | money }} · reste <b [class.red]="s.balance > 0">{{ s.balance | money }}</b></small>
               </div>
               <app-paid-badge [value]="s.paymentStatus" />
-              @if (admin() && !s.payments.length) {
+              @if (canManage() && !s.payments.length) {
                 <button class="icon-btn danger" (click)="cancelRenewal(c, s)" matTooltip="Supprimer cette période" aria-label="Supprimer cette période"><lucide-icon name="trash-2" [size]="16" /></button>
               }
             </div>
@@ -159,11 +159,11 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
                       <td class="muted">{{ p.createdBy }} @if (p.cancelled) {<span class="badge ko" [matTooltip]="p.cancelReason ?? ''">annulé</span>}</td>
                       <td class="actions">
                         <button class="icon-btn" (click)="openReceipt(p)" matTooltip="Voir le reçu (PDF)" [attr.aria-label]="'Reçu ' + p.receiptNumber"><lucide-icon name="file-text" [size]="16" /></button>
-                        @if (admin() && !p.cancelled) {
+                        @if (canManage() && !p.cancelled) {
                           <button class="icon-btn" (click)="editPayment(c, p)" matTooltip="Modifier" [attr.aria-label]="'Modifier ' + p.receiptNumber"><lucide-icon name="pencil" [size]="16" /></button>
                           <button class="icon-btn danger" (click)="cancelPayment(p)" matTooltip="Annuler le paiement" [attr.aria-label]="'Annuler ' + p.receiptNumber"><lucide-icon name="ban" [size]="16" /></button>
                         }
-                        @if (admin() && p.cancelled) {
+                        @if (canManage() && p.cancelled) {
                           <button class="icon-btn danger" (click)="deletePayment(p)" matTooltip="Supprimer de l'historique" [attr.aria-label]="'Supprimer ' + p.receiptNumber"><lucide-icon name="trash-2" [size]="16" /></button>
                         }
                       </td>
@@ -227,7 +227,8 @@ export class MemberCardPage {
   private confirm = inject(ConfirmService);
   private notify = inject(NotifyService);
   private config = inject(ConfigService);
-  admin = inject(AuthService).isAdmin;
+  private auth = inject(AuthService);
+  canManage = computed(() => this.auth.can('MANAGE_PAYMENTS'));
 
   members = signal<MemberView[]>([]);
   allActivities = signal<ActivityView[]>([]);

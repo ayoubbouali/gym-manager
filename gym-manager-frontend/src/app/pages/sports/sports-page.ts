@@ -27,7 +27,7 @@ import { SportFormDialog } from './sport-form-dialog';
         <input type="search" placeholder="Rechercher un sport ou un coach" [ngModel]="t.search()" (ngModelChange)="t.setSearch($event)" aria-label="Rechercher un sport" /></label>
       <mat-slide-toggle [ngModel]="t.showInactive()" (ngModelChange)="t.showInactive.set($event)">Afficher les inactifs</mat-slide-toggle>
       <button mat-stroked-button (click)="csv()"><lucide-icon name="download" [size]="16" /> CSV</button>
-      @if (admin()) {<button mat-flat-button (click)="edit()"><lucide-icon name="plus" [size]="16" /> Ajouter un sport</button>}
+      @if (canEdit()) {<button mat-flat-button (click)="edit()"><lucide-icon name="plus" [size]="16" /> Ajouter un sport</button>}
     </div>
     <div class="table-wrap">
       <table class="table">
@@ -39,7 +39,7 @@ import { SportFormDialog } from './sport-form-dialog';
           <th class="num" [attr.aria-sort]="t.ariaSort('price')"><app-sort [table]="t" key="price">Prix mensuel</app-sort></th>
           <th class="num" [attr.aria-sort]="t.ariaSort('count')"><app-sort [table]="t" key="count">Inscrits</app-sort></th>
           <th [attr.aria-sort]="t.ariaSort('fill')"><app-sort [table]="t" key="fill">Remplissage</app-sort></th>
-          <th>Actif</th>@if (admin()) {<th><span class="sr-only">Actions</span></th>}
+          <th>Actif</th>@if (canEdit()) {<th><span class="sr-only">Actions</span></th>}
         </tr></thead>
         <tbody>
           @for (s of t.page(); track s.id) {
@@ -58,7 +58,7 @@ import { SportFormDialog } from './sport-form-dialog';
                 <small [class.red]="s.fillPercent > 100" [class.muted]="s.fillPercent <= 100">{{ s.fillPercent }} %</small>
               </td>
               <td><app-active-badge [active]="s.active" /></td>
-              @if (admin()) {
+              @if (canEdit()) {
                 <td class="actions">
                   <button class="icon-btn" (click)="edit(s)" matTooltip="Modifier" [attr.aria-label]="'Modifier ' + s.name"><lucide-icon name="pencil" [size]="16" /></button>
                   <button class="icon-btn" (click)="toggle(s)" [matTooltip]="s.active ? 'Désactiver' : 'Réactiver'" [attr.aria-label]="(s.active ? 'Désactiver ' : 'Réactiver ') + s.name"><lucide-icon name="power" [size]="16" /></button>
@@ -79,7 +79,8 @@ export class SportsPage {
   private confirm = inject(ConfirmService);
   private notify = inject(NotifyService);
   private config = inject(ConfigService);
-  admin = inject(AuthService).isAdmin;
+  private auth = inject(AuthService);
+  canEdit = computed(() => this.auth.can('EDIT_REFERENTIALS'));
 
   t = new TableState<SportView>({
     searchText: (s) => `${s.code} ${s.name} ${s.coaches.map((c) => c.name).join(' ')} ${s.scheduleSummary}`,

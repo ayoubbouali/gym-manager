@@ -1,6 +1,9 @@
 /** API models (mirror of the Java views). Money values are numbers, dates ISO strings. */
 
-export type Role = 'ADMIN' | 'ACCUEIL';
+/** Menu pages a role opens (Accueil and Mon compte are open to everyone), then two write rights. Checked by the server. */
+export type Permission =
+  | 'MEMBERS' | 'MEMBER_CARD' | 'PACKS' | 'DISCOUNTS' | 'SPORTS' | 'ACTIVITIES' | 'STAFF' | 'PAYROLL' | 'PAYMENTS'
+  | 'ALERTS' | 'STATS' | 'SETTINGS' | 'EDIT_REFERENTIALS' | 'MANAGE_PAYMENTS';
 export type PaymentStatus = 'PAYE' | 'PARTIEL' | 'IMPAYE';
 export type PaymentMethod = 'ESPECES' | 'CARTE' | 'VIREMENT';
 export type Insurance = 'PAYE' | 'IMPAYE';
@@ -14,7 +17,7 @@ export type PayMode = 'COMMISSION' | 'FIXED';
 export interface User {
   id: number;
   username: string;
-  role: Role;
+  permissions: Permission[];
   active: boolean;
   mustChangePassword: boolean;
   email: string | null;
@@ -27,7 +30,7 @@ export interface User {
 export interface UserRoleView {
   id: number;
   name: string;
-  accessLevel: Role;
+  permissions: Permission[];
   userCount: number;
 }
 

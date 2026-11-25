@@ -29,7 +29,7 @@ import { PhoneInput, PhoneValue } from '../../shared/phone-input';
           @if (auth.user()?.hasPhoto) {<button class="link-btn danger" (click)="removePhoto()">Retirer la photo</button>}
         </div>
         <div class="grow">
-          <h3>{{ auth.user()?.username }} <span class="badge" [class.info]="auth.isAdmin()" [class.warn]="!auth.isAdmin()">{{ auth.user()?.roleName }}</span></h3>
+          <h3>{{ auth.user()?.username }} <span class="badge info">{{ auth.user()?.roleName }}</span></h3>
           <form class="stack mt" (ngSubmit)="save()">
             <mat-form-field class="w-full">
               <mat-label>Adresse e-mail</mat-label>

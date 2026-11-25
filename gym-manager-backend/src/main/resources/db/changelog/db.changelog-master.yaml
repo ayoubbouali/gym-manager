@@ -20,3 +20,6 @@ databaseChangeLog:
   - include:
       file: sql/V7__salary_bonus.sql
       relativeToChangelogFile: true
+  - include:
+      file: sql/V8__role_permissions.sql
+      relativeToChangelogFile: true

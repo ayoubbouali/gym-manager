@@ -138,7 +138,8 @@ public class BackupService {
         if (doc == null || !FORMAT.equals(doc.get("format"))) throw unreadable("format inconnu");
         String current = schemaVersion();
         Object version = doc.get("schemaVersion");
-        if (!Objects.equals(current, version)) {
+        boolean older = !Objects.equals(current, version) && isOlderChangeset(version);
+        if (!Objects.equals(current, version) && !older) {
             throw ApiException.invalid("file", "Cette sauvegarde a été produite par une autre version du schéma (« " + version
                     + " ») que celle de la base (« " + current + " ») : elle ne peut pas être importée.");
         }
@@ -148,6 +149,7 @@ public class BackupService {
         for (Object t : tables.keySet()) {
             if (!schema.containsKey(String.valueOf(t))) throw unreadable("table inconnue « " + t + " »");
         }
+        if (older) requireSameColumns(tables, schema, version, current);
         Map<String, List<Map<String, Object>>> rows = new LinkedHashMap<>();
         for (String table : insertionOrder()) rows.put(table, convert(table, tables.get(table), schema.get(table)));
 
@@ -303,6 +305,33 @@ public class BackupService {
     /** Last Liquibase changeset applied: two backups are compatible only if they share it. */
     String schemaVersion() {
         return jdbc.queryForObject("SELECT id FROM databasechangelog ORDER BY orderexecuted DESC LIMIT 1", String.class);
+    }
+
+    /** True if the version is a changeset already applied to this database before its latest one. */
+    private boolean isOlderChangeset(Object version) {
+        if (!(version instanceof String id)) return false;
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM databasechangelog WHERE id = ? AND orderexecuted < "
+                + "(SELECT MAX(orderexecuted) FROM databasechangelog)", Integer.class, id);
+        return count != null && count > 0;
+    }
+
+    /**
+     * An older backup is accepted only if the later migrations left the backed-up tables unchanged:
+     * every exported row must carry exactly the current columns, otherwise data would be lost or defaulted silently.
+     */
+    private static void requireSameColumns(Map<?, ?> tables, Map<String, List<Column>> schema, Object version, String current) {
+        for (var e : tables.entrySet()) {
+            if (!(e.getValue() instanceof List<?> rows)) continue;
+            Set<String> expected = new HashSet<>();
+            schema.get(String.valueOf(e.getKey())).forEach(c -> expected.add(c.name()));
+            for (Object row : rows) {
+                if (row instanceof Map<?, ?> m && !expected.equals(m.keySet())) {
+                    throw ApiException.invalid("file", "Cette sauvegarde a été produite par une version plus ancienne du schéma (« "
+                            + version + " ») et la table « " + e.getKey() + " » a changé depuis (« " + current
+                            + " ») : elle ne peut pas être importée.");
+                }
+            }
+        }
     }
 
     /** Files of the uploads folder referenced by the current data: member photos and club logo. */

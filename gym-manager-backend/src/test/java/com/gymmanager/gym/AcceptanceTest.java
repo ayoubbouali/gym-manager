@@ -653,7 +653,7 @@ class AcceptanceTest {
     }
 
     @Test
-    @DisplayName("Sauvegarde : confirmation, fichier illisible, autre version du schéma, accès ACCUEIL — rien n'est modifié")
+    @DisplayName("Sauvegarde : confirmation, fichier illisible, autre version du schéma, accès ACCUEIL — rien n'est modifié ; version antérieure compatible acceptée")
     void backupRejections() throws Exception {
         byte[] zip = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/data/export").session(admin))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
@@ -684,6 +684,23 @@ class AcceptanceTest {
         restore(admin, zip(Map.of("data.json", JSON.writeValueAsBytes(doc))), "SUPPRIMER").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("Fichier de sauvegarde illisible")));
 
+        assertThat(body(get(admin, "/api/data/summary"))).isEqualTo(summary);
+
+        // older schema version whose tables changed since: rejected, naming the table
+        String older = jdbc.queryForObject("SELECT id FROM databasechangelog ORDER BY orderexecuted DESC OFFSET 1 LIMIT 1", String.class);
+        doc = JSON.readValue(json, Map.class);
+        doc.put("schemaVersion", older);
+        List<Map<String, Object>> members = (List<Map<String, Object>>) ((Map<String, Object>) doc.get("tables")).get("members");
+        members.forEach(m -> m.remove("photo"));
+        restore(admin, zip(Map.of("data.json", JSON.writeValueAsBytes(doc))), "SUPPRIMER").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString(older), org.hamcrest.Matchers.containsString("« members »"))));
+        assertThat(body(get(admin, "/api/data/summary"))).isEqualTo(summary);
+
+        // older schema version with unchanged tables: imported
+        doc = JSON.readValue(json, Map.class);
+        doc.put("schemaVersion", older);
+        restore(admin, zip(Map.of("data.json", JSON.writeValueAsBytes(doc))), "SUPPRIMER").andExpect(status().isOk());
         assertThat(body(get(admin, "/api/data/summary"))).isEqualTo(summary);
     }
 

@@ -102,7 +102,23 @@ Tant que `DEPLOY_HOST` n'est pas défini, le workflow est ignoré. Ensuite, chaq
 
 **Branches** : `develop` est la branche d'intégration, stable pour le développement local, et reste la branche par défaut : les branches `feature/*` en partent et y reviennent par PR. `main` est la branche de déploiement, protégée par deux rulesets GitHub : seul le rôle admin (le propriétaire du dépôt) peut la mettre à jour, par push direct ou en mergeant une PR ; les autres collaborateurs peuvent ouvrir une PR vers `main` mais pas la merger ; personne, admin compris, ne peut la supprimer ni y faire un force push. Tout push sur `main` (push de l'admin ou merge de PR) déclenche le déploiement. L'admin peut aussi le relancer à la main : onglet *Actions* › *Déploiement production* › *Run workflow*, branche `main`. Le workflow vérifie en premier lieu que la personne qui a lancé l'exécution (push, lancement manuel ou *Re-run*) est admin du dépôt, et échoue sinon ; un lancement sur une autre branche que `main` est ignoré.
 
-**Sauvegardes** : les données sont dans les volumes Docker `gymmanager-prod_gym-db` et `gymmanager-prod_gym-files`. Exporter régulièrement la base depuis Paramètres › Données (section 5 bis) et conserver l'archive hors du serveur.
+**Sauvegardes** : les données sont dans les volumes Docker `gymmanager-prod_gym-db` et `gymmanager-prod_gym-files`. Deux niveaux automatiques, gratuits :
+
+- **Chaque jour**, le conteneur `db-backup` exporte toute la base (comptes compris) avec `pg_dump` dans le volume `gymmanager-prod_gym-backups` : `gym-AAAA-MM-JJ.dump`, gardés 14 jours. Protège contre une erreur de manipulation (données effacées, import raté).
+- **Chaque dimanche à 3 h**, Oracle sauvegarde le disque entier du serveur (base, photos, exports quotidiens) : politique `gym-manager-hebdo` sur le *boot volume*, gardée 4 semaines. Protège contre la perte du serveur. Oracle offre 5 sauvegardes : le quota `free-tier-guard` en interdit une sixième, pour qu'elles restent gratuites.
+
+Restaurer un export quotidien (sur le serveur, dans `DEPLOY_PATH`) :
+
+```bash
+sudo docker compose -f docker/docker-compose.prod.yaml exec db-backup ls /backups
+sudo docker compose -f docker/docker-compose.prod.yaml stop app
+sudo docker compose -f docker/docker-compose.prod.yaml exec db-backup pg_restore --clean --if-exists -d gym /backups/gym-AAAA-MM-JJ.dump
+sudo docker compose -f docker/docker-compose.prod.yaml start app
+```
+
+Restaurer le disque entier : console Oracle › Block Storage › *Boot Volume Backups* › *Create Boot Volume*, puis créer une instance à partir de ce volume.
+
+Pour une copie **hors d'Oracle**, exporter aussi de temps en temps depuis Paramètres › Données (section 5 bis) et garder l'archive chez soi.
 
 ## 4. Comptes par défaut
 

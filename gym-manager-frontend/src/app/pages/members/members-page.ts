@@ -44,7 +44,7 @@ export const PREVIEW_DELAY_MS = 300;
 export const PREVIEW_ID = 'member-preview';
 
 /** Right of the ID, then left, then below, then above: the card always stays in the viewport. */
-const PREVIEW_POSITIONS: ConnectedPosition[] = [
+export const PREVIEW_POSITIONS: ConnectedPosition[] = [
   { originX: 'end', originY: 'center', overlayX: 'start', overlayY: 'center', offsetX: 10 },
   { originX: 'start', originY: 'center', overlayX: 'end', overlayY: 'center', offsetX: -10 },
   { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 8 },

@@ -107,8 +107,13 @@ export interface SalaryPaymentView {
   createdAt: string; createdBy: string; cancelled: boolean; cancelledAt: string | null; cancelledBy: string | null; cancelReason: string | null;
 }
 
+/**
+ * {@code due} = {@code salary} + {@code bonus}; a month is paid in one go. {@code revenue}: cashed this month on the
+ * sports the staff member coaches, null when they coach none. {@code paidOn}: date of the month's payment, null while unpaid.
+ */
 export interface PayrollRow {
-  staff: StaffView; due: number; paid: number; balance: number; status: PaymentStatus;
+  staff: StaffView; salary: number; bonus: number; bonusNote: string | null; revenue: number | null;
+  due: number; paid: number; balance: number; status: PaymentStatus; paidOn: string | null;
   detail: SalaryDetail; payments: SalaryPaymentView[];
 }
 
@@ -141,6 +146,8 @@ export interface StaffView {
   id: number; code: string; lastName: string; firstName: string; name: string; phone: string;
   functionId: number; function: FunctionView | null; sportIds: number[]; sports: SportRef[];
   payMode: PayMode; fixedSalary: number | null; active: boolean; salary: number; salaryDetail: SalaryDetail;
+  /** Distinct active members with a paid or partial subscription in the coached sports; null when coaching none. */
+  activeMembers: number | null;
 }
 
 export interface StaffList { rows: StaffView[]; payroll: number; activeCount: number; }

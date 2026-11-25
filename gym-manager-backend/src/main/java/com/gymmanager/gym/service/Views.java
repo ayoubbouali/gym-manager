@@ -102,7 +102,8 @@ public final class Views {
 
     public record StaffView(Long id, String code, String lastName, String firstName, String name, String phone,
                             Long functionId, FunctionView function, List<Long> sportIds, List<SportRef> sports,
-                            PayMode payMode, BigDecimal fixedSalary, boolean active, BigDecimal salary, SalaryDetail salaryDetail) {
+                            PayMode payMode, BigDecimal fixedSalary, boolean active, BigDecimal salary, SalaryDetail salaryDetail,
+                            Integer activeMembers) {
     }
 
     public record ActivityView(Long id, String code, String name, String description, BigDecimal price,

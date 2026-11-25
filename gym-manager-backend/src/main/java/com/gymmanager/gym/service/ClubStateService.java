@@ -203,9 +203,13 @@ public class ClubStateService {
             SalaryComputation sc = salary(s.getId(), s.getPayMode(), s.getFixedSalary(), members, subsByMember, coachesBySport,
                     sportNames, packNames, cfg, today);
             List<Long> coached = sportsByStaff.getOrDefault(s.getId(), List.of());
+            // distinct members: one enrolled in two coached sports counts once; null when the staff member coaches nothing
+            Integer enrolled = coached.isEmpty() ? null : (int) members.stream()
+                    .filter(m -> m.activeMember() && m.paymentStatus() != Rules.PaymentStatus.IMPAYE)
+                    .filter(m -> m.sportIds().stream().anyMatch(coached::contains)).count();
             return new StaffView(s.getId(), s.getCode(), s.getLastName(), s.getFirstName(), staffName(s), s.getPhone(),
                     s.getFunctionId(), fnById.get(s.getFunctionId()), coached, coached.stream().map(sportRef).toList(),
-                    s.getPayMode(), s.getFixedSalary(), s.isActive(), sc.amount(), sc.detail());
+                    s.getPayMode(), s.getFixedSalary(), s.isActive(), sc.amount(), sc.detail(), enrolled);
         }).toList();
 
         List<ActivityView> activities = activityRepo.findAll().stream()

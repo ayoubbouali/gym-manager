@@ -229,8 +229,7 @@ public class DemoDataSeeder implements ApplicationRunner {
 
         // October 2026 payroll already paid to the fixed-salary staff.
         for (String n : List.of("Bouzid", "Moujahid", "Errami", "Tahiri", "Fadili")) {
-            BigDecimal amount = new BigDecimal(Arrays.stream(people).filter(p -> p[0].equals(n)).findFirst().orElseThrow()[5]);
-            payroll.pay(new SalaryPaymentRequest(st.get(n), "2026-10", amount, PaymentMethod.VIREMENT, d("31/10/2026"), ""), "admin");
+            payroll.pay(new SalaryPaymentRequest(st.get(n), "2026-10", PaymentMethod.VIREMENT, d("31/10/2026"), ""), "admin");
         }
 
         // Users (password change forced at first login)

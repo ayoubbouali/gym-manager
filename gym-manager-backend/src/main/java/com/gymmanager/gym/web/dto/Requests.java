@@ -90,7 +90,12 @@ public final class Requests {
                                BigDecimal paymentAmount, PaymentMethod paymentMethod, LocalDate paidOn, String note) {
     }
 
-    public record SalaryPaymentRequest(Long staffId, String period, BigDecimal amount, PaymentMethod method, LocalDate paidOn, String note) {
+    /** The amount is not sent: the month is paid in one go, salary + bonus, computed by the server. */
+    public record SalaryPaymentRequest(Long staffId, String period, PaymentMethod method, LocalDate paidOn, String note) {
+    }
+
+    /** {@code amount} null removes the bonus of the month. */
+    public record SalaryBonusRequest(Long staffId, String period, BigDecimal amount, String note) {
     }
 
     public record LoginRequest(String username, String password) {

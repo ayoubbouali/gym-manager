@@ -87,6 +87,11 @@ export class ApiService {
   payrollStats = (from?: string, to?: string, staffId?: number | null) =>
     this.get<M.PayrollStats>('/payroll/stats', { ...(from && to ? { from, to } : {}), ...(staffId ? { staffId: String(staffId) } : {}) });
   salaryHistory = (staffId: number) => this.get<M.SalaryPaymentView[]>(`/payroll/staff/${staffId}/history`);
+  /** {@code amount} null removes the bonus of the month. */
+  salaryBonus = (staffId: number, period: string, amount: number | null, note = '') =>
+    this.put<M.PayrollRow>('/payroll/bonus', { staffId, period, amount, note });
+  /** Cancels a paid month: its pay slips and bonus are deleted. */
+  resetPayrollMonth = (staffId: number, period: string) => this.delete(`/payroll/staff/${staffId}/months/${period}`);
   users = () => this.get<M.User[]>('/users');
   roles = () => this.get<M.UserRoleView[]>('/roles');
 }

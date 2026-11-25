@@ -1,6 +1,7 @@
 package com.gymmanager.gym.security;
 
 import com.gymmanager.gym.common.ApiExceptionHandler;
+import com.gymmanager.gym.domain.Permission;
 import com.gymmanager.gym.repository.AppUserRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,6 +17,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import tools.jackson.databind.json.JsonMapper;
@@ -23,22 +25,26 @@ import tools.jackson.databind.json.JsonMapper;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Roles are enforced on the server for every API route:
- * - ADMIN: everything;
- * - ACCUEIL: read everything except staff (salaries), payroll, statistics, settings, users and roles;
- *   write members (list + card, renewals), payments and activity registrations; correcting or
- *   cancelling or deleting a payment is ADMIN only.
+ * The permissions of the user's role are enforced on the server for every API route:
+ * - the APIs proper to a page (personnel, paie, statistiques, paramètres) need that page;
+ * - the shared reads (members, packs, sports, payments…) and recording members, renewals, payments and
+ *   registrations are open to any signed-in user, since several pages use them;
+ * - editing the referentials needs EDIT_REFERENTIALS; correcting, cancelling or deleting a payment, or
+ *   deleting a period, needs MANAGE_PAYMENTS; any other write needs SETTINGS.
  * CSRF: the session cookie is SameSite=Strict and HttpOnly, and the API only accepts JSON/multipart.
  */
 @Configuration
 public class SecurityConfig {
 
-    public static final String ADMIN = "ADMIN";
+    private static String a(Permission p) {
+        return p.authority();
+    }
 
     @Bean
-    SecurityFilterChain api(HttpSecurity http, SecurityContextRepository contextRepository) throws Exception {
+    SecurityFilterChain api(HttpSecurity http, SecurityContextRepository contextRepository, AppUserRepository users) throws Exception {
         JsonMapper json = JsonMapper.builder().build();
         http
+                .addFilterBefore(new PermissionRefreshFilter(users, contextRepository), AuthorizationFilter.class)
                 .csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -49,18 +55,25 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/api/public/**", "/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/**").authenticated()
-                        // ADMIN only, including reads
-                        .requestMatchers("/api/staff/**", "/api/stats/**", "/api/settings/**", "/api/users/**", "/api/roles/**", "/api/functions/**", "/api/data/**", "/api/admin/**").hasRole(ADMIN)
-                        // payments: ACCUEIL records them; correcting / cancelling / deleting is ADMIN only
-                        .requestMatchers(HttpMethod.PUT, "/api/payments/**").hasRole(ADMIN)
-                        .requestMatchers(HttpMethod.DELETE, "/api/payments/**").hasRole(ADMIN)
-                        .requestMatchers("/api/payments/*/cancel", "/api/payroll/**").hasRole(ADMIN)
+                        // APIs proper to a page, including reads; the staff page lists the functions
+                        .requestMatchers(HttpMethod.GET, "/api/functions/**").hasAnyAuthority(a(Permission.STAFF), a(Permission.SETTINGS))
+                        .requestMatchers(HttpMethod.GET, "/api/payroll/stats").hasAnyAuthority(a(Permission.PAYROLL), a(Permission.STATS))
+                        .requestMatchers("/api/staff/**").hasAuthority(a(Permission.STAFF))
+                        .requestMatchers("/api/payroll/**").hasAuthority(a(Permission.PAYROLL))
+                        .requestMatchers("/api/stats/**").hasAuthority(a(Permission.STATS))
+                        .requestMatchers("/api/settings/**", "/api/users/**", "/api/roles/**", "/api/functions/**", "/api/data/**", "/api/admin/**")
+                        .hasAuthority(a(Permission.SETTINGS))
+                        // payments: recording one is open; correcting / cancelling / deleting is not
+                        .requestMatchers(HttpMethod.PUT, "/api/payments/**").hasAuthority(a(Permission.MANAGE_PAYMENTS))
+                        .requestMatchers(HttpMethod.DELETE, "/api/payments/**", "/api/subscriptions/**").hasAuthority(a(Permission.MANAGE_PAYMENTS))
+                        .requestMatchers("/api/payments/*/cancel").hasAuthority(a(Permission.MANAGE_PAYMENTS))
                         .requestMatchers(HttpMethod.POST, "/api/payments").authenticated()
-                        // ACCUEIL may write members (incl. renewals) and registrations
                         .requestMatchers("/api/members/**", "/api/registrations/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/**").authenticated()
-                        // any other write on the API: ADMIN
-                        .requestMatchers("/api/**").hasRole(ADMIN)
+                        .requestMatchers("/api/packs/**", "/api/discounts/**", "/api/durations/**", "/api/sports/**", "/api/activities/**")
+                        .hasAuthority(a(Permission.EDIT_REFERENTIALS))
+                        // any other write on the API
+                        .requestMatchers("/api/**").hasAuthority(a(Permission.SETTINGS))
                         // Angular application (static files)
                         .anyRequest().permitAll())
                 .exceptionHandling(e -> e
@@ -92,7 +105,7 @@ public class SecurityConfig {
     @Bean
     UserDetailsService userDetailsService(AppUserRepository users) {
         return username -> users.findByUsernameIgnoreCase(username)
-                .map(u -> User.withUsername(u.getUsername()).password(u.getPasswordHash()).roles(u.getRole().name())
+                .map(u -> User.withUsername(u.getUsername()).password(u.getPasswordHash()).authorities(UserService.authorities(u).toArray(String[]::new))
                         .disabled(!u.isActive()).build())
                 .orElseThrow(() -> new UsernameNotFoundException(username));
     }

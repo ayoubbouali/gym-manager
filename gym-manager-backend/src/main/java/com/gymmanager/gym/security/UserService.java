@@ -4,7 +4,7 @@ import com.gymmanager.gym.common.ApiException;
 import com.gymmanager.gym.common.Check;
 import com.gymmanager.gym.common.FileStorage;
 import com.gymmanager.gym.domain.AppUser;
-import com.gymmanager.gym.domain.Role;
+import com.gymmanager.gym.domain.Permission;
 import com.gymmanager.gym.domain.UserRole;
 import com.gymmanager.gym.repository.AppUserRepository;
 import com.gymmanager.gym.repository.UserRoleRepository;
@@ -20,9 +20,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,17 +37,29 @@ public class UserService {
     private final SettingsService settings;
     private final FileStorage files;
 
-    /** {@code role}: access level (ADMIN / ACCUEIL); {@code roleName}: the club's name for the user's role. */
-    public record UserView(Long id, String username, Role role, boolean active, boolean mustChangePassword, String email,
-                           Long roleId, String roleName, String phone, boolean hasPhoto) {
+    /** {@code permissions}: what the user's role grants, enforced by SecurityConfig. */
+    public record UserView(Long id, String username, Set<Permission> permissions, boolean active, boolean mustChangePassword,
+                           String email, Long roleId, String roleName, String phone, boolean hasPhoto) {
         static UserView of(AppUser u) {
-            return new UserView(u.getId(), u.getUsername(), u.getRole(), u.isActive(), u.isMustChangePassword(), u.getEmail(),
-                    u.getUserRole().getId(), u.getUserRole().getName(), u.getPhone(), u.getPhoto() != null);
+            return new UserView(u.getId(), u.getUsername(), sorted(u.getUserRole().getPermissions()), u.isActive(),
+                    u.isMustChangePassword(), u.getEmail(), u.getUserRole().getId(), u.getUserRole().getName(), u.getPhone(),
+                    u.getPhoto() != null);
         }
     }
 
-    public record RoleView(Long id, String name, Role accessLevel, long userCount) {
+    public record RoleView(Long id, String name, Set<Permission> permissions, long userCount) {
     }
+
+    private static Set<Permission> sorted(Set<Permission> p) {
+        return p.isEmpty() ? EnumSet.noneOf(Permission.class) : EnumSet.copyOf(p);
+    }
+
+    /** Spring Security authorities of an account: one per permission of its role. */
+    public static Set<String> authorities(AppUser u) {
+        return u.getUserRole().getPermissions().stream().map(Permission::authority).collect(Collectors.toSet());
+    }
+
+    private static final String LAST_SETTINGS = "Il doit rester au moins un utilisateur actif ayant accès aux Paramètres.";
 
     private static final Pattern EMAIL = Pattern.compile("[^\\s@]+@[^\\s@]+\\.[^\\s@]+");
 
@@ -86,12 +101,14 @@ public class UserService {
     public UserView update(Long id, UserUpdateRequest r, String currentUsername) {
         AppUser u = users.findById(id).orElseThrow(() -> ApiException.notFound("Utilisateur introuvable."));
         UserRole userRole = role(r.roleId(), r.role(), u.getUserRole());
-        Role role = userRole.getAccessLevel();
+        boolean settings = userRole.grants(Permission.SETTINGS);
         boolean active = r.active() == null ? u.isActive() : r.active();
         boolean self = u.getUsername().equalsIgnoreCase(currentUsername);
-        if (self && (!active || role != Role.ADMIN)) throw ApiException.badRequest("Vous ne pouvez pas désactiver ni rétrograder votre propre compte.");
-        boolean losesAdmin = u.getRole() == Role.ADMIN && u.isActive() && (role != Role.ADMIN || !active);
-        if (losesAdmin && users.countByUserRoleAccessLevelAndActiveTrue(Role.ADMIN) <= 1) throw ApiException.badRequest("Il doit rester au moins un administrateur actif.");
+        if (self && (!active || !settings)) {
+            throw ApiException.badRequest("Vous ne pouvez pas désactiver votre propre compte ni lui retirer l'accès aux Paramètres.");
+        }
+        boolean losesSettings = u.can(Permission.SETTINGS) && u.isActive() && (!settings || !active);
+        if (losesSettings && users.countActiveWith(Permission.SETTINGS) <= 1) throw ApiException.badRequest(LAST_SETTINGS);
         String email = r.email() == null ? u.getEmail() : uniqueEmail(email(r.email()), u);
         String phone = r.phone() == null ? u.getPhone() : phone(r.phone(), u.getPhone(), r.phoneCountry());
         u.setUserRole(userRole);
@@ -108,13 +125,11 @@ public class UserService {
         return UserView.of(u);
     }
 
-    /** Explicit role id, else the first role of the given access level, else {@code current}. */
-    private UserRole role(Long roleId, Role level, UserRole current) {
+    /** Explicit role id, else the role of that name, else {@code current}. */
+    private UserRole role(Long roleId, String name, UserRole current) {
         if (roleId != null) return roles.findById(roleId).orElseThrow(() -> ApiException.invalid("roleId", "Rôle introuvable."));
-        if (level != null) {
-            if (current != null && current.getAccessLevel() == level) return current;
-            return roles.findFirstByAccessLevelOrderByIdAsc(level)
-                    .orElseThrow(() -> ApiException.invalid("roleId", "Aucun rôle n'a le niveau d'accès " + level + "."));
+        if (name != null && !name.isBlank()) {
+            return roles.findByNameIgnoreCase(name.trim()).orElseThrow(() -> ApiException.invalid("roleId", "Rôle introuvable."));
         }
         if (current == null) throw ApiException.invalid("roleId", "Le champ « Rôle » est obligatoire.");
         return current;
@@ -172,7 +187,7 @@ public class UserService {
         List<AppUser> all = users.findAll();
         return roles.findAll().stream()
                 .sorted(Comparator.comparing(UserRole::getName, String.CASE_INSENSITIVE_ORDER))
-                .map(r -> new RoleView(r.getId(), r.getName(), r.getAccessLevel(),
+                .map(r -> new RoleView(r.getId(), r.getName(), sorted(r.getPermissions()),
                         all.stream().filter(u -> u.getUserRole().getId().equals(r.getId())).count()))
                 .toList();
     }
@@ -181,22 +196,24 @@ public class UserService {
         UserRole role = id == null ? new UserRole() : roles.findById(id).orElseThrow(() -> ApiException.notFound("Rôle introuvable."));
         String name = Check.text(r.name(), "name", "Nom", 50, true);
         Check.unique(roles.findAll(), UserRole::getId, UserRole::getName, id, name, "name", "Ce rôle existe déjà.");
-        Role level = Check.required(r.accessLevel(), "accessLevel", "Niveau d'accès");
-        if (id != null && role.getAccessLevel() == Role.ADMIN && level != Role.ADMIN) {
+        Set<Permission> permissions = Check.required(r.permissions(), "permissions", "Pages et droits");
+        if (permissions.contains(null)) throw ApiException.invalid("permissions", "Droit inconnu.");
+        if (id != null && role.grants(Permission.SETTINGS) && !permissions.contains(Permission.SETTINGS)) {
             List<AppUser> holders = users.findAll().stream().filter(u -> u.getUserRole().getId().equals(id)).toList();
             if (holders.stream().anyMatch(u -> u.getUsername().equalsIgnoreCase(currentUsername))) {
-                throw ApiException.invalid("accessLevel", "Vous ne pouvez pas retirer l'accès administrateur à votre propre rôle.");
+                throw ApiException.invalid("permissions", "Vous ne pouvez pas retirer l'accès aux Paramètres à votre propre rôle.");
             }
             long activeHolders = holders.stream().filter(AppUser::isActive).count();
-            if (activeHolders > 0 && users.countByUserRoleAccessLevelAndActiveTrue(Role.ADMIN) <= activeHolders) {
-                throw ApiException.invalid("accessLevel", "Il doit rester au moins un administrateur actif.");
+            if (activeHolders > 0 && users.countActiveWith(Permission.SETTINGS) <= activeHolders) {
+                throw ApiException.invalid("permissions", LAST_SETTINGS);
             }
         }
         role.setName(name);
-        role.setAccessLevel(level);
+        role.getPermissions().clear();
+        role.getPermissions().addAll(permissions);
         UserRole saved = roles.save(role);
         long count = id == null ? 0 : users.findAll().stream().filter(u -> u.getUserRole().getId().equals(id)).count();
-        return new RoleView(saved.getId(), saved.getName(), saved.getAccessLevel(), count);
+        return new RoleView(saved.getId(), saved.getName(), sorted(saved.getPermissions()), count);
     }
 
     public void deleteRole(Long id) {

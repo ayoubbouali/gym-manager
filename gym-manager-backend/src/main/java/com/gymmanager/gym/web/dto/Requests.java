@@ -3,7 +3,7 @@ package com.gymmanager.gym.web.dto;
 import com.gymmanager.gym.domain.Insurance;
 import com.gymmanager.gym.domain.PayMode;
 import com.gymmanager.gym.domain.PaymentMethod;
-import com.gymmanager.gym.domain.Role;
+import com.gymmanager.gym.domain.Permission;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Request bodies. Validation is done in the services (French messages, field names). */
 public final class Requests {
@@ -105,22 +106,22 @@ public final class Requests {
     }
 
     /**
-     * email, phone: optional, blank = none. {@code roleId} wins over {@code role}, which picks the first role of that
-     * access level. {@code phoneCountry}: ISO country chosen in the phone field, null = the club's country.
+     * email, phone: optional, blank = none. {@code roleId} wins over {@code role}, a role name.
+     * {@code phoneCountry}: ISO country chosen in the phone field, null = the club's country.
      */
-    public record UserCreateRequest(String username, String password, Role role, String email, Long roleId,
+    public record UserCreateRequest(String username, String password, String role, String email, Long roleId,
                                     String phone, String phoneCountry) {
     }
 
     /** Null fields are left unchanged; a blank email or phone removes it. {@code roleId} wins over {@code role}. */
-    public record UserUpdateRequest(Role role, Boolean active, String email, Long roleId, String phone, String phoneCountry) {
+    public record UserUpdateRequest(String role, Boolean active, String email, Long roleId, String phone, String phoneCountry) {
     }
 
     /** Null fields are left unchanged; a blank email or phone removes it. */
     public record AccountUpdateRequest(String email, String phone, String phoneCountry) {
     }
 
-    public record UserRoleRequest(String name, Role accessLevel) {
+    public record UserRoleRequest(String name, Set<Permission> permissions) {
     }
 
     public record ForgotPasswordRequest(String username) {

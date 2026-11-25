@@ -1318,55 +1318,88 @@ class AcceptanceTest {
         send(accueil, "PUT", "/api/auth/me", Map.of("email", "accueil@club.test")).andExpect(jsonPath("$.phone").value("0661445566"));
     }
 
+    static final List<String> ALL_PERMISSIONS = List.of("MEMBERS", "MEMBER_CARD", "PACKS", "DISCOUNTS", "SPORTS", "ACTIVITIES",
+            "STAFF", "PAYROLL", "PAYMENTS", "ALERTS", "STATS", "SETTINGS", "EDIT_REFERENTIALS", "MANAGE_PAYMENTS");
+
     @Test
-    @DisplayName("Rôles : nom libre rattaché à un niveau d'accès qui fixe les droits réels")
+    @DisplayName("Rôles : nom libre et liste de pages et droits ; ADMIN et ACCUEIL gardent leurs droits d'avant")
     void customRoles() throws Exception {
-        List<String> levels = read(get(admin, "/api/roles").andExpect(status().isOk()), "$[?(@.name in ['ADMIN', 'ACCUEIL'])].accessLevel");
-        assertThat(levels).containsExactlyInAnyOrder("ADMIN", "ACCUEIL");
-        long coach = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Coach", "accessLevel", "ACCUEIL")).andExpect(status().isOk()), "$.id")).longValue();
-        send(admin, "POST", "/api/roles", Map.of("name", "coach", "accessLevel", "ADMIN"))
+        List<List<String>> adminPerms = read(get(admin, "/api/roles").andExpect(status().isOk()), "$[?(@.name=='ADMIN')].permissions");
+        assertThat(adminPerms.getFirst()).containsExactlyInAnyOrderElementsOf(ALL_PERMISSIONS);
+        List<List<String>> accueilPerms = read(get(admin, "/api/roles"), "$[?(@.name=='ACCUEIL')].permissions");
+        assertThat(accueilPerms.getFirst()).containsExactlyInAnyOrder("MEMBERS", "MEMBER_CARD", "PACKS", "DISCOUNTS", "SPORTS",
+                "ACTIVITIES", "PAYMENTS", "ALERTS");
+
+        long coach = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Coach", "permissions", List.of("ACTIVITIES", "STATS")))
+                .andExpect(status().isOk()), "$.id")).longValue();
+        send(admin, "POST", "/api/roles", Map.of("name", "coach", "permissions", List.of()))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("name"));
-        send(admin, "POST", "/api/roles", Map.of("name", "Sans niveau")).andExpect(status().isBadRequest());
+        send(admin, "POST", "/api/roles", Map.of("name", "Sans droits")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("permissions"));
 
         send(admin, "POST", "/api/users", Map.of("username", "karim", "password", "Karim2026x", "roleId", coach))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.role").value("ACCUEIL")).andExpect(jsonPath("$.roleName").value("Coach"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.roleName").value("Coach"))
+                .andExpect(jsonPath("$.permissions[0]").value("ACTIVITIES")).andExpect(jsonPath("$.permissions[1]").value("STATS"));
         MockHttpSession karim = login("karim", "Karim2026x", "Karim2027x");
+        get(karim, "/api/stats").andExpect(status().isOk());
+        get(karim, "/api/payroll/stats").andExpect(status().isOk());
         get(karim, "/api/members").andExpect(status().isOk());
-        get(karim, "/api/users").andExpect(status().isForbidden());
-        get(karim, "/api/roles").andExpect(status().isForbidden());
+        for (String url : List.of("/api/staff", "/api/payroll", "/api/users", "/api/roles", "/api/settings", "/api/functions")) {
+            get(karim, url).andExpect(status().isForbidden());
+        }
+        // seeing the Activités page does not allow editing the activities
+        send(karim, "POST", "/api/activities", Map.of("name", "Yoga")).andExpect(status().isForbidden());
 
-        // raising the role's level takes effect on the next login (the current session is closed)
-        send(admin, "PUT", "/api/roles/" + coach, Map.of("name", "Coach principal", "accessLevel", "ADMIN")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.userCount").value(1));
-        get(karim, "/api/members").andExpect(status().isUnauthorized());
-        MockHttpSession karim2 = (MockHttpSession) mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                .content(json(Map.of("username", "karim", "password", "Karim2027x")))).andExpect(status().isOk())
-                .andExpect(jsonPath("$.roleName").value("Coach principal")).andReturn().getRequest().getSession();
-        get(karim2, "/api/users").andExpect(status().isOk());
+        // a role edit applies to the next request of its holders, without a new login
+        send(admin, "PUT", "/api/roles/" + coach, Map.of("name", "Coach principal", "permissions", List.of("STAFF", "SETTINGS")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.userCount").value(1));
+        get(karim, "/api/users").andExpect(status().isOk());
+        get(karim, "/api/functions").andExpect(status().isOk());
+        get(karim, "/api/stats").andExpect(status().isForbidden());
+        get(karim, "/api/auth/me").andExpect(jsonPath("$.roleName").value("Coach principal"))
+                .andExpect(jsonPath("$.permissions.length()").value(2));
 
         // a role in use cannot be deleted; an unused one can
         send(admin, "DELETE", "/api/roles/" + coach, null).andExpect(status().isConflict());
-        long compta = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Comptable", "accessLevel", "ADMIN")), "$.id")).longValue();
+        long compta = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Comptable", "permissions", List.of("PAYROLL"))), "$.id")).longValue();
         send(admin, "DELETE", "/api/roles/" + compta, null).andExpect(status().isNoContent());
-        send(accueilSession(), "POST", "/api/roles", Map.of("name", "Pirate", "accessLevel", "ADMIN")).andExpect(status().isForbidden());
+        send(accueilSession(), "POST", "/api/roles", Map.of("name", "Pirate", "permissions", ALL_PERMISSIONS)).andExpect(status().isForbidden());
     }
 
     @Test
-    @DisplayName("Rôles : on ne peut pas retirer l'accès administrateur à son propre rôle ni au dernier administrateur actif")
+    @DisplayName("Rôles : les deux droits d'écriture se donnent indépendamment des pages")
+    void customRolesWriteRights() throws Exception {
+        long role = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Responsable",
+                "permissions", List.of("PACKS", "PAYMENTS", "EDIT_REFERENTIALS", "MANAGE_PAYMENTS"))), "$.id")).longValue();
+        send(admin, "POST", "/api/users", Map.of("username", "resp", "password", "Resp2026x", "roleId", role)).andExpect(status().isOk());
+        MockHttpSession resp = login("resp", "Resp2026x", "Resp2027x");
+        send(resp, "POST", "/api/discounts", Map.of("name", "Fidélité", "percent", 5)).andExpect(status().isOk());
+        long a001 = id("/api/members", "$[?(@.code=='A001')].id");
+        long pay = ((Number) read(send(resp, "POST", "/api/payments", Map.of("memberId", a001, "amount", 100, "method", "ESPECES")), "$.id")).longValue();
+        send(resp, "POST", "/api/payments/" + pay + "/cancel", Map.of("reason", "Erreur de saisie")).andExpect(status().isOk());
+        send(resp, "PUT", "/api/settings", Map.of("values", Map.of("club.name", "X"))).andExpect(status().isForbidden());
+        send(resp, "POST", "/api/staff", Map.of("lastName", "X")).andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Rôles : on ne peut pas retirer l'accès aux Paramètres à son propre rôle ni au dernier utilisateur qui l'a")
     void customRolesKeepAnAdmin() throws Exception {
         long adminRole = id("/api/roles", "$[?(@.name=='ADMIN')].id");
-        send(admin, "PUT", "/api/roles/" + adminRole, Map.of("name", "ADMIN", "accessLevel", "ACCUEIL"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("accessLevel"));
+        send(admin, "PUT", "/api/roles/" + adminRole, Map.of("name", "ADMIN", "permissions", List.of("MEMBERS")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("permissions"));
+        send(admin, "PUT", "/api/users/" + userId("admin"), Map.of("role", "ACCUEIL"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Vous ne pouvez pas désactiver votre propre compte ni lui retirer l'accès aux Paramètres."));
 
-        long gerant = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Gérant", "accessLevel", "ADMIN")), "$.id")).longValue();
+        long gerant = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Gérant", "permissions", ALL_PERMISSIONS)), "$.id")).longValue();
         send(admin, "PUT", "/api/users/" + userId("accueil"), Map.of("roleId", gerant)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.role").value("ADMIN"));
+                .andExpect(jsonPath("$.permissions.length()").value(ALL_PERMISSIONS.size()));
         send(admin, "PUT", "/api/users/" + userId("admin"), Map.of("roleId", gerant)).andExpect(status().isOk());
-        // admin now holds "Gérant": the old ADMIN role may be renamed and downgraded
-        send(admin, "PUT", "/api/roles/" + adminRole, Map.of("name", "Ancien admin", "accessLevel", "ACCUEIL")).andExpect(status().isOk());
+        // admin now holds "Gérant": the old ADMIN role may be renamed and lose Paramètres
+        send(admin, "PUT", "/api/roles/" + adminRole, Map.of("name", "Ancien admin", "permissions", List.of("MEMBERS"))).andExpect(status().isOk());
         // own role: refused
-        send(admin, "PUT", "/api/roles/" + gerant, Map.of("name", "Gérant", "accessLevel", "ACCUEIL"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("Vous ne pouvez pas retirer l'accès administrateur à votre propre rôle."));
+        send(admin, "PUT", "/api/roles/" + gerant, Map.of("name", "Gérant", "permissions", List.of("MEMBERS")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("Vous ne pouvez pas retirer l'accès aux Paramètres à votre propre rôle."));
     }
 
     @Test

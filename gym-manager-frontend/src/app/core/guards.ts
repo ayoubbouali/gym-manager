@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { AuthService } from './auth.service';
 import { ConfigService } from './config.service';
+import { Permission } from './models';
 
 /** Authenticated user with an up-to-date password; loads the UI configuration. */
 export const authGuard: CanActivateFn = async () => {
@@ -21,11 +22,10 @@ export const authGuard: CanActivateFn = async () => {
   return true;
 };
 
-/** Pages reserved to ADMIN (Personnel, Statistiques, Paramètres). The server enforces it too. */
-export const adminGuard: CanActivateFn = () => {
-  const auth = inject(AuthService);
-  return auth.isAdmin() ? true : inject(Router).parseUrl('/acces-refuse');
-};
+/** Page opened only by the roles granting {@code permission}. The server enforces it too. */
+export function permissionGuard(permission: Permission): CanActivateFn {
+  return () => (inject(AuthService).can(permission) ? true : inject(Router).parseUrl('/acces-refuse'));
+}
 
 export const passwordGuard: CanActivateFn = async () => {
   const user = await inject(AuthService).ensureLoaded();

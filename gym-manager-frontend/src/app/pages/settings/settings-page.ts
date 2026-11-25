@@ -22,7 +22,9 @@ import { openSimpleForm } from '../../shared/simple-form-dialog';
 import { DataImport } from './data-import';
 import { ListPicker, PickOption } from './list-picker';
 import { applyRegional } from './regional';
-import { ACCESS_LEVELS, UserFormDialog, accessLevelLabel } from './user-form-dialog';
+import { PAGE_RIGHTS, RoleFormDialog, permissionSummary } from './role-form-dialog';
+import { WRITE_RIGHTS } from '../../layout/nav';
+import { UserFormDialog } from './user-form-dialog';
 import { firstValueFrom } from 'rxjs';
 
 const VARIABLES = ['prenom', 'nom', 'jours', 'date_fin', 'club', 'pack'];
@@ -218,15 +220,15 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
               <button mat-flat-button class="mt" (click)="addUser()"><lucide-icon name="user-plus" [size]="16" /> Nouvel utilisateur</button>
 
               <h3 class="mt-lg">Rôles</h3>
-              <p class="muted small">Chaque rôle porte un nom libre et s'appuie sur un niveau d'accès qui fixe les droits :
-                <strong>Administrateur</strong> (tout) ou <strong>Accueil</strong> (adhérents, paiements, inscriptions ; ni personnel, ni paie, ni statistiques, ni paramètres).</p>
+              <p class="muted small">Chaque rôle porte un nom libre et la liste des pages du menu qu'il ouvre, plus deux droits de modification
+                (référentiels, corrections de paiements). Le serveur refuse tout ce qui n'est pas coché.</p>
               <table class="table compact max-640">
-                <thead><tr><th>Rôle</th><th>Niveau d'accès</th><th>Utilisateurs</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <thead><tr><th>Rôle</th><th>Pages et droits</th><th>Utilisateurs</th><th><span class="sr-only">Actions</span></th></tr></thead>
                 <tbody>
                   @for (r of roles(); track r.id) {
                     <tr>
                       <td class="strong">{{ r.name }}</td>
-                      <td><span class="badge" [class.info]="r.accessLevel === 'ADMIN'" [class.warn]="r.accessLevel !== 'ADMIN'">{{ levelLabel(r.accessLevel) }}</span></td>
+                      <td><span [matTooltip]="permissionList(r)">{{ summary(r.permissions) }}</span></td>
                       <td>{{ r.userCount }}</td>
                       <td class="actions">
                         <button class="icon-btn" (click)="editRole(r)" matTooltip="Modifier" [attr.aria-label]="'Modifier le rôle ' + r.name"><lucide-icon name="pencil" [size]="16" /></button>
@@ -258,7 +260,7 @@ export class SettingsPage {
   functions = signal<FunctionView[]>([]);
   users = signal<User[]>([]);
   roles = signal<UserRoleView[]>([]);
-  levelLabel = accessLevelLabel;
+  summary = permissionSummary;
   tab = signal(0);
   busy = signal(false);
   fieldError = signal<{ field?: string; message: string } | null>(null);
@@ -458,17 +460,10 @@ export class SettingsPage {
 
   // ---------------------------------------------------------------- roles
 
+  permissionList = permissionList;
+
   async editRole(r?: UserRoleView): Promise<void> {
-    const ok = await openSimpleForm(this.dialog, {
-      title: r ? `Modifier le rôle « ${r.name} »` : 'Nouveau rôle',
-      fields: [
-        { key: 'name', label: 'Nom du rôle', required: true, hint: 'Exemples : Coach, Comptable, Gérant.' },
-        { key: 'accessLevel', label: "Niveau d'accès", type: 'select', required: true, options: ACCESS_LEVELS.map((l) => ({ ...l })),
-          hint: r?.userCount ? 'Un changement de niveau reconnecte les utilisateurs de ce rôle.' : undefined },
-      ],
-      value: { name: r?.name ?? '', accessLevel: r?.accessLevel ?? 'ACCUEIL' },
-      submit: (v) => this.api.save('roles', r?.id, v),
-    });
+    const ok = await firstValueFrom(this.dialog.open(RoleFormDialog, { data: { role: r }, width: '460px', maxWidth: '96vw' }).afterClosed());
     if (ok) {
       this.notify.success(r ? 'Rôle enregistré.' : 'Rôle créé.');
       this.loadUsers();
@@ -505,7 +500,7 @@ export class SettingsPage {
 
   async setRole(u: User, roleId: number): Promise<void> {
     const role = this.roles().find((r) => r.id === roleId);
-    if (!role || !(await this.confirm.confirm({ title: `Passer ${u.username} en ${role.name} (${accessLevelLabel(role.accessLevel)}) ?`, confirmLabel: 'Confirmer' }))) {
+    if (!role || !(await this.confirm.confirm({ title: `Passer ${u.username} en ${role.name} ?`, message: permissionList(role), confirmLabel: 'Confirmer' }))) {
       this.loadUsers();
       return;
     }
@@ -540,4 +535,10 @@ export class SettingsPage {
       this.loadUsers();
     }
   }
+}
+
+/** Labels of what a role grants, in menu order. */
+function permissionList(r: UserRoleView): string {
+  const labels = [...PAGE_RIGHTS, ...WRITE_RIGHTS].filter((x) => r.permissions.includes(x.permission)).map((x) => x.label);
+  return ['Accueil', ...labels].join(', ');
 }

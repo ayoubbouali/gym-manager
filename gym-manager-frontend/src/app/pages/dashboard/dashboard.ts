@@ -6,7 +6,7 @@ import { AuthService } from '../../core/auth.service';
 import { FrDateTimePipe, MoneyPipe } from '../../core/format';
 import { Dashboard } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
-import { NAV } from '../../layout/nav';
+import { visibleNav } from '../../layout/nav';
 import { SportChip } from '../../shared/badges';
 
 @Component({
@@ -96,10 +96,9 @@ export class DashboardPage {
   data = signal<Dashboard | null>(null);
   max = computed(() => Math.max(0, ...(this.data()?.bySport ?? []).map((s) => s.count)));
   shortcuts = computed(() => {
-    const admin = this.auth.isAdmin();
-    return NAV.filter((g) => g.label !== null || g.items[0].path !== '/')
-      .map((g) => ({ label: g.label ?? 'Paramètres', items: g.items.filter((i) => admin || !i.adminOnly) }))
-      .filter((g) => g.items.length);
+    return visibleNav((p) => this.auth.can(p))
+      .filter((g) => g.label !== null || g.items[0].path !== '/')
+      .map((g) => ({ label: g.label ?? 'Paramètres', items: g.items }));
   });
 
   constructor() {

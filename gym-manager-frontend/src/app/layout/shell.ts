@@ -7,7 +7,7 @@ import { LucideAngularModule } from 'lucide-angular';
 import { filter, map } from 'rxjs';
 import { AuthService } from '../core/auth.service';
 import { ConfigService } from '../core/config.service';
-import { NAV } from './nav';
+import { visibleNav } from './nav';
 
 @Component({
   selector: 'app-shell',
@@ -50,7 +50,7 @@ import { NAV } from './nav';
               <span class="avatar sm">{{ (auth.user()?.username ?? '?').slice(0, 1).toUpperCase() }}</span>
             }
             <span class="user-name">{{ auth.user()?.username }}</span>
-            <span class="badge" [class.info]="auth.isAdmin()" [class.warn]="!auth.isAdmin()">{{ auth.user()?.roleName }}</span>
+            <span class="badge info">{{ auth.user()?.roleName }}</span>
           </button>
           <mat-menu #userMenu="matMenu" xPosition="before">
             <button mat-menu-item routerLink="/mon-compte"><lucide-icon name="user-round" [size]="16" /> Mon compte</button>
@@ -76,8 +76,7 @@ export class Shell {
   dark = signal(readTheme() === 'dark');
 
   nav = computed(() => {
-    const admin = this.auth.isAdmin();
-    return NAV.map((g) => ({ ...g, items: g.items.filter((i) => admin || !i.adminOnly) })).filter((g) => g.items.length);
+    return visibleNav((p) => this.auth.can(p));
   });
 
   title = toSignal(

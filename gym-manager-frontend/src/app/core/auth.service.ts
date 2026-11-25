@@ -2,7 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { ApiService } from './api.service';
 import { ConfigService } from './config.service';
-import { User } from './models';
+import { Permission, User } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -11,7 +11,10 @@ export class AuthService {
   private config = inject(ConfigService);
 
   readonly user = signal<User | null>(null);
-  readonly isAdmin = computed(() => this.user()?.role === 'ADMIN');
+  /** Reactive: reads the user signal. The server enforces the same permissions. */
+  can(p: Permission): boolean {
+    return this.user()?.permissions.includes(p) ?? false;
+  }
   private checked = false;
 
   /** Restores the session once (on page load). */

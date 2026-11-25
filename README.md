@@ -136,7 +136,7 @@ Avec Docker, mettre ces variables dans `docker/.env` (fichier à ne pas versionn
 
 **Exporter la base** télécharge une sauvegarde complète `gym-manager-AAAA-MM-JJ.zip` : `data.json` (toutes les tables des données du club et les paramètres) et `uploads/` (photos des adhérents et logo du club). Les comptes utilisateurs ne sont pas exportés.
 
-**Importer une sauvegarde** remplace **toutes les données actuelles** par celles du fichier, après avoir tapé `SUPPRIMER`, en une seule transaction (tout ou rien) : en cas d'erreur, rien n'est modifié. Les comptes utilisateurs sont conservés, l'ADMIN qui importe garde donc son accès. Une sauvegarde produite par une autre version du schéma de base est refusée, avec un message qui nomme les deux versions. L'archive est limitée à 100 Mo.
+**Importer une sauvegarde** remplace **toutes les données actuelles** par celles du fichier, après avoir tapé `SUPPRIMER`, en une seule transaction (tout ou rien) : en cas d'erreur, rien n'est modifié. Les comptes utilisateurs sont conservés, l'ADMIN qui importe garde donc son accès. Une sauvegarde produite par une version **plus ancienne** du schéma est acceptée si les tables sauvegardées n'ont pas changé depuis (mêmes colonnes) ; sinon, comme une sauvegarde d'une version plus récente ou inconnue, elle est refusée avec un message qui nomme les deux versions. L'archive est limitée à 100 Mo.
 
 **Réinitialiser les données** : efface adhérents, paiements, sports, personnel, packs, remises, durées, activités et paie, et remet les numéros à zéro, après avoir tapé `SUPPRIMER`. Les comptes, les paramètres et le logo sont conservés.
 

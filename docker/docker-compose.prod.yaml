@@ -1,7 +1,7 @@
-# Production: PostgreSQL + application + Caddy (HTTPS behind Cloudflare). See README, section 3 bis.
+# Production: PostgreSQL + application + Cloudflare Tunnel. See README, section 3 bis.
 #   docker compose -f docker/docker-compose.prod.yaml up -d --build
-# Requires docker/.env (DB_PASSWORD, APP_DOMAIN) and the Cloudflare origin certificate in docker/certs/.
-# Only Caddy publishes a port: PostgreSQL and the application stay on the internal network.
+# Requires docker/.env (DB_PASSWORD, TUNNEL_TOKEN).
+# No published port: cloudflared opens an outbound connection to Cloudflare, which serves HTTPS.
 
 name: gymmanager-prod
 
@@ -38,29 +38,23 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       BREVO_API_KEY: ${BREVO_API_KEY:-}
       MAIL_FROM: ${MAIL_FROM:-}
-      # Trust X-Forwarded-For / X-Forwarded-Proto from Caddy: real client IP for the password reset rate limit,
-      # and secure session cookie.
+      # Requests only arrive through cloudflared: take the client IP from CF-Connecting-IP (password reset
+      # rate limit) and the scheme from X-Forwarded-Proto (secure session cookie).
       SERVER_FORWARD_HEADERS_STRATEGY: native
+      SERVER_TOMCAT_REMOTEIP_REMOTE_IP_HEADER: CF-Connecting-IP
     volumes:
       - gym-files:/data   # uploaded photos and logo
 
-  caddy:
-    image: caddy:2
+  cloudflared:
+    image: cloudflare/cloudflared:latest
     restart: unless-stopped
     depends_on:
       - app
+    # Public hostnames (club-ali-sport.com -> http://app:8090) are configured on the tunnel in Cloudflare.
+    command: tunnel --no-autoupdate run
     environment:
-      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN must be set in docker/.env}
-    ports:
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./certs:/etc/caddy/certs:ro
-      - caddy-data:/data
-      - caddy-config:/config
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN must be set in docker/.env}
 
 volumes:
   gym-db:
   gym-files:
-  caddy-data:
-  caddy-config:

@@ -62,4 +62,3 @@ _bmad-output/
 
 ### Secrets (DB password, Brevo key, Cloudflare origin certificate) ###
 .env
-docker/certs/

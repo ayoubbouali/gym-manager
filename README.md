@@ -66,20 +66,20 @@ mvn clean verify                                                    # tous les t
 
 Variables utiles : `PORT`, `DATA_DIR` (dossier des fichiers téléversés), `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, et `BREVO_API_KEY` / `MAIL_FROM` pour l'envoi des e-mails (section 4 bis).
 
-## 3 bis. Mise en production (https://gym.ali-sport.com)
+## 3 bis. Mise en production (https://gym.club-ali-sport.com)
 
 Architecture : un VPS fait tourner `docker/docker-compose.prod.yaml` (PostgreSQL, application, **Caddy**). Cloudflare est devant : DNS, HTTPS côté visiteurs, protection. Seul Caddy publie un port (443) ; PostgreSQL et l'application ne sont pas joignables depuis Internet. Chaque push sur `develop` est déployé par `.github/workflows/deploy.yml`.
 
 ### Mise en place (une seule fois)
 
-1. **Domaine** : dans Cloudflare › *Domain Registration*, `ali-sport.com` doit être *Active*.
+1. **Domaine** : dans Cloudflare › *Domain Registration*, `club-ali-sport.com` doit être *Active*.
 2. **VPS** : Ubuntu, **4 Go de RAM** conseillés (le build Maven + Angular se fait sur le serveur ; avec 2 Go, ajouter un swap de 2 Go). Installer Docker et git, puis ouvrir uniquement les ports **22** et **443** (`ufw allow 22,443/tcp`).
 3. **Code** : cloner le dépôt sur le serveur, par exemple dans `/opt/gym-manager`. Si le dépôt est privé, ajouter une *Deploy key* (lecture seule) dans GitHub › Settings › Deploy keys et cloner en SSH.
-4. **Certificat d'origine** : Cloudflare › SSL/TLS › *Origin Server* › *Create Certificate* (hôte `gym.ali-sport.com`, format PEM). Enregistrer le certificat dans `docker/certs/origin.pem` et la clé privée dans `docker/certs/origin.key` sur le serveur (`chmod 600`). Ces fichiers sont ignorés par git.
+4. **Certificat d'origine** : Cloudflare › SSL/TLS › *Origin Server* › *Create Certificate* (hôte `gym.club-ali-sport.com`, format PEM). Enregistrer le certificat dans `docker/certs/origin.pem` et la clé privée dans `docker/certs/origin.key` sur le serveur (`chmod 600`). Ces fichiers sont ignorés par git.
 5. **Secrets** : créer `docker/.env` sur le serveur (ignoré par git) :
 
    ```properties
-   APP_DOMAIN=gym.ali-sport.com
+   APP_DOMAIN=gym.club-ali-sport.com
    DB_PASSWORD=<mot de passe long et aléatoire, ex. openssl rand -base64 32>
    BREVO_API_KEY=
    MAIL_FROM=

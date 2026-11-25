@@ -45,6 +45,30 @@ services:
     volumes:
       - gym-files:/data   # uploaded photos and logo
 
+  # Daily pg_dump kept 14 days, on the server disk: covered by the weekly Oracle boot volume backup.
+  db-backup:
+    image: postgres:17
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: gym
+      PGDATABASE: gym
+      PGPASSWORD: ${DB_PASSWORD}
+    volumes:
+      - gym-backups:/backups
+    entrypoint: [ "/bin/sh", "-c" ]
+    command:
+      - |
+        while true; do
+          f=/backups/gym-$$(date +%F).dump
+          if pg_dump -Fc -f "$$f.tmp"; then mv "$$f.tmp" "$$f"; echo "backup ok: $$f"; else rm -f "$$f.tmp"; echo "backup FAILED"; fi
+          find /backups -name 'gym-*.dump' -mtime +14 -delete
+          sleep 86400
+        done
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
@@ -58,3 +82,4 @@ services:
 volumes:
   gym-db:
   gym-files:
+  gym-backups:

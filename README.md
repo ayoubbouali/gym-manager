@@ -66,6 +66,45 @@ mvn clean verify                                                    # tous les t
 
 Variables utiles : `PORT`, `DATA_DIR` (dossier des fichiers téléversés), `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, et `BREVO_API_KEY` / `MAIL_FROM` pour l'envoi des e-mails (section 4 bis).
 
+## 3 bis. Mise en production (https://gym.ali-sport.com)
+
+Architecture : un VPS fait tourner `docker/docker-compose.prod.yaml` (PostgreSQL, application, **Caddy**). Cloudflare est devant : DNS, HTTPS côté visiteurs, protection. Seul Caddy publie un port (443) ; PostgreSQL et l'application ne sont pas joignables depuis Internet. Chaque push sur `develop` est déployé par `.github/workflows/deploy.yml`.
+
+### Mise en place (une seule fois)
+
+1. **Domaine** : dans Cloudflare › *Domain Registration*, `ali-sport.com` doit être *Active*.
+2. **VPS** : Ubuntu, **4 Go de RAM** conseillés (le build Maven + Angular se fait sur le serveur ; avec 2 Go, ajouter un swap de 2 Go). Installer Docker et git, puis ouvrir uniquement les ports **22** et **443** (`ufw allow 22,443/tcp`).
+3. **Code** : cloner le dépôt sur le serveur, par exemple dans `/opt/gym-manager`. Si le dépôt est privé, ajouter une *Deploy key* (lecture seule) dans GitHub › Settings › Deploy keys et cloner en SSH.
+4. **Certificat d'origine** : Cloudflare › SSL/TLS › *Origin Server* › *Create Certificate* (hôte `gym.ali-sport.com`, format PEM). Enregistrer le certificat dans `docker/certs/origin.pem` et la clé privée dans `docker/certs/origin.key` sur le serveur (`chmod 600`). Ces fichiers sont ignorés par git.
+5. **Secrets** : créer `docker/.env` sur le serveur (ignoré par git) :
+
+   ```properties
+   APP_DOMAIN=gym.ali-sport.com
+   DB_PASSWORD=<mot de passe long et aléatoire, ex. openssl rand -base64 32>
+   BREVO_API_KEY=
+   MAIL_FROM=
+   ```
+
+6. **DNS** : Cloudflare › DNS › enregistrement `A`, nom `gym`, valeur l'IP du VPS, **proxy activé** (nuage orange). Puis SSL/TLS › mode **Full (strict)** (en mode *Flexible*, Cloudflare appellerait le port 80, fermé).
+7. **Premier démarrage** : `docker compose -f docker/docker-compose.prod.yaml up -d --build` depuis la racine du dépôt.
+8. **Sécuriser les comptes, tout de suite** : la base vide est initialisée avec les données de démonstration et les comptes `admin` / `accueil` de la section 4, joignables depuis Internet. Se connecter immédiatement en `admin` (nouveau mot de passe imposé), changer aussi celui d'`accueil` ou le désactiver, puis effacer la démo avec Paramètres › Données › **Réinitialiser les données** (section 5 bis).
+
+### Déploiement automatique
+
+Dans GitHub › Settings › *Secrets and variables* › *Actions* :
+
+| Type | Nom | Valeur |
+| --- | --- | --- |
+| Variable | `DEPLOY_HOST` | IP ou nom du VPS |
+| Variable | `DEPLOY_USER` | utilisateur SSH (membre du groupe `docker`) |
+| Variable | `DEPLOY_PATH` | dossier du dépôt sur le serveur, ex. `/opt/gym-manager` |
+| Secret | `DEPLOY_SSH_KEY` | clé privée d'une paire générée pour l'occasion (`ssh-keygen -t ed25519 -f deploy`), dont la clé publique est dans `~/.ssh/authorized_keys` du serveur |
+| Secret | `DEPLOY_KNOWN_HOSTS` | sortie de `ssh-keyscan <IP du VPS>` |
+
+Tant que `DEPLOY_HOST` n'est pas défini, le workflow est ignoré. Ensuite, chaque push sur `develop` (merge de PR compris) se connecte au serveur, se place sur le commit poussé (`git reset --hard` : ne rien modifier à la main dans le clone du serveur, hors `docker/.env` et `docker/certs/`), reconstruit l'image et redémarre l'application. Un lancement manuel est possible depuis l'onglet *Actions* (*Run workflow*).
+
+**Sauvegardes** : les données sont dans les volumes Docker `gymmanager-prod_gym-db` et `gymmanager-prod_gym-files`. Exporter régulièrement la base depuis Paramètres › Données (section 5 bis) et conserver l'archive hors du serveur.
+
 ## 4. Comptes par défaut
 
 | Identifiant | Mot de passe | Rôle |

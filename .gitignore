@@ -59,3 +59,7 @@ build/
 /_bmad/custom/*.user.toml
 _bmad-output/
 .claude/
+
+### Secrets (DB password, Brevo key, Cloudflare origin certificate) ###
+.env
+docker/certs/

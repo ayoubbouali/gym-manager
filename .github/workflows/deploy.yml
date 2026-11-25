@@ -1,5 +1,6 @@
-# Deploys every push on main to the production server (README, section 3 bis).
-# Only the repository admin can update main (repository rulesets): by a direct push or by merging a PR.
+# Deploys every push on main to the production server (README, section 3 bis), and manual runs on main.
+# Only the repository admin can update main (repository rulesets) or start a run: the first step checks it,
+# because any collaborator with write access can trigger workflow_dispatch or re-run a deployment.
 # The first run also prepares a bare Ubuntu server: Docker, clone of the repository.
 # Skipped until the DEPLOY_HOST repository variable is set.
 name: Déploiement production
@@ -7,6 +8,10 @@ name: Déploiement production
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-production
@@ -14,7 +19,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: vars.DEPLOY_HOST != ''
+    if: vars.DEPLOY_HOST != '' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -22,6 +27,17 @@ jobs:
       DEPLOY_USER: ${{ vars.DEPLOY_USER }}
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
     steps:
+      - name: Check that the repository admin started this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.triggering_actor }}
+        run: |
+          permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$ACTOR/permission" --jq .permission)
+          if [ "$permission" != admin ]; then
+            echo "::error::Deployment refused: $ACTOR is not an admin of the repository ($permission)."
+            exit 1
+          fi
+
       - name: Configure SSH
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}

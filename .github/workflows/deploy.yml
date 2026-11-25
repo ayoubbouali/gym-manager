@@ -1,5 +1,5 @@
 # Deploys every push on main to the production server (README, section 3 bis).
-# main only moves through merged pull requests (repository ruleset), so a deployment is always a merged PR.
+# Only the repository admin can update main (repository rulesets): by a direct push or by merging a PR.
 # The first run also prepares a bare Ubuntu server: Docker, clone of the repository.
 # Skipped until the DEPLOY_HOST repository variable is set.
 name: Déploiement production

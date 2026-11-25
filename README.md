@@ -93,14 +93,14 @@ Architecture : un serveur **Oracle Cloud « Always Free »** fait tourner `docke
    | Secret | `TUNNEL_TOKEN` | jeton du tunnel, étape 2 |
    | Secret / Variable | `BREVO_API_KEY` / `MAIL_FROM` | facultatifs, envoi d'e-mails (section 4 bis) |
 
-4. **Premier déploiement** : merger sur `main`, ou onglet *Actions* › *Déploiement production* › *Run workflow*. Le premier passage installe Docker, clone le dépôt dans `DEPLOY_PATH`, écrit `docker/.env` à partir des secrets et construit l'image (une dizaine de minutes). Le tunnel passe à *Healthy* dans Cloudflare et le site répond sur https://club-ali-sport.com.
+4. **Premier déploiement** : merger une PR `develop` → `main`. Le premier passage installe Docker, clone le dépôt dans `DEPLOY_PATH`, écrit `docker/.env` à partir des secrets et construit l'image (une dizaine de minutes). Le tunnel passe à *Healthy* dans Cloudflare et le site répond sur https://club-ali-sport.com.
 5. **Sécuriser les comptes, tout de suite** : la base vide est initialisée avec les données de démonstration et les comptes `admin` / `accueil` de la section 4, joignables depuis Internet. Se connecter immédiatement en `admin` (nouveau mot de passe imposé), changer aussi celui d'`accueil` ou le désactiver, puis effacer la démo avec Paramètres › Données › **Réinitialiser les données** (section 5 bis).
 
 ### Déploiement automatique
 
-Tant que `DEPLOY_HOST` n'est pas défini, le workflow est ignoré. Ensuite, chaque push sur `main` (merge de PR compris) se connecte au serveur, se place sur le commit poussé (`git reset --hard` : ne rien modifier à la main dans le clone du serveur), réécrit `docker/.env` depuis les secrets GitHub, reconstruit l'image et redémarre l'application. Un lancement manuel est possible depuis l'onglet *Actions* (*Run workflow*), sur la branche `main` uniquement.
+Tant que `DEPLOY_HOST` n'est pas défini, le workflow est ignoré. Ensuite, chaque push sur `main` (merge de PR compris) se connecte au serveur, se place sur le commit poussé (`git reset --hard` : ne rien modifier à la main dans le clone du serveur), réécrit `docker/.env` depuis les secrets GitHub, reconstruit l'image et redémarre l'application.
 
-**Branches** : `develop` est la branche d'intégration, stable pour le développement local, et reste la branche par défaut : les branches `feature/*` en partent et y reviennent par PR. `main` est la branche de déploiement, protégée : on n'y pousse jamais directement, on la met à jour par une PR `develop` → `main`, dont le merge déclenche le déploiement.
+**Branches** : `develop` est la branche d'intégration, stable pour le développement local, et reste la branche par défaut : les branches `feature/*` en partent et y reviennent par PR. `main` est la branche de déploiement, protégée par un ruleset GitHub : aucun push direct, ni suppression, ni force push ; seul le propriétaire du dépôt (rôle admin) peut merger une PR vers `main`, et ce merge est le seul déclencheur du déploiement (pas de lancement manuel).
 
 **Sauvegardes** : les données sont dans les volumes Docker `gymmanager-prod_gym-db` et `gymmanager-prod_gym-files`. Exporter régulièrement la base depuis Paramètres › Données (section 5 bis) et conserver l'archive hors du serveur.
 

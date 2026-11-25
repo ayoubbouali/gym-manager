@@ -1,4 +1,5 @@
 # Deploys every push on main to the production server (README, section 3 bis).
+# main only moves through merged pull requests (repository ruleset), so a deployment is always a merged PR.
 # The first run also prepares a bare Ubuntu server: Docker, clone of the repository.
 # Skipped until the DEPLOY_HOST repository variable is set.
 name: Déploiement production
@@ -6,7 +7,6 @@ name: Déploiement production
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
 
 concurrency:
   group: deploy-production
@@ -14,8 +14,7 @@ concurrency:
 
 jobs:
   deploy:
-    # A manual run from another branch must not deploy it.
-    if: vars.DEPLOY_HOST != '' && github.ref == 'refs/heads/main'
+    if: vars.DEPLOY_HOST != ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:

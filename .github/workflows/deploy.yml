@@ -1,12 +1,12 @@
-# Deploys every push on develop to the production server (README, section 3 bis).
+# Deploys every push on main to the production server (README, section 3 bis).
+# main only moves through merged pull requests (repository ruleset), so a deployment is always a merged PR.
 # The first run also prepares a bare Ubuntu server: Docker, clone of the repository.
 # Skipped until the DEPLOY_HOST repository variable is set.
 name: Déploiement production
 
 on:
   push:
-    branches: [ develop ]
-  workflow_dispatch:
+    branches: [ main ]
 
 concurrency:
   group: deploy-production

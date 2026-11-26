@@ -679,10 +679,11 @@ class AcceptanceTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.paidOn").value("2026-11-18")), "$.id")).longValue();
         send(admin, "POST", "/api/charges/payments", Map.of("chargeId", elec, "period", "2026-11", "amount", 850, "method", "VIREMENT"))
                 .andExpect(status().isBadRequest());
-        for (String month : List.of("2026-10", "2026-12")) {
-            send(admin, "POST", "/api/charges/payments", Map.of("chargeId", elec, "period", month, "amount", 10, "method", "ESPECES"))
-                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("period"));
-        }
+        send(admin, "POST", "/api/charges/payments", Map.of("chargeId", elec, "period", "2026-10", "amount", 10, "method", "ESPECES"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("period"));
+        // a permanent charge shows in the coming months too, still to pay
+        get(admin, "/api/charges/month?period=2027-02").andExpect(jsonPath("$.rows[0].charge.label").value("Électricité"))
+                .andExpect(jsonPath("$.rows[0].scheduled").value(false)).andExpect(jsonPath("$.toPayCount").value(1));
 
         // one-off with a known amount, paid at once; one-off with an unknown amount, paid later
         send(admin, "POST", "/api/charges", Map.of("label", "Réparation tapis", "category", "ENTRETIEN", "permanent", false,
@@ -736,6 +737,30 @@ class AcceptanceTest {
         send(admin, "DELETE", "/api/charges/payments/" + elecNov, null).andExpect(status().isNoContent());
         send(admin, "DELETE", "/api/charges/" + elec, null).andExpect(status().isNoContent());
         assertThat((List<Object>) read(get(admin, "/api/charges"), "$[*].label")).containsExactly("Ménage", "Réparation tapis");
+
+        // permanent with an amount: settled automatically every month, or for the current month only
+        send(admin, "POST", "/api/charges", Map.of("label", "Loyer", "category", "LOYER", "permanent", true, "autoPay", true, "method", "VIREMENT"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("amount"));
+        send(admin, "POST", "/api/charges", Map.of("label", "Loyer", "category", "LOYER", "permanent", true, "amount", 3000, "autoPay", true,
+                        "method", "VIREMENT"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.autoPay").value(true)).andExpect(jsonPath("$.amount").value(3000.0))
+                .andExpect(jsonPath("$.paymentCount").value(1));
+        send(admin, "POST", "/api/charges", Map.of("label", "Internet", "category", "INTERNET", "permanent", true, "amount", 400, "autoPay", false,
+                        "method", "ESPECES"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.autoPay").value(false)).andExpect(jsonPath("$.amount").doesNotExist())
+                .andExpect(jsonPath("$.totalPaid").value(400.0));
+        get(admin, "/api/charges/month?period=2027-01").andExpect(jsonPath("$.rows.length()").value(2)).andExpect(jsonPath("$.toPayCount").value(1))
+                .andExpect(jsonPath("$.rows[0].charge.label").value("Internet")).andExpect(jsonPath("$.rows[0].expected").doesNotExist())
+                .andExpect(jsonPath("$.rows[1].charge.label").value("Loyer")).andExpect(jsonPath("$.rows[1].scheduled").value(true))
+                .andExpect(jsonPath("$.rows[1].expected").value(3000.0));
+        clock.advance(Duration.ofDays(31));   // 2027-01-08: the month comes, the rent is settled
+        long rentJan = ((Number) read(get(admin, "/api/charges/month?period=2027-01").andExpect(jsonPath("$.toPayCount").value(1))
+                .andExpect(jsonPath("$.rows[1].payment.amount").value(3000.0)).andExpect(jsonPath("$.rows[1].payment.paidOn").value("2027-01-01"))
+                .andExpect(jsonPath("$.rows[1].payment.createdBy").value("automatique")), "$.rows[1].payment.id")).longValue();
+        // a payment deleted by hand is not recreated
+        send(admin, "DELETE", "/api/charges/payments/" + rentJan, null).andExpect(status().isNoContent());
+        get(admin, "/api/charges/month?period=2027-01").andExpect(jsonPath("$.toPayCount").value(2))
+                .andExpect(jsonPath("$.rows[1].payment").doesNotExist()).andExpect(jsonPath("$.rows[1].scheduled").value(false));
     }
 
     @Test

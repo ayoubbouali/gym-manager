@@ -84,7 +84,6 @@ export class ApiService {
   settings = () => this.get<M.SettingsPayload>('/settings');
   registrationStats = (from?: string, to?: string) => this.get<M.RegistrationStats>('/stats/registrations', from && to ? { from, to } : undefined);
   chargeStats = (from?: string, to?: string) => this.get<M.ChargeStats>('/stats/charges', from && to ? { from, to } : undefined);
-  charges = () => this.get<M.ChargeView[]>('/charges');
   chargeMonth = (period: string) => this.get<M.ChargeMonth>('/charges/month', { period });
   payments = (from?: string, to?: string) => this.get<M.PaymentView[]>('/payments', from && to ? { from, to } : undefined);
   payroll = (month?: string) => this.get<M.PayrollMonth>('/payroll', month ? { month } : undefined);

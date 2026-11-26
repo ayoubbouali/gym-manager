@@ -37,13 +37,13 @@ public class ChargeController {
     }
 
     @PutMapping("/{id}")
-    public ChargeView update(@PathVariable Long id, @RequestBody ChargeRequest r) {
-        return charges.update(id, r);
+    public ChargeView update(@PathVariable Long id, @RequestBody ChargeRequest r, Principal user) {
+        return charges.update(id, r, user.getName());
     }
 
     @PatchMapping("/{id}/active")
-    public ChargeView active(@PathVariable Long id, @RequestBody ActiveRequest r) {
-        return charges.setActive(id, Boolean.TRUE.equals(r.active()));
+    public ChargeView active(@PathVariable Long id, @RequestBody ActiveRequest r, Principal user) {
+        return charges.setActive(id, Boolean.TRUE.equals(r.active()), user.getName());
     }
 
     @DeleteMapping("/{id}")

@@ -23,3 +23,9 @@ databaseChangeLog:
   - include:
       file: sql/V8__role_permissions.sql
       relativeToChangelogFile: true
+  - include:
+      file: sql/V9__member_purge_dates.sql
+      relativeToChangelogFile: true
+  - include:
+      file: sql/V10__charges.sql
+      relativeToChangelogFile: true

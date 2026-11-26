@@ -31,6 +31,10 @@ public class Member {
     private String photo;
     private String notes = "";
     private boolean active = true;
+    /** Start of the automatic deletion delay of a deactivated member (RG-PURGE). */
+    private LocalDate deactivatedOn;
+    /** Start of the automatic deletion delay of a member left without any subscription period (RG-PURGE). */
+    private LocalDate noSubscriptionSince;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "member_sports", joinColumns = @JoinColumn(name = "member_id"))

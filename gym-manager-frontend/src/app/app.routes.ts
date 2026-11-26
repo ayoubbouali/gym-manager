@@ -23,6 +23,7 @@ export const routes: Routes = [
       { path: 'personnel/fiche/:code', canActivate: [can('STAFF')], loadComponent: () => import('./pages/staff/staff-card-page').then((m) => m.StaffCardPage), data: { title: 'Fiche personnel' } },
       { path: 'paiements', canActivate: [can('PAYMENTS')], loadComponent: () => import('./pages/payments/payments-page').then((m) => m.PaymentsPage), data: { title: 'Paiements' } },
       { path: 'paie', canActivate: [can('PAYROLL')], loadComponent: () => import('./pages/payroll/payroll-page').then((m) => m.PayrollPage), data: { title: 'Paie du personnel' } },
+      { path: 'charges', canActivate: [can('CHARGES')], loadComponent: () => import('./pages/charges/charges-page').then((m) => m.ChargesPage), data: { title: 'Charges' } },
       { path: 'alertes', canActivate: [can('ALERTS')], loadComponent: () => import('./pages/alerts/alerts-page').then((m) => m.AlertsPage), data: { title: 'Alertes paiements' } },
       { path: 'statistiques', canActivate: [can('STATS')], loadComponent: () => import('./pages/stats/stats-page').then((m) => m.StatsPage), data: { title: 'Statistiques' } },
       { path: 'parametres', canActivate: [can('SETTINGS')], loadComponent: () => import('./pages/settings/settings-page').then((m) => m.SettingsPage), data: { title: 'Paramètres' } },

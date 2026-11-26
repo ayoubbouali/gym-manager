@@ -27,3 +27,6 @@ app:
   data-dir: ${java.io.tmpdir}/gym-manager-test
   seed:
     enabled: true
+  member-purge:
+    # Disabled: tests call MemberPurgeService.purge() themselves.
+    cron: "-"

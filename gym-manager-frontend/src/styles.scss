@@ -44,6 +44,14 @@ html.dark { color-scheme: dark; }
   --bg: light-dark(#f4f5f8, #0d1017);
   --card: light-dark(#ffffff, #151922);
   --card-2: light-dark(#fafbfc, #1a1f2a);
+  /* Categorical chart series, fixed order (validated light and dark, adjacent pairs cyclic for pie charts). Never status colors. */
+  --series-1: light-dark(#2a78d6, #3987e5);
+  --series-2: light-dark(#eb6834, #d95926);
+  --series-3: light-dark(#1baf7a, #199e70);
+  --series-4: light-dark(#eda100, #c98500);
+  --series-5: light-dark(#e87ba4, #d55181);
+  --series-6: light-dark(#6250d6, #9085e9);
+  --series-7: light-dark(#008300, #008300);
   --hover: light-dark(#f6f7fb, #1d2230);
   --ok: light-dark(#15803d, #4ade80);
   --ok-bg: light-dark(#dcfce7, rgba(74, 222, 128, .14));

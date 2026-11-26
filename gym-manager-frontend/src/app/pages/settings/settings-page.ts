@@ -13,7 +13,8 @@ import { LucideAngularModule } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ConfigService } from '../../core/config.service';
-import { FunctionView, SettingDef, SettingsPayload, User, UserRoleView } from '../../core/models';
+import { FunctionView, PurgePreview, PurgeReason, SettingDef, SettingsPayload, User, UserRoleView } from '../../core/models';
+import { FrDatePipe } from '../../core/format';
 import { NotifyService, apiError, errorMessage } from '../../core/notify.service';
 import { ActiveBadge } from '../../shared/badges';
 import { ConfirmService } from '../../shared/confirm.service';
@@ -35,7 +36,7 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
 @Component({
   selector: 'app-settings',
   imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatRadioModule, MatSelectModule, MatSlideToggleModule,
-    MatTabsModule, MatTooltipModule, LucideAngularModule, ActiveBadge, DataImport, ListPicker, PhoneInput],
+    MatTabsModule, MatTooltipModule, LucideAngularModule, ActiveBadge, FrDatePipe, DataImport, ListPicker, PhoneInput],
   template: `
     @if (payload(); as p) {
       <section class="card no-pad">
@@ -104,6 +105,7 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                             <mat-form-field subscriptSizing="dynamic" class="w-140">
                               <input matInput [id]="d.key" type="number" [min]="d.min" [max]="d.max" [(ngModel)]="values[d.key]" />
                               @if (d.key.startsWith('alerts.')) {<span matTextSuffix>&nbsp;jours</span>}
+                              @if (d.key === 'purge.months') {<span matTextSuffix>&nbsp;mois</span>}
                             </mat-form-field>
                           }
                           @case ('secret') {
@@ -147,6 +149,29 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                       </div>
                     }
                   </div>
+                }
+                @if (g === 'purge') {
+                  <p class="muted small">Seuls les adhérents <strong>sans aucun reste à payer</strong> sont supprimés : un reste à payer les garde, quelle que soit leur ancienneté.
+                    La suppression est définitive et emporte la fiche, la photo, les abonnements et <strong>tous les paiements</strong> (le chiffre d’affaires passé baisse d’autant).
+                    Réactiver un adhérent ou lui créer un abonnement arrête son délai.</p>
+                  @if (purgePreview(); as pp) {
+                    <h3 class="section-title">Prochaine exécution (cette nuit), selon les paramètres enregistrés</h3>
+                    @if (!pp.enabled) {
+                      <p class="muted small">La suppression automatique est désactivée : rien ne sera supprimé. Avec ces réglages, elle concernerait {{ pp.members.length }} adhérent(s).</p>
+                    } @else if (pp.members.length === 0) {
+                      <p class="muted small">Aucun adhérent ne remplit aujourd’hui les conditions.</p>
+                    }
+                    @if (pp.members.length) {
+                      <table class="table compact max-640">
+                        <thead><tr><th>Code</th><th>Adhérent</th><th>Motif</th><th>Depuis le</th></tr></thead>
+                        <tbody>
+                          @for (m of pp.members; track m.id) {
+                            <tr><td class="code">{{ m.code }}</td><td>{{ m.name }}</td><td>{{ purgeReasons[m.reason] }}</td><td>{{ m.since | frDate }}</td></tr>
+                          }
+                        </tbody>
+                      </table>
+                    }
+                  }
                 }
                 @if (g === 'mail') {
                   <p class="muted small">L’envoi des e-mails passe par l’API HTTP de Brevo : le serveur, le port et la connexion SMTP sont enregistrés mais pas utilisés pour l’envoi.</p>
@@ -262,6 +287,8 @@ export class SettingsPage {
   roles = signal<UserRoleView[]>([]);
   summary = permissionSummary;
   tab = signal(0);
+  purgePreview = signal<PurgePreview | null>(null);
+  readonly purgeReasons: Record<PurgeReason, string> = { INACTIVE: 'Désactivé', EXPIRED: 'Expiré', NO_SUBSCRIPTION: 'Sans abonnement' };
   busy = signal(false);
   fieldError = signal<{ field?: string; message: string } | null>(null);
   values: Record<string, string> = {};
@@ -288,6 +315,7 @@ export class SettingsPage {
 
   private apply(p: SettingsPayload): void {
     this.payload.set(p);
+    this.loadPurgePreview();
     this.values = { ...p.values };
     this.clubPhone = { country: null, number: p.values['club.phone'] ?? '' };
     this.loadCities(this.values['regional.country']);
@@ -310,6 +338,15 @@ export class SettingsPage {
   async load(): Promise<void> {
     try {
       this.apply(await this.api.settings());
+    } catch (e) {
+      this.notify.error(e);
+    }
+  }
+
+  /** Reloaded with the settings, so it always reflects the saved values. */
+  private async loadPurgePreview(): Promise<void> {
+    try {
+      this.purgePreview.set(await this.api.get<PurgePreview>('/settings/purge-preview'));
     } catch (e) {
       this.notify.error(e);
     }

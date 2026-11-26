@@ -111,9 +111,11 @@ export class ClubStats {
   private notify = inject(NotifyService);
   private config = inject(ConfigService);
   s = signal<Stats | null>(null);
-  period = signal<Period>('LAST12');
-  from = '';
-  to = '';
+  private today = this.config.config()?.today ?? new Date().toISOString().slice(0, 10);
+  /** Default: custom period on the current month, from its first day to today. */
+  period = signal<Period>('CUSTOM');
+  from = `${this.today.slice(0, 7)}-01`;
+  to = this.today;
   month = (ym: string) => formatMonth(ym, true);
 
   private money = (v: number) => `${formatAmount(v, 0)} ${this.config.currency()}`;
@@ -133,10 +135,9 @@ export class ClubStats {
 
   setPeriod(p: Period): void {
     this.period.set(p);
-    const today = this.config.config()?.today ?? new Date().toISOString().slice(0, 10);
     if (p === 'YEAR') {
-      this.from = `${today.slice(0, 4)}-01-01`;
-      this.to = today;
+      this.from = `${this.today.slice(0, 4)}-01-01`;
+      this.to = this.today;
     }
     if (p !== 'CUSTOM') this.load();
   }
@@ -169,8 +170,8 @@ const HIDE_FIGURES_KEY = 'stats.hideFigures';
         <span class="figures-toggle-switch" aria-hidden="true"><i></i></span>
       </button>
       <mat-tab-group [selectedIndex]="tab()" (selectedIndexChange)="tab.set($event)" animationDuration="0ms" mat-stretch-tabs="false">
-        <mat-tab label="Paiements du personnel"><ng-template matTabContent><div class="stats-tab"><app-staff-pay-stats /></div></ng-template></mat-tab>
-        <mat-tab label="Paiements du club"><ng-template matTabContent><div class="stats-tab"><app-club-stats /></div></ng-template></mat-tab>
+        <mat-tab label="Suivi des salaires"><ng-template matTabContent><div class="stats-tab"><app-staff-pay-stats /></div></ng-template></mat-tab>
+        <mat-tab label="Suivi des revenus"><ng-template matTabContent><div class="stats-tab"><app-club-stats /></div></ng-template></mat-tab>
       </mat-tab-group>
     </div>
   `,

@@ -111,9 +111,10 @@ export class StaffPayStats {
   s = signal<PayrollStats | null>(null);
   staff = signal<StaffRef[]>([]);
   staffId = signal<number | null>(null);
-  period = signal<Period>('LAST12');
-  from: string | null = null;
-  to: string | null = null;
+  /** Default: custom period on the current month. */
+  period = signal<Period>('CUSTOM');
+  from: string | null = this.currentMonth;
+  to: string | null = this.currentMonth;
   month = (ym: string) => formatMonth(ym, true);
 
   private money = (v: number) => `${formatAmount(v, 0)} ${this.config.currency()}`;

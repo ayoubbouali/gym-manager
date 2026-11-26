@@ -251,7 +251,10 @@ export interface ApiError { message: string; field?: string; code?: string; }
 
 export type ChargeCategory = 'ELECTRICITE' | 'EAU' | 'INTERNET' | 'LOYER' | 'MENAGE' | 'ENTRETIEN' | 'AUTRE';
 
-/** Permanent: due every month from `startPeriod` to `endPeriod` (null while running). One-off: `period`, `amount` null while unknown. */
+/**
+ * Permanent: due every month from `startPeriod` to `endPeriod` (null while running); with `autoPay`, settled every month with
+ * `amount`. One-off: `period`, `amount` null while unknown.
+ */
 export interface ChargeView {
   id: number;
   label: string;
@@ -263,6 +266,8 @@ export interface ChargeView {
   startPeriod: string | null;
   endPeriod: string | null;
   active: boolean;
+  autoPay: boolean;
+  autoMethod: PaymentMethod | null;
   note: string;
   paymentCount: number;
   totalPaid: number;
@@ -283,12 +288,13 @@ export interface ChargePaymentView {
   updatedBy: string | null;
 }
 
-/** A charge due for a month: paid (`payment`) or to pay (`expected`: known amount of a one-off charge). */
+/** A charge due for a month: paid (`payment`) or to pay (`expected`: known amount). `scheduled`: coming month of an automatic charge. */
 export interface ChargeDue {
   charge: ChargeView;
   period: string;
   expected: number | null;
   payment: ChargePaymentView | null;
+  scheduled: boolean;
 }
 
 export interface ChargeMonth {

@@ -96,19 +96,20 @@ public final class Requests {
     public record SalaryPaymentRequest(Long staffId, String period, PaymentMethod method, LocalDate paidOn, String note) {
     }
 
-    /** {@code amount} null removes the bonus of the month. */
     /**
-     * Creates or edits a charge. {@code permanent} is ignored on edit (the type never changes). One-off only: {@code period},
-     * {@code amount} (null while unknown) and, at creation, {@code payNow} with {@code method} / {@code paidOn}.
+     * Creates or edits a charge; {@code permanent} is ignored on edit. One-off: {@code period}, {@code amount} (null while
+     * unknown) and, at creation, {@code payNow}. Permanent with an {@code amount}: settled every month if {@code autoPay},
+     * else the current month only, at creation. Payments use {@code method} / {@code paidOn}.
      */
     public record ChargeRequest(String label, ChargeCategory category, Boolean permanent, String period, BigDecimal amount,
-                                String note, Boolean payNow, PaymentMethod method, LocalDate paidOn) {
+                                String note, Boolean payNow, Boolean autoPay, PaymentMethod method, LocalDate paidOn) {
     }
 
     /** Pays a charge for a month (the month of a one-off charge is its own). */
     public record ChargePaymentRequest(Long chargeId, String period, BigDecimal amount, PaymentMethod method, LocalDate paidOn, String note) {
     }
 
+    /** {@code amount} null removes the bonus of the month. */
     public record SalaryBonusRequest(Long staffId, String period, BigDecimal amount, String note) {
     }
 

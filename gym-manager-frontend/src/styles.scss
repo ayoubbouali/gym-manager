@@ -294,6 +294,7 @@ a.kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 .link-btn { all: unset; cursor: pointer; color: var(--info); display: inline-flex; align-items: center; gap: 4px; }
 .link-btn:hover { text-decoration: underline; }
 .link-btn.danger { color: var(--ko); font-size: 12px; }
+.mat-mdc-menu-item.danger, .mat-mdc-menu-item.danger lucide-icon { color: var(--ko); }
 .pager { display: flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 13px; }
 .page-btn { border: 1px solid transparent; background: transparent; color: var(--ink); min-width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font: inherit; }
 .page-btn:hover { background: var(--neutral-bg); }

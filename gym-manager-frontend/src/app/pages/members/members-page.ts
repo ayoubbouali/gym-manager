@@ -17,8 +17,8 @@ import { LucideAngularModule } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
 import { csvNumber, exportCsv } from '../../core/csv';
-import { FrDatePipe, MoneyPipe, PAYMENT_STATUS_LABELS, SITUATION_LABELS, formatDate } from '../../core/format';
-import { MemberView, SportView } from '../../core/models';
+import { FrDatePipe, MEMBER_STATE_LABELS, MoneyPipe, PAYMENT_STATUS_LABELS, SITUATION_LABELS, formatDate } from '../../core/format';
+import { MemberState, MemberView, SportView } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ConfirmService } from '../../shared/confirm.service';
 import { DaysLeft, PaidBadge, SportChip, StateBadge } from '../../shared/badges';
@@ -93,6 +93,12 @@ export const PREVIEW_POSITIONS: ConnectedPosition[] = [
       <mat-form-field subscriptSizing="dynamic"><mat-label>Statut</mat-label>
         <mat-select [ngModel]="fStatus()" (ngModelChange)="fStatus.set($event); t.resetPage()">
           <mat-option [value]="null">Tous</mat-option><mat-option value="PAYE">Payé</mat-option><mat-option value="PARTIEL">Partiel</mat-option><mat-option value="IMPAYE">Impayé</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field subscriptSizing="dynamic"><mat-label>État</mat-label>
+        <mat-select [ngModel]="fState()" (ngModelChange)="fState.set($event); t.resetPage()">
+          <mat-option [value]="null">Tous</mat-option>
+          @for (s of states; track s.id) {<mat-option [value]="s.id">{{ s.label }}</mat-option>}
         </mat-select>
       </mat-form-field>
       <mat-form-field subscriptSizing="dynamic"><mat-label>Assurance</mat-label>
@@ -191,6 +197,8 @@ export class MembersPage {
   loaded = signal(false);
   fSport = signal<number | null>(null);
   fStatus = signal<string | null>(null);
+  fState = signal<MemberState | null>(null);
+  readonly states = Object.entries(MEMBER_STATE_LABELS).map(([id, label]) => ({ id: id as MemberState, label }));
   fInsurance = signal<string | null>(null);
   fNote = signal(false);
   readonly cols = new MemberColumns();
@@ -206,15 +214,15 @@ export class MembersPage {
     defaultSort: DEFAULT_SORT,
     isActive,
     filter: () => {
-      const [s, st, ins, note] = [this.fSport(), this.fStatus(), this.fInsurance(), this.fNote()];
-      return (m) => (!s || m.sportIds.includes(s)) && (!st || m.paymentStatus === st) && (!ins || m.insurance === ins) && (!note || hasNote(m));
+      const [s, st, state, ins, note] = [this.fSport(), this.fStatus(), this.fState(), this.fInsurance(), this.fNote()];
+      return (m) => (!s || m.sportIds.includes(s)) && (!st || m.paymentStatus === st) && (!state || m.state === state) && (!ins || m.insurance === ins) && (!note || hasNote(m));
     },
     pageSize: computed(() => this.config.pageSize()),
   });
 
   /** Search, each select and each toggle (note, inactive) count as one active filter each. */
   activeFilters = computed(() => [!!this.t.search(), this.t.showInactive(), this.fSport() !== null,
-    this.fStatus() !== null, this.fInsurance() !== null, this.fNote()].filter(Boolean).length);
+    this.fStatus() !== null, this.fState() !== null, this.fInsurance() !== null, this.fNote()].filter(Boolean).length);
   filtersAtDefault = computed(() => this.activeFilters() === 0);
 
   /** Rows under the current inactive toggle, before search and selects: the filtered count never exceeds it. */
@@ -296,6 +304,7 @@ export class MembersPage {
   resetFilters(): void {
     this.fSport.set(null);
     this.fStatus.set(null);
+    this.fState.set(null);
     this.fInsurance.set(null);
     this.fNote.set(false);
     this.t.showInactive.set(false);

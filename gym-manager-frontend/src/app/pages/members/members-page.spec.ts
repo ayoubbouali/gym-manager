@@ -90,11 +90,11 @@ describe('page Adhérents', () => {
     expect(f.nativeElement.querySelector('.count-pill-unit').textContent.trim()).toBe('adhérent');
   });
 
-  it('les filtres sont Sport, Statut, Assurance puis « Avec une note », sans Pack', async () => {
+  it('les filtres sont Sport, Statut, État, Assurance puis « Avec une note », sans Pack', async () => {
     const f = await render();
     const labels = [...f.nativeElement.querySelectorAll('.filters mat-label, .filters mat-slide-toggle')]
       .map((e) => (e as HTMLElement).textContent!.trim());
-    expect(labels).toEqual(['Sport', 'Statut', 'Assurance', 'Avec une note', 'Afficher les inactifs']);
+    expect(labels).toEqual(['Sport', 'Statut', 'État', 'Assurance', 'Avec une note', 'Afficher les inactifs']);
     expect(api.packs).not.toHaveBeenCalled();
   });
 
@@ -107,18 +107,29 @@ describe('page Adhérents', () => {
     expect(page.activeFilters()).toBe(2);
   });
 
+  it('le filtre État ne garde que les adhérents dans l’état choisi', async () => {
+    api.members.mockResolvedValue([member(1), member(2, { state: 'EXPIRED' }), member(3, { state: 'EXPIRED' })]);
+    const f = await render();
+    const page = f.componentInstance;
+    page.fState.set('EXPIRED');
+    expect(page.t.filtered().map((m) => m.id)).toEqual([2, 3]);
+    expect(page.count()).toBe('2 sur 3 adhérents');
+    expect(page.activeFilters()).toBe(1);
+    expect(page.states.map((s) => s.label)).toEqual(['Expiré', 'En attente de paiement', 'Expire bientôt', 'À jour', 'Sans abonnement']);
+  });
+
   it('Réinitialiser remet tous les filtres à l’état initial sans toucher au tri', async () => {
     const f = await render();
     const page = f.componentInstance;
     expect(page.filtersAtDefault()).toBe(true);
     page.t.toggleSort('price');
-    page.fSport.set(1); page.fStatus.set('PAYE'); page.fInsurance.set('IMPAYE'); page.fNote.set(true);
+    page.fSport.set(1); page.fStatus.set('PAYE'); page.fState.set('UP_TO_DATE'); page.fInsurance.set('IMPAYE'); page.fNote.set(true);
     page.t.showInactive.set(true); page.t.setSearch('nom'); page.t.pageIndex.set(2);
     expect(page.filtersAtDefault()).toBe(false);
 
     page.resetFilters();
 
-    expect([page.fSport(), page.fStatus(), page.fInsurance(), page.fNote()]).toEqual([null, null, null, false]);
+    expect([page.fSport(), page.fStatus(), page.fState(), page.fInsurance(), page.fNote()]).toEqual([null, null, null, null, false]);
     expect(page.t.showInactive()).toBe(false);
     expect(page.t.search()).toBe('');
     expect(page.t.pageIndex()).toBe(0);

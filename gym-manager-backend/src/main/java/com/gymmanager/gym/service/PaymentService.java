@@ -184,6 +184,7 @@ public class PaymentService {
         sub.setCreatedAt(cfg.now());
         sub.setCreatedBy(username);
         sub = subscriptions.saveAndFlush(sub);
+        m.setNoSubscriptionSince(null);
         if (r.paymentAmount() != null && r.paymentAmount().signum() > 0) {
             pay(new PaymentRequest(memberId, sub.getId(), r.paymentAmount(), r.paymentMethod(), r.paidOn(), r.note()), username);
         }
@@ -201,5 +202,9 @@ public class PaymentService {
                     + "(un paiement doit être annulé avant d'être supprimé).");
         }
         subscriptions.delete(sub);
+        subscriptions.flush();
+        if (subscriptions.findByMemberIdOrderByStartDateAscIdAsc(sub.getMemberId()).isEmpty()) {
+            members.findById(sub.getMemberId()).ifPresent(m -> m.setNoSubscriptionSince(settings.config().today()));
+        }
     }
 }

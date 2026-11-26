@@ -5,6 +5,8 @@ import com.gymmanager.gym.rules.Rules.MemberState;
 import com.gymmanager.gym.rules.Rules.MultiCoach;
 import com.gymmanager.gym.rules.Rules.PayMode;
 import com.gymmanager.gym.rules.Rules.PaymentStatus;
+import com.gymmanager.gym.rules.Rules.PurgeReason;
+import com.gymmanager.gym.rules.Rules.PurgeSettings;
 import com.gymmanager.gym.rules.Rules.Rounding;
 import com.gymmanager.gym.rules.Rules.Sale;
 import com.gymmanager.gym.rules.Rules.SalaryParams;
@@ -255,6 +257,57 @@ class RulesTest {
         void thresholdIsTheClubSetting() {
             assertThat(Rules.memberState(8, PaymentStatus.PAYE, 10)).isEqualTo(MemberState.SOON);
             assertThat(Rules.memberState(10, PaymentStatus.PAYE, 10)).isEqualTo(MemberState.UP_TO_DATE);
+        }
+    }
+
+    @Nested
+    @DisplayName("RG-PURGE")
+    class Purge {
+        static final LocalDate TODAY = d("2026-11-18");
+        static final PurgeSettings ALL = new PurgeSettings(3, true, true, true);
+
+        @ParameterizedTest(name = "depuis le {0} → supprimé : {1}")
+        @CsvSource({"2026-08-18, true", "2026-08-01, true", "2026-08-19, false", "2026-11-18, false"})
+        void threeMonthsAfterEachState(LocalDate since, boolean expected) {
+            assertThat(Rules.purgeReason(BigDecimal.ZERO, since, null, null, ALL, TODAY)).as("inactif")
+                    .isEqualTo(expected ? PurgeReason.INACTIVE : null);
+            assertThat(Rules.purgeReason(BigDecimal.ZERO, null, since, null, ALL, TODAY)).as("expiré")
+                    .isEqualTo(expected ? PurgeReason.EXPIRED : null);
+            assertThat(Rules.purgeReason(null, null, null, since, ALL, TODAY)).as("sans abonnement")
+                    .isEqualTo(expected ? PurgeReason.NO_SUBSCRIPTION : null);
+        }
+
+        @Test
+        void theDelayIsTheClubSetting() {
+            PurgeSettings oneMonth = new PurgeSettings(1, true, true, true);
+            assertThat(Rules.purgeReason(BigDecimal.ZERO, d("2026-10-18"), null, null, oneMonth, TODAY)).isEqualTo(PurgeReason.INACTIVE);
+            assertThat(Rules.purgeReason(BigDecimal.ZERO, d("2026-10-19"), null, null, oneMonth, TODAY)).isNull();
+        }
+
+        @Test
+        void aDisabledStateIsIgnored() {
+            LocalDate old = d("2025-01-01");
+            assertThat(Rules.purgeReason(BigDecimal.ZERO, old, null, null, new PurgeSettings(3, false, true, true), TODAY)).isNull();
+            assertThat(Rules.purgeReason(BigDecimal.ZERO, old, old, null, new PurgeSettings(3, false, true, true), TODAY))
+                    .isEqualTo(PurgeReason.EXPIRED);
+            assertThat(Rules.purgeReason(BigDecimal.ZERO, null, old, null, new PurgeSettings(3, true, false, true), TODAY)).isNull();
+            assertThat(Rules.purgeReason(null, null, null, old, new PurgeSettings(3, true, true, false), TODAY)).isNull();
+        }
+
+        @Test
+        void theOldestStateIsTheReason() {
+            assertThat(Rules.purgeReason(BigDecimal.ZERO, d("2026-03-01"), d("2026-01-01"), null, ALL, TODAY)).isEqualTo(PurgeReason.EXPIRED);
+        }
+
+        @Test
+        void aBalanceKeepsTheMember() {
+            LocalDate old = d("2025-01-01");
+            assertThat(Rules.purgeReason(bd("0.01"), old, old, null, ALL, TODAY)).isNull();
+        }
+
+        @Test
+        void aMemberInNoneOfTheStatesIsKept() {
+            assertThat(Rules.purgeReason(BigDecimal.ZERO, null, null, null, ALL, TODAY)).isNull();
         }
     }
 

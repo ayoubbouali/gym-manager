@@ -12,5 +12,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     void deleteByMemberIdAndCancelledTrue(Long memberId);
 
+    void deleteByMemberId(Long memberId);
+
     boolean existsBySubscriptionId(Long subscriptionId);
 }

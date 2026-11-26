@@ -77,6 +77,14 @@ public class SettingsService {
     }
 
     @Transactional(readOnly = true)
+    public PurgeConfig purge() {
+        Map<String, String> s = raw();
+        return new PurgeConfig(Boolean.parseBoolean(s.get("purge.enabled")), new Rules.PurgeSettings(Integer.parseInt(s.get("purge.months")),
+                Boolean.parseBoolean(s.get("purge.inactive")), Boolean.parseBoolean(s.get("purge.expired")),
+                Boolean.parseBoolean(s.get("purge.noSubscription"))));
+    }
+
+    @Transactional(readOnly = true)
     public MailConfig mail() {
         Map<String, String> s = raw();
         return new MailConfig(s.get("mail.from"), s.get(SettingsCatalog.MAIL_API_KEY), s.get("mail.smtp.host"),

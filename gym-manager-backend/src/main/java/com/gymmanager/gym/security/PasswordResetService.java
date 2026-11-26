@@ -6,6 +6,8 @@ import com.gymmanager.gym.rules.Rules;
 import com.gymmanager.gym.settings.SettingsCatalog;
 import com.gymmanager.gym.settings.SettingsService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.task.TaskExecutionAutoConfiguration;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -51,7 +53,9 @@ public class PasswordResetService {
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Deque<Instant>> attempts = new ConcurrentHashMap<>();
 
-    public PasswordResetService(AppUserRepository users, PasswordEncoder encoder, Clock clock, TaskExecutor executor,
+    public PasswordResetService(AppUserRepository users, PasswordEncoder encoder, Clock clock,
+                                // the scheduler enabled for the nightly purge is a TaskExecutor too
+                                @Qualifier(TaskExecutionAutoConfiguration.APPLICATION_TASK_EXECUTOR_BEAN_NAME) TaskExecutor executor,
                                 PlatformTransactionManager txManager, EmailSender emailSender,
                                 SettingsService settings) {
         this.users = users;

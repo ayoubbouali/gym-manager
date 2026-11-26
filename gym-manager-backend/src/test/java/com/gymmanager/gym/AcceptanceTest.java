@@ -15,7 +15,9 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.MediaType;
 import org.mockito.ArgumentCaptor;
 import com.gymmanager.gym.security.BrevoEmailSender;
+import com.gymmanager.gym.common.FileStorage;
 import com.gymmanager.gym.security.EmailSender;
+import com.gymmanager.gym.service.MemberPurgeService;
 import com.gymmanager.gym.settings.SettingsCatalog;
 import com.gymmanager.gym.settings.SettingsService;
 import com.sun.net.httpserver.HttpServer;
@@ -70,10 +72,10 @@ class AcceptanceTest {
             return new MutableClock(new AtomicReference<>(Instant.parse("2026-11-18T10:00:00Z")), ZoneOffset.UTC);
         }
 
-        /** Password reset emails are sent in the calling thread, so assertions need no waiting. */
+        /** Replaces the application executor: password reset emails are sent in the calling thread, so assertions need no waiting. */
         @Bean
         @Primary
-        TaskExecutor syncTaskExecutor() {
+        TaskExecutor applicationTaskExecutor() {
             return new SyncTaskExecutor();
         }
     }
@@ -122,6 +124,12 @@ class AcceptanceTest {
 
     @Autowired
     org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    @Autowired
+    MemberPurgeService purge;
+
+    @Autowired
+    FileStorage files;
 
     MockHttpSession admin;
 
@@ -574,6 +582,88 @@ class AcceptanceTest {
         send(admin, "POST", "/api/payments/" + payment + "/cancel", Map.of("reason", "Erreur")).andExpect(status().isOk());
         send(admin, "DELETE", "/api/subscriptions/" + paid, null).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("supprimez-les d'abord")));
+    }
+
+    @Test
+    @DisplayName("Suppression automatique après 3 mois : inactifs, expirés et sans abonnement, sauf reste à payer")
+    void memberPurge() throws Exception {
+        long karate = id("/api/sports", "$[?(@.name=='Karaté')].id");
+        long monthly = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
+        long expiredLong = newMember("ExpireAncien", "0612000201", karate, monthly, "2026-07-01", true);   // ended 2026-08-01
+        long expiredDebt = newMember("ExpireDette", "0612000202", karate, monthly, "2026-07-01", false);   // partly paid
+        long expiredRecent = newMember("ExpireRecent", "0612000203", karate, monthly, "2026-09-01", true); // ended 2026-10-01
+        long inactive = newMember("Inactif", "0612000204", karate, monthly, "2026-11-01", true);
+        long reactivated = newMember("Reactive", "0612000205", karate, monthly, "2026-11-10", true);
+        long withoutSub = ((Number) read(send(admin, "POST", "/api/members",
+                member("SansAbo", "Test", "0612000206", karate, monthly, null, "2026-11-01")), "$.id")).longValue();
+        send(admin, "PATCH", "/api/members/" + inactive + "/active", Map.of("active", false)).andExpect(status().isNoContent());
+        send(admin, "PATCH", "/api/members/" + reactivated + "/active", Map.of("active", false)).andExpect(status().isNoContent());
+        send(admin, "PATCH", "/api/members/" + reactivated + "/active", Map.of("active", true)).andExpect(status().isNoContent());
+        long period = id("/api/members", "$[?(@.id==" + withoutSub + ")].subscriptionId");
+        send(admin, "DELETE", "/api/subscriptions/" + period, null).andExpect(status().isNoContent());
+
+        byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 1, 2, 3, 4};
+        for (long m : List.of(expiredLong, inactive)) {
+            mvc.perform(multipart("/api/members/" + m + "/photo").file(new MockMultipartFile("file", "p.jpg", "image/jpeg", jpeg)).session(admin))
+                    .andExpect(status().isOk());
+        }
+        String expiredPhoto = jdbc.queryForObject("SELECT photo FROM members WHERE id = ?", String.class, expiredLong);
+        String inactivePhoto = jdbc.queryForObject("SELECT photo FROM members WHERE id = ?", String.class, inactive);
+        assertThat(files.find(expiredPhoto)).isPresent();
+
+        // today 2026-11-18: only the paid membership expired for more than 3 months goes, with its payments and photo
+        purge.purge();
+        assertThat(memberIds()).doesNotContain(expiredLong)
+                .contains(expiredDebt, expiredRecent, inactive, reactivated, withoutSub);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payments WHERE member_id = ?", Integer.class, expiredLong)).isZero();
+        assertThat(files.find(expiredPhoto)).isEmpty();
+        assertThat(files.find(inactivePhoto)).isPresent();
+
+        // one day short of 3 months after deactivation and subscription removal: nothing more
+        clock.advance(Duration.ofDays(91));   // 2027-02-17
+        purge.purge();
+        assertThat(memberIds()).contains(inactive, withoutSub);
+
+        // 2027-02-18: inactive, without subscription and recently expired go; a balance keeps the member however old
+        clock.advance(Duration.ofDays(1));
+        purge.purge();
+        assertThat(memberIds()).doesNotContain(expiredRecent, inactive, withoutSub).contains(expiredDebt);
+        assertThat(files.find(inactivePhoto)).isEmpty();
+        // reactivation cancelled the delay; that member has expired since 2026-12-10, less than 3 months ago
+        assertThat(memberIds()).contains(reactivated);
+
+        // Paramètres › Suppression auto: the preview lists what the next run deletes, with the saved settings
+        setting("purge.months", "1");
+        get(admin, "/api/settings/purge-preview").andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(true)).andExpect(jsonPath("$.months").value(1))
+                .andExpect(jsonPath("$.members[?(@.id==" + reactivated + ")].reason").value("EXPIRED"))
+                .andExpect(jsonPath("$.members[?(@.id==" + reactivated + ")].since").value("2026-12-10"));
+        assertThat((List<Object>) read(get(admin, "/api/settings/purge-preview"), "$.members[?(@.id==" + expiredDebt + ")]")).isEmpty();
+        // excluding the expired state, or disabling the purge, keeps the member
+        setting("purge.expired", "false");
+        assertThat((List<Object>) read(get(admin, "/api/settings/purge-preview"), "$.members[?(@.id==" + reactivated + ")]")).isEmpty();
+        setting("purge.expired", "true");
+        setting("purge.enabled", "false");
+        assertThat(purge.purge()).isEmpty();
+        assertThat(memberIds()).contains(reactivated);
+        setting("purge.enabled", "true");
+        purge.purge();
+        assertThat(memberIds()).doesNotContain(reactivated);
+        MockHttpSession accueil = login("accueil", "accueil123", "Accueil2026");
+        get(accueil, "/api/settings/purge-preview").andExpect(status().isForbidden());
+    }
+
+    /** Creates a member on a monthly pack; {@code paid}: the period is paid in full, otherwise only 10. */
+    long newMember(String last, String phone, long sport, long pack, String date, boolean paid) throws Exception {
+        long m = ((Number) read(send(admin, "POST", "/api/members", member(last, "Test", phone, sport, pack, null, date)), "$.id")).longValue();
+        Number due = ((List<Number>) read(get(admin, "/api/members"), "$[?(@.id==" + m + ")].balance")).getFirst();
+        send(admin, "POST", "/api/payments", Map.of("memberId", m, "amount", paid ? due : 10, "method", "ESPECES", "paidOn", date))
+                .andExpect(status().isOk());
+        return m;
+    }
+
+    List<Long> memberIds() throws Exception {
+        return ((List<Number>) read(get(admin, "/api/members"), "$[*].id")).stream().map(Number::longValue).toList();
     }
 
     @Test

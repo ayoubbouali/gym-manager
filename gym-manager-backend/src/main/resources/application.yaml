@@ -41,6 +41,9 @@ app:
   data-dir: ${DATA_DIR:${user.dir}/data}
   seed:
     enabled: true
+  member-purge:
+    # Nightly deletion of members inactive, expired or without subscription for 3 months, with nothing left to pay.
+    cron: ${MEMBER_PURGE_CRON:0 0 3 * * *}
   mail:
     # Fallbacks used when Paramètres > Brevo config leaves the field blank (the database value wins).
     # Sender address (verified in Brevo); empty everywhere = password reset emails are not sent.

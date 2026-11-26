@@ -40,6 +40,7 @@ public final class SettingsCatalog {
         GROUPS.put("codes", "Codes");
         GROUPS.put("subscription", "Abonnement");
         GROUPS.put("alerts", "Alertes");
+        GROUPS.put("purge", "Suppression auto");
         GROUPS.put("salary", "Salaire");
         GROUPS.put("documents", "Reçus");
         GROUPS.put("display", "Affichage");
@@ -72,6 +73,12 @@ public final class SettingsCatalog {
                 "Bonjour {prenom} {nom}, votre abonnement a expiré il y a {jours} jour(s). Passez au club pour le renouveler."));
         l.add(SettingDef.required("alerts.soonTemplate", "alerts", "template", "Modèle de message « bientôt »",
                 "Bonjour {prenom} {nom}, votre abonnement se termine dans {jours} jour(s). Pensez à le renouveler."));
+
+        l.add(new SettingDef("purge.enabled", "purge", "bool", "Supprimer automatiquement les adhérents (chaque nuit)", "true", true, null, null, List.of()));
+        l.add(SettingDef.integer("purge.months", "purge", "Délai avant suppression", "3", 1, 60));
+        l.add(new SettingDef("purge.inactive", "purge", "bool", "Adhérents désactivés (depuis leur désactivation)", "true", true, null, null, List.of()));
+        l.add(new SettingDef("purge.expired", "purge", "bool", "Adhérents expirés (depuis la fin de leur abonnement)", "true", true, null, null, List.of()));
+        l.add(new SettingDef("purge.noSubscription", "purge", "bool", "Adhérents sans abonnement (depuis la suppression de leur dernière période)", "true", true, null, null, List.of()));
 
         l.add(SettingDef.required("salary.share", "salary", "share", "Part du CA reversée au coach (mode commission)", "1/3"));
         l.add(SettingDef.integer("salary.cutoffDay", "salary",

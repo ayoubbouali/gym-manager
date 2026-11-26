@@ -216,6 +216,15 @@ export interface SettingDef {
   required: boolean; min: number | null; max: number | null; options: { value: string; label: string }[];
 }
 
+export type PurgeReason = 'INACTIVE' | 'EXPIRED' | 'NO_SUBSCRIPTION';
+
+/** Paramètres › Suppression auto: members the next nightly run would delete, with the saved settings. */
+export interface PurgePreview {
+  enabled: boolean;
+  months: number;
+  members: { id: number; code: string; name: string; reason: PurgeReason; since: string }[];
+}
+
 export interface SettingsPayload {
   groups: Record<string, string>;
   definitions: SettingDef[];

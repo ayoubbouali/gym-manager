@@ -6,6 +6,7 @@ import com.gymmanager.gym.repository.SettingRepository;
 import com.gymmanager.gym.security.UserService;
 import com.gymmanager.gym.security.UserService.UserView;
 import com.gymmanager.gym.service.InsightService;
+import com.gymmanager.gym.service.MemberPurgeService;
 import com.gymmanager.gym.settings.RegionalCatalog;
 import com.gymmanager.gym.settings.SettingDef;
 import com.gymmanager.gym.settings.SettingsCatalog;
@@ -38,6 +39,7 @@ public class AdminController {
     private final CodeService codes;
     private final UserService users;
     private final FileStorage files;
+    private final MemberPurgeService purge;
 
     @GetMapping("/dashboard")
     public InsightService.Dashboard dashboard() {
@@ -63,6 +65,12 @@ public class AdminController {
      */
     public record SettingsPayload(Map<String, String> groups, List<SettingDef> definitions, Map<String, String> values,
                                   Map<String, Boolean> secretsSet, Map<String, String> nextCodes, RegionalCatalog.Options regional) {
+    }
+
+    /** Paramètres › Suppression auto: members the next nightly run would delete, with the saved settings. */
+    @GetMapping("/settings/purge-preview")
+    public MemberPurgeService.Preview purgePreview() {
+        return purge.preview();
     }
 
     @GetMapping("/settings")

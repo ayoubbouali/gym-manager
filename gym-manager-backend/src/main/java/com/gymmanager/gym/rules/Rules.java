@@ -234,6 +234,33 @@ public final class Rules {
                 memberState(remaining, status, s.soonThreshold()));
     }
 
+    /** RG-PURGE: state that makes a member deletable. */
+    public enum PurgeReason { INACTIVE, EXPIRED, NO_SUBSCRIPTION }
+
+    /** RG-PURGE settings: delay in months and the states taken into account. */
+    public record PurgeSettings(int months, boolean inactive, boolean expired, boolean noSubscription) {
+    }
+
+    /**
+     * RG-PURGE: a member with nothing left to pay is deleted {@code months} months after the start of any enabled state;
+     * a null date means the member is not in that state. A balance keeps the member, however old.
+     * Returns the reason met first (oldest date), or null when the member is kept.
+     * @param deactivatedOn       date of deactivation
+     * @param expiredOn           end date of an expired subscription
+     * @param noSubscriptionSince date the member was left without any period
+     */
+    public static PurgeReason purgeReason(BigDecimal balance, LocalDate deactivatedOn, LocalDate expiredOn,
+                                          LocalDate noSubscriptionSince, PurgeSettings s, LocalDate today) {
+        if (balance != null && balance.signum() > 0) return null;
+        LocalDate limit = today.minusMonths(s.months());
+        Map<PurgeReason, LocalDate> since = new LinkedHashMap<>();
+        if (s.inactive() && deactivatedOn != null) since.put(PurgeReason.INACTIVE, deactivatedOn);
+        if (s.expired() && expiredOn != null) since.put(PurgeReason.EXPIRED, expiredOn);
+        if (s.noSubscription() && noSubscriptionSince != null) since.put(PurgeReason.NO_SUBSCRIPTION, noSubscriptionSince);
+        return since.entrySet().stream().filter(e -> !e.getValue().isAfter(limit))
+                .min(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(null);
+    }
+
     // ------------------------------------------------------------------ messages
 
     public static final List<String> MESSAGE_VARIABLES = List.of("prenom", "nom", "jours", "date_fin", "club", "pack");

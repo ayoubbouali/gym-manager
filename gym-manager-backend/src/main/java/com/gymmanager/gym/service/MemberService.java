@@ -14,6 +14,8 @@ import com.gymmanager.gym.web.dto.Requests.MemberRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
@@ -186,7 +188,10 @@ public class MemberService {
     }
 
     public void setActive(Long id, boolean active) {
-        members.findById(id).orElseThrow(() -> ApiException.notFound("Adhérent introuvable.")).setActive(active);
+        Member m = members.findById(id).orElseThrow(() -> ApiException.notFound("Adhérent introuvable."));
+        if (active) m.setDeactivatedOn(null);
+        else if (m.isActive()) m.setDeactivatedOn(settings.config().today());
+        m.setActive(active);
     }
 
     /**
@@ -202,12 +207,28 @@ public class MemberService {
         // payments reference members and subscriptions without ON DELETE CASCADE; a live payment
         // recorded meanwhile is left in place so the foreign key refuses the delete
         payments.deleteByMemberIdAndCancelledTrue(id);
+        remove(m);
+    }
+
+    /** Automatic deletion (RG-PURGE): unlike {@link #delete}, every payment goes with the member, cancelled or not. */
+    void purge(Member m) {
+        payments.deleteByMemberId(m.getId());
+        remove(m);
+    }
+
+    private void remove(Member m) {
         payments.flush();
-        registrations.deleteByMemberId(id);
+        registrations.deleteByMemberId(m.getId());
         String photo = m.getPhoto();
         members.delete(m);
         members.flush();
-        files.delete(photo);
+        // after commit only: a rolled-back deletion (e.g. one member failing in the nightly purge) keeps its photo
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                files.delete(photo);
+            }
+        });
     }
 
     public void setPhoto(Long id, MultipartFile file) {

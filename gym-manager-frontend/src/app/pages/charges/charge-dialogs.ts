@@ -25,8 +25,8 @@ export function today(config: ConfigService): string {
 }
 
 /**
- * Creates or edits a charge. Permanent: no month, settled every month. One-off: a month, and an amount if it is known,
- * which can then be paid at once.
+ * Creates or edits a charge. Permanent: no month, due every month; with a known amount, settled automatically every month
+ * or for the current month only. One-off: a month, and an amount if it is known, which can then be paid at once.
  */
 @Component({
   selector: 'app-charge-form-dialog',
@@ -50,37 +50,53 @@ export function today(config: ConfigService): string {
               <mat-button-toggle [value]="true">Permanente</mat-button-toggle><mat-button-toggle [value]="false">Ponctuelle</mat-button-toggle>
             </mat-button-toggle-group>
           }
-          @if (permanent) {<span class="muted small">Due chaque mois à partir de {{ startLabel }} : vous saisissez son montant en la réglant.</span>}
         </div>
         @if (!permanent) {
           <app-date-field mode="month" label="Mois concerné" name="period" [(ngModel)]="period" required />
-          <div class="field-block">
-            <span class="field-label">Connaissez-vous le montant ?</span>
-            <mat-button-toggle-group name="known" [(ngModel)]="known" aria-label="Montant connu">
-              <mat-button-toggle [value]="true">Oui</mat-button-toggle><mat-button-toggle [value]="false">Non, je le saisirai en la réglant</mat-button-toggle>
-            </mat-button-toggle-group>
-          </div>
-          @if (known) {
-            <mat-form-field class="w-full"><mat-label>Montant</mat-label>
-              <input matInput type="number" min="0.01" step="0.01" name="amount" [(ngModel)]="amount" required />
-              <span matTextSuffix>&nbsp;{{ currency() }}</span></mat-form-field>
-            @if (!d.charge) {
-              <div class="field-block">
-                <span class="field-label">La régler maintenant ?</span>
-                <mat-button-toggle-group name="payNow" [(ngModel)]="payNow" aria-label="Régler maintenant">
-                  <mat-button-toggle [value]="true">Oui</mat-button-toggle><mat-button-toggle [value]="false">Non, plus tard</mat-button-toggle>
-                </mat-button-toggle-group>
-              </div>
-              @if (payNow) {
-                <app-date-field label="Date du règlement" name="paidOn" [(ngModel)]="paidOn" [max]="today" required />
-                <div class="field-block">
-                  <span class="field-label">Mode de paiement</span>
-                  <mat-button-toggle-group name="method" [(ngModel)]="method" aria-label="Mode de paiement">
-                    @for (m of methods; track m.value) {<mat-button-toggle [value]="m.value">{{ m.label }}</mat-button-toggle>}
-                  </mat-button-toggle-group>
-                </div>
-              }
-            }
+        }
+        <div class="field-block">
+          <span class="field-label">{{ permanent && d.charge ? 'Réglée automatiquement chaque mois ?' : 'Connaissez-vous le montant ?' }}</span>
+          <mat-button-toggle-group name="known" [(ngModel)]="known" aria-label="Montant connu">
+            <mat-button-toggle [value]="true">Oui</mat-button-toggle>
+            <mat-button-toggle [value]="false">{{ permanent && d.charge ? 'Non' : 'Non, je le saisirai en la réglant' }}</mat-button-toggle>
+          </mat-button-toggle-group>
+          @if (permanent && !known) {<span class="muted small">Due chaque mois à partir de {{ startLabel }} : vous saisirez son montant en la réglant.</span>}
+        </div>
+        @if (known) {
+          <mat-form-field class="w-full"><mat-label>{{ permanent ? 'Montant mensuel' : 'Montant' }}</mat-label>
+            <input matInput type="number" min="0.01" step="0.01" name="amount" [(ngModel)]="amount" required />
+            <span matTextSuffix>&nbsp;{{ currency() }}</span></mat-form-field>
+          @if (permanent && !d.charge) {
+            <div class="field-block">
+              <span class="field-label">Réglée</span>
+              <mat-button-toggle-group name="autoPay" [(ngModel)]="autoPay" aria-label="Règlement">
+                <mat-button-toggle [value]="true">Automatiquement chaque mois</mat-button-toggle><mat-button-toggle [value]="false">Juste ce mois-ci</mat-button-toggle>
+              </mat-button-toggle-group>
+              <span class="muted small">{{ autoPay ? 'Le mois de ' + startLabel + ' est réglé maintenant, puis chaque mois suivant le 1er, avec ce montant.'
+                : 'Seul le mois de ' + startLabel + ' est réglé maintenant ; les mois suivants, le montant sera saisi au règlement.' }}</span>
+            </div>
+          }
+          @if (permanent && d.charge) {
+            <span class="muted small">Le mois en cours est réglé avec ce montant s'il ne l'est pas déjà, puis chaque mois suivant le 1er.</span>
+          }
+          @if (!permanent && !d.charge) {
+            <div class="field-block">
+              <span class="field-label">La régler maintenant ?</span>
+              <mat-button-toggle-group name="payNow" [(ngModel)]="payNow" aria-label="Régler maintenant">
+                <mat-button-toggle [value]="true">Oui</mat-button-toggle><mat-button-toggle [value]="false">Non, plus tard</mat-button-toggle>
+              </mat-button-toggle-group>
+            </div>
+          }
+          @if (!d.charge && (permanent || payNow)) {
+            <app-date-field label="Date du règlement" name="paidOn" [(ngModel)]="paidOn" [max]="today" required />
+          }
+          @if (permanent || (!d.charge && payNow)) {
+            <div class="field-block">
+              <span class="field-label">Mode de paiement</span>
+              <mat-button-toggle-group name="method" [(ngModel)]="method" aria-label="Mode de paiement">
+                @for (m of methods; track m.value) {<mat-button-toggle [value]="m.value">{{ m.label }}</mat-button-toggle>}
+              </mat-button-toggle-group>
+            </div>
           }
         }
         <mat-form-field class="w-full"><mat-label>Note (facultatif)</mat-label><input matInput name="note" [(ngModel)]="note" maxlength="500" /></mat-form-field>
@@ -107,11 +123,13 @@ export class ChargeFormDialog {
   category: ChargeCategory | null = this.d.charge?.category ?? null;
   permanent = this.d.charge?.permanent ?? true;
   period: string | null = this.d.charge?.period ?? this.d.period ?? this.today.slice(0, 7);
-  known = this.d.charge ? this.d.charge.amount !== null : true;
+  /** Edit of a permanent charge: whether it is settled automatically. */
+  known = this.d.charge ? this.d.charge.amount !== null : false;
   amount: number | null = this.d.charge?.amount ?? null;
+  autoPay = true;
   payNow = false;
   paidOn = this.today;
-  method: PaymentMethod = 'ESPECES';
+  method: PaymentMethod = this.d.charge?.autoMethod ?? 'ESPECES';
   note = this.d.charge?.note ?? '';
   busy = signal(false);
   error = signal('');
@@ -122,7 +140,8 @@ export class ChargeFormDialog {
     const oneOff = !this.permanent;
     const body = {
       label: this.label, category: this.category, permanent: this.permanent, note: this.note,
-      period: oneOff ? this.period : null, amount: oneOff && this.known ? this.amount : null,
+      period: oneOff ? this.period : null, amount: this.known ? this.amount : null,
+      autoPay: this.permanent && this.known && (!!this.d.charge || this.autoPay),
       payNow: oneOff && this.known && this.payNow, method: this.method, paidOn: this.paidOn,
     };
     this.busy.set(true);

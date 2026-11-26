@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 /**
  * A club charge. Permanent: due every month from {@code startPeriod} to {@code endPeriod} (null while running).
  * One-off: concerns {@code period}; {@code amount} is null while unknown.
+ * A permanent charge with {@code autoPay} is settled every month with {@code amount}, up to {@code autoPaidUntil}.
  */
 @Entity
 @Table(name = "charges")
@@ -29,6 +30,12 @@ public class Charge {
     private BigDecimal amount;
     private String startPeriod;
     private String endPeriod;
+    private boolean autoPay;
+
+    @Enumerated(EnumType.STRING)
+    private PaymentMethod autoMethod;
+
+    private String autoPaidUntil;
     private String note = "";
     private LocalDateTime createdAt;
     private String createdBy;

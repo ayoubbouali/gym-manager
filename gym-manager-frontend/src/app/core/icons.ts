@@ -1,4 +1,4 @@
-import { ArrowRight, BadgePercent, Ban, Banknote, Briefcase, CalendarClock, CalendarDays, CalendarRange, Camera, ChartColumn, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsUpDown, CircleAlert, CircleCheck, Columns3, CreditCard, Database, Download, Dumbbell, Eye, EyeOff, FileText, FunnelX, HandCoins, History, Hourglass, House, IdCard, Info, KeyRound, Landmark, Lock, LogOut, Mail, Menu, MessageCircle, Moon, Pencil, Plus, Power, Receipt, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, StickyNote, Sun, Ticket, Trash2, TrendingDown, TrendingUp, TriangleAlert, Upload, UserMinus, UserPlus, UserRound, Users, Wallet, X, Zap } from 'lucide-angular';
+import { ArrowRight, BadgePercent, Ban, Banknote, Briefcase, CalendarClock, CalendarDays, CalendarRange, Camera, ChartColumn, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsUpDown, CircleAlert, CircleCheck, Columns3, CreditCard, Database, Download, Dumbbell, EllipsisVertical, Eye, EyeOff, FileText, FunnelX, HandCoins, History, Hourglass, House, IdCard, Info, KeyRound, Landmark, Lock, LogOut, Mail, Menu, MessageCircle, Moon, Pencil, Plus, Power, Receipt, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, StickyNote, Sun, Ticket, Trash2, TrendingDown, TrendingUp, TriangleAlert, Upload, UserMinus, UserPlus, UserRound, Users, Wallet, X, Zap } from 'lucide-angular';
 
 /** Icons available through <lucide-icon name="kebab-case-name" />. */
 export const APP_ICONS = {
@@ -45,6 +45,7 @@ export const APP_ICONS = {
   Pencil,
   Plus,
   Power,
+  EllipsisVertical,
   Receipt,
   RefreshCw,
   RotateCcw,

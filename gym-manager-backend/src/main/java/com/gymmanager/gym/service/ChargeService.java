@@ -30,7 +30,8 @@ import java.util.stream.Stream;
 
 /**
  * Club charges (RG-CHARGE): a permanent charge is due every month from its creation month until stopped, its amount typed
- * when paid; a one-off charge concerns one month, with an amount known at creation or typed when paid.
+ * when paid, or settled automatically each month with a fixed amount; a one-off charge concerns one month, with an amount
+ * known at creation or typed when paid.
  * A charge counts in the month it concerns, like salaries; revenue counts at its payment date.
  */
 @Service
@@ -43,6 +44,9 @@ public class ChargeService {
     private final ClubStateService stateService;
     private final SettingsService settings;
 
+    static final String AUTO_NOTE = "Règlement automatique";
+    static final String AUTO_USER = "automatique";
+
     public record ChargePaymentView(Long id, Long chargeId, String period, BigDecimal amount, PaymentMethod method, String methodLabel,
                                     LocalDate paidOn, String note, LocalDateTime createdAt, String createdBy,
                                     LocalDateTime updatedAt, String updatedBy) {
@@ -50,12 +54,15 @@ public class ChargeService {
 
     /** {@code active}: a permanent charge not stopped, or any one-off charge. */
     public record ChargeView(Long id, String label, ChargeCategory category, String categoryLabel, boolean permanent, String period,
-                             BigDecimal amount, String startPeriod, String endPeriod, boolean active, String note,
-                             int paymentCount, BigDecimal totalPaid) {
+                             BigDecimal amount, String startPeriod, String endPeriod, boolean active, boolean autoPay,
+                             PaymentMethod autoMethod, String note, int paymentCount, BigDecimal totalPaid) {
     }
 
-    /** A charge due for a month: paid ({@code payment} set) or to pay ({@code expected}: known amount of a one-off, else null). */
-    public record ChargeDue(ChargeView charge, String period, BigDecimal expected, ChargePaymentView payment) {
+    /**
+     * A charge due for a month: paid ({@code payment} set) or to pay ({@code expected}: known amount, else null).
+     * {@code scheduled}: a future month of an automatic charge, settled when it comes, so not to pay.
+     */
+    public record ChargeDue(ChargeView charge, String period, BigDecimal expected, ChargePaymentView payment, boolean scheduled) {
     }
 
     public record ChargeMonth(String period, boolean currentMonth, List<ChargeDue> rows, BigDecimal totalPaid,
@@ -79,8 +86,8 @@ public class ChargeService {
 
     // ------------------------------------------------------------------ charges
 
-    @Transactional(readOnly = true)
     public List<ChargeView> list() {
+        settle();
         Map<Long, List<ChargePayment>> byCharge = paymentsByCharge();
         return charges.findAll().stream().map(c -> view(c, byCharge.getOrDefault(c.getId(), List.of())))
                 .sorted(Comparator.comparing(ChargeView::permanent).reversed().thenComparing(ChargeView::label, String.CASE_INSENSITIVE_ORDER))
@@ -94,19 +101,28 @@ public class ChargeService {
         apply(c, r, cfg);
         c.setCreatedAt(cfg.now());
         c.setCreatedBy(username);
-        if (c.isPermanent()) c.setStartPeriod(YearMonth.from(cfg.today()).toString());
+        YearMonth current = YearMonth.from(cfg.today());
+        if (c.isPermanent()) c.setStartPeriod(current.toString());
         c = charges.saveAndFlush(c);
-        if (!c.isPermanent() && Boolean.TRUE.equals(r.payNow())) {
+        if (c.isAutoPay()) {
+            startAutoPay(c, r, current, username);
+        } else if (c.isPermanent() && r.amount() != null) {
+            // amount typed for this month only: the current month is paid, the next ones are typed when paid
+            pay(new ChargePaymentRequest(c.getId(), current.toString(), r.amount(), r.method(), r.paidOn(), ""), username);
+        } else if (!c.isPermanent() && Boolean.TRUE.equals(r.payNow())) {
             if (c.getAmount() == null) throw ApiException.invalid("amount", "Saisissez le montant pour régler la charge.");
             pay(new ChargePaymentRequest(c.getId(), c.getPeriod(), c.getAmount(), r.method(), r.paidOn(), ""), username);
         }
         return one(c.getId());
     }
 
-    public ChargeView update(Long id, ChargeRequest r) {
+    public ChargeView update(Long id, ChargeRequest r, String username) {
+        ClubConfig cfg = settings.config();
         Charge c = find(id);
         String before = c.getPeriod();
-        apply(c, r, settings.config());
+        boolean wasAuto = c.isAutoPay();
+        apply(c, r, cfg);
+        if (c.isAutoPay() && !wasAuto) startAutoPay(c, r, YearMonth.from(cfg.today()), username);
         if (!c.isPermanent() && !Objects.equals(before, c.getPeriod()) && payments.existsByChargeId(id)) {
             throw ApiException.invalid("period", "Cette charge est déjà réglée : supprimez le règlement pour changer son mois.");
         }
@@ -117,7 +133,14 @@ public class ChargeService {
         c.setLabel(Check.text(r.label(), "label", "Libellé", 120, true));
         c.setCategory(Check.required(r.category(), "category", "Catégorie"));
         c.setNote(Check.text(r.note(), "note", "Note", 500, false));
-        if (c.isPermanent()) return;
+        if (c.isPermanent()) {
+            boolean auto = Boolean.TRUE.equals(r.autoPay());
+            c.setAutoPay(auto);
+            c.setAmount(auto ? positive(r.amount(), "Saisissez le montant réglé chaque mois.") : null);
+            c.setAutoMethod(auto ? Check.required(r.method(), "method", "Mode de paiement") : null);
+            if (!auto) c.setAutoPaidUntil(null);
+            return;
+        }
         c.setPeriod(PayrollService.parsePeriod(Check.required(r.period(), "period", "Mois")).toString());
         if (r.amount() != null && Check.amount(r.amount(), "amount", "Montant").signum() == 0) {
             throw ApiException.invalid("amount", "Le montant doit être supérieur à 0 (laissez vide s'il n'est pas connu).");
@@ -125,12 +148,60 @@ public class ChargeService {
         c.setAmount(r.amount() == null ? null : r.amount().setScale(2, RoundingMode.HALF_UP));
     }
 
+    private static BigDecimal positive(BigDecimal amount, String missing) {
+        if (amount == null) throw ApiException.invalid("amount", missing);
+        if (Check.amount(amount, "amount", "Montant").signum() == 0) throw ApiException.invalid("amount", "Le montant doit être supérieur à 0.");
+        return amount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /** Automatic payment switched on (creation, edit, resume): the current month is paid now, the next ones as they come. */
+    private void startAutoPay(Charge c, ChargeRequest r, YearMonth current, String username) {
+        if (!payments.existsByChargeIdAndPeriod(c.getId(), current.toString())) {
+            pay(new ChargePaymentRequest(c.getId(), current.toString(), c.getAmount(), c.getAutoMethod(), r == null ? null : r.paidOn(),
+                    AUTO_NOTE), username);
+        }
+        c.setAutoPaidUntil(current.toString());
+    }
+
     /** Stops a permanent charge after the current month, or makes it due again. Its payments are kept. */
-    public ChargeView setActive(Long id, boolean active) {
+    public ChargeView setActive(Long id, boolean active, String username) {
         Charge c = find(id);
         if (!c.isPermanent()) throw ApiException.badRequest("Seule une charge permanente peut être arrêtée.");
-        c.setEndPeriod(active ? null : YearMonth.from(settings.config().today()).toString());
+        YearMonth current = YearMonth.from(settings.config().today());
+        if (!active) settle();
+        c.setEndPeriod(active ? null : current.toString());
+        // not settled for the months it was stopped: they stay to pay, like those of a charge paid by hand
+        if (active && c.isAutoPay()) startAutoPay(c, null, current, username);
         return one(id);
+    }
+
+    /**
+     * Pays the automatic charges for every month since their last one, up to the current month, dated the 1st of the month.
+     * Run before reading charges; a payment deleted by hand is not recreated ({@code autoPaidUntil}).
+     */
+    public void settle() {
+        ClubConfig cfg = settings.config();
+        YearMonth current = YearMonth.from(cfg.today());
+        for (Charge c : charges.findAll()) {
+            if (!c.isAutoPay() || c.getAutoPaidUntil() == null) continue;
+            YearMonth last = end(c) == null || end(c).isAfter(current) ? current : end(c);
+            YearMonth ym = YearMonth.parse(c.getAutoPaidUntil()).plusMonths(1);
+            if (ym.isAfter(last)) continue;
+            for (; !ym.isAfter(last); ym = ym.plusMonths(1)) {
+                if (payments.existsByChargeIdAndPeriod(c.getId(), ym.toString())) continue;
+                ChargePayment p = new ChargePayment();
+                p.setChargeId(c.getId());
+                p.setPeriod(ym.toString());
+                p.setAmount(c.getAmount());
+                p.setMethod(c.getAutoMethod());
+                p.setPaidOn(ym.atDay(1));
+                p.setNote(AUTO_NOTE);
+                p.setCreatedAt(cfg.now());
+                p.setCreatedBy(AUTO_USER);
+                payments.save(p);
+            }
+            c.setAutoPaidUntil(last.toString());
+        }
     }
 
     public void delete(Long id) {
@@ -151,7 +222,8 @@ public class ChargeService {
         YearMonth ym;
         if (c.isPermanent()) {
             ym = PayrollService.parsePeriod(r.period());
-            if (!Rules.isChargeDue(YearMonth.parse(c.getStartPeriod()), end(c), ym, YearMonth.from(cfg.today()))) {
+            // a coming month may be paid in advance
+            if (!Rules.isChargeDue(YearMonth.parse(c.getStartPeriod()), end(c), ym, ym)) {
                 throw ApiException.invalid("period", "Cette charge n'est pas due ce mois-là.");
             }
         } else {
@@ -197,19 +269,19 @@ public class ChargeService {
 
     // ------------------------------------------------------------------ month and statistics
 
-    /** Charges of a month: permanent ones due that month (never a future one) and one-off ones of that month, paid or not. */
-    @Transactional(readOnly = true)
+    /** Charges of a month, past or coming: permanent ones due that month and one-off ones of that month, paid or not. */
     public ChargeMonth month(String period) {
+        settle();
         YearMonth current = YearMonth.from(settings.config().today());
         YearMonth ym = period == null || period.isBlank() ? current : PayrollService.parsePeriod(period);
-        List<ChargeDue> rows = dues(ym, ym, current);
-        List<ChargeDue> toPay = rows.stream().filter(d -> d.payment() == null).toList();
+        List<ChargeDue> rows = dues(ym, ym, ym, current);
+        List<ChargeDue> toPay = rows.stream().filter(d -> d.payment() == null && !d.scheduled()).toList();
         return new ChargeMonth(ym.toString(), ym.equals(current), rows, sum(rows.stream().filter(d -> d.payment() != null).map(d -> d.payment().amount())),
                 toPay.size(), sum(toPay.stream().map(ChargeDue::expected).filter(Objects::nonNull)));
     }
 
-    @Transactional(readOnly = true)
     public ChargeStats stats(String fromPeriod, String toPeriod) {
+        settle();
         ClubState st = stateService.load();
         YearMonth current = YearMonth.from(st.today());
         boolean defaults = fromPeriod == null || fromPeriod.isBlank() || toPeriod == null || toPeriod.isBlank();
@@ -221,7 +293,7 @@ public class ChargeService {
         if (from.plusMonths(PayrollService.MAX_STATS_MONTHS - 1).isBefore(to)) {
             throw ApiException.badRequest("Période trop longue (" + PayrollService.MAX_STATS_MONTHS / 12 + " ans maximum).");
         }
-        List<ChargeDue> rows = dues(from, to, current);
+        List<ChargeDue> rows = dues(from, to, current, current);
         List<ChargeDue> paid = rows.stream().filter(d -> d.payment() != null).toList();
         List<ChargeDue> toPay = rows.stream().filter(d -> d.payment() == null).toList();
 
@@ -253,7 +325,7 @@ public class ChargeService {
     }
 
     /** Every (charge, month) due in from..to; permanent charges are due up to {@code lastDue} at most. */
-    private List<ChargeDue> dues(YearMonth from, YearMonth to, YearMonth lastDue) {
+    private List<ChargeDue> dues(YearMonth from, YearMonth to, YearMonth lastDue, YearMonth current) {
         Map<Long, List<ChargePayment>> byCharge = paymentsByCharge();
         List<ChargeDue> out = new ArrayList<>();
         for (Charge c : charges.findAll()) {
@@ -265,7 +337,7 @@ public class ChargeService {
                         : c.getPeriod().equals(ym.toString());
                 if (!due) continue;
                 ChargePayment p = byPeriod.get(ym.toString());
-                out.add(new ChargeDue(v, ym.toString(), c.isPermanent() ? null : c.getAmount(), p == null ? null : view(p)));
+                out.add(new ChargeDue(v, ym.toString(), c.getAmount(), p == null ? null : view(p), p == null && c.isAutoPay() && ym.isAfter(current)));
             }
         }
         out.sort(Comparator.comparing(ChargeDue::period).thenComparing(d -> !d.charge().permanent())
@@ -294,7 +366,8 @@ public class ChargeService {
 
     private static ChargeView view(Charge c, List<ChargePayment> list) {
         return new ChargeView(c.getId(), c.getLabel(), c.getCategory(), c.getCategory().label(), c.isPermanent(), c.getPeriod(),
-                c.getAmount(), c.getStartPeriod(), c.getEndPeriod(), !c.isPermanent() || c.getEndPeriod() == null, c.getNote(),
+                c.getAmount(), c.getStartPeriod(), c.getEndPeriod(), !c.isPermanent() || c.getEndPeriod() == null, c.isAutoPay(),
+                c.getAutoMethod(), c.getNote(),
                 list.size(), sum(list.stream().map(ChargePayment::getAmount)));
     }
 

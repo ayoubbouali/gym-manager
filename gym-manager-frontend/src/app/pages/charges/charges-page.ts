@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { LucideAngularModule } from 'lucide-angular';
 import { firstValueFrom } from 'rxjs';
@@ -15,10 +16,10 @@ import { ConfirmService } from '../../shared/confirm.service';
 import { DateField } from '../../shared/date-field';
 import { ChargeFormDialog, ChargePayDialog, today } from './charge-dialogs';
 
-/** Club charges: the charges due for a month and their payments, then every charge (create, edit, stop, delete). */
+/** Club charges of a month, past or coming: their payments and the actions on each charge (edit, stop, delete). */
 @Component({
   selector: 'app-charges',
-  imports: [FormsModule, MatButtonModule, MatTooltipModule, LucideAngularModule, DateField, MoneyPipe, FrDatePipe],
+  imports: [FormsModule, MatButtonModule, MatMenuModule, MatTooltipModule, LucideAngularModule, DateField, MoneyPipe, FrDatePipe],
   template: `
     <div class="toolbar">
       <button class="icon-btn" (click)="shift(-1)" aria-label="Mois précédent"><lucide-icon name="chevron-left" /></button>
@@ -47,13 +48,17 @@ import { ChargeFormDialog, ChargePayDialog, today } from './charge-dialogs';
               <tr>
                 <td class="strong">{{ r.charge.label }}@if (r.charge.note) {<div class="muted small">{{ r.charge.note }}</div>}</td>
                 <td>{{ r.charge.categoryLabel }}</td>
-                <td>{{ r.charge.permanent ? 'Permanente' : 'Ponctuelle' }}</td>
+                <td>{{ type(r.charge) }}</td>
                 <td class="num">
                   @if (r.payment) {<span class="strong">{{ r.payment.amount | money }}</span>}
                   @else if (r.expected !== null) {{{ r.expected | money }}}
                   @else {<span class="muted">À saisir</span>}
                 </td>
-                <td>@if (r.payment) {<span class="badge ok">Réglée</span>} @else {<span class="badge ko">À régler</span>}</td>
+                <td>
+                  @if (r.payment) {<span class="badge ok">Réglée</span>}
+                  @else if (r.scheduled) {<span class="badge info" matTooltip="Réglée automatiquement quand le mois arrive">Automatique</span>}
+                  @else {<span class="badge ko">À régler</span>}
+                </td>
                 <td>{{ r.payment ? (r.payment.paidOn | frDate) : '—' }}</td>
                 <td>@if (r.payment) {<span [matTooltip]="r.payment.note">{{ r.payment.methodLabel }}</span>} @else {<span class="muted">—</span>}</td>
                 <td class="actions">
@@ -62,48 +67,29 @@ import { ChargeFormDialog, ChargePayDialog, today } from './charge-dialogs';
                       <button class="icon-btn" (click)="correct(r)" matTooltip="Corriger le règlement" [attr.aria-label]="'Corriger le règlement de ' + r.charge.label"><lucide-icon name="pencil" [size]="16" /></button>
                       <button class="icon-btn danger" (click)="deletePayment(r)" matTooltip="Supprimer le règlement" [attr.aria-label]="'Supprimer le règlement de ' + r.charge.label"><lucide-icon name="trash-2" [size]="16" /></button>
                     }
-                  } @else {
+                  } @else if (!r.scheduled) {
                     <button mat-flat-button class="sm pay-action" (click)="pay(r)">Régler</button>
                   }
+                  <button class="icon-btn" [matMenuTriggerFor]="chargeMenu" matTooltip="Actions sur la charge" [attr.aria-label]="'Actions sur la charge ' + r.charge.label">
+                    <lucide-icon name="ellipsis-vertical" [size]="16" /></button>
+                  <mat-menu #chargeMenu="matMenu" xPosition="before">
+                    <button mat-menu-item (click)="edit(r.charge)"><lucide-icon name="pencil" [size]="16" /> Modifier la charge</button>
+                    @if (r.charge.permanent) {
+                      <button mat-menu-item (click)="toggle(r.charge)"><lucide-icon [name]="r.charge.active ? 'power' : 'rotate-ccw'" [size]="16" />
+                        {{ r.charge.active ? 'Arrêter (plus due après ce mois)' : 'Reprendre' }}</button>
+                    }
+                    <button mat-menu-item class="danger" (click)="remove(r.charge)"><lucide-icon name="trash-2" [size]="16" /> Supprimer la charge</button>
+                  </mat-menu>
                 </td>
               </tr>
-            } @empty {<tr><td colspan="8" class="empty">Aucune charge pour ce mois.</td></tr>}
+            } @empty {<tr><td colspan="8" class="empty">Aucune charge pour ce mois : créez-en une avec « Nouvelle charge ».</td></tr>}
           </tbody>
         </table>
       </div>
     } @else {
       <div class="loading">Chargement…</div>
     }
-
-    <section class="card all-charges">
-      <div class="card-head"><h3>Toutes les charges</h3></div>
-      <div class="table-wrap">
-        <table class="table compact">
-          <thead><tr><th>Charge</th><th>Catégorie</th><th>Type</th><th class="num">Montant</th><th class="num">Total réglé</th><th><span class="sr-only">Actions</span></th></tr></thead>
-          <tbody>
-            @for (c of charges(); track c.id) {
-              <tr [class.inactive]="!c.active">
-                <td class="strong">{{ c.label }}@if (c.note) {<div class="muted small">{{ c.note }}</div>}</td>
-                <td>{{ c.categoryLabel }}</td>
-                <td>{{ type(c) }}</td>
-                <td class="num">@if (c.permanent) {<span class="muted">Saisi à chaque règlement</span>} @else if (c.amount !== null) {{{ c.amount | money }}} @else {<span class="muted">Inconnu</span>}</td>
-                <td class="num">{{ c.totalPaid | money }} <span class="muted small">({{ c.paymentCount }})</span></td>
-                <td class="actions">
-                  <button class="icon-btn" (click)="edit(c)" matTooltip="Modifier" [attr.aria-label]="'Modifier ' + c.label"><lucide-icon name="pencil" [size]="16" /></button>
-                  @if (c.permanent) {
-                    <button class="icon-btn" (click)="toggle(c)" [matTooltip]="c.active ? 'Arrêter (plus due après ce mois)' : 'Reprendre'"
-                            [attr.aria-label]="(c.active ? 'Arrêter ' : 'Reprendre ') + c.label"><lucide-icon [name]="c.active ? 'power' : 'rotate-ccw'" [size]="16" /></button>
-                  }
-                  <button class="icon-btn danger" (click)="remove(c)" matTooltip="Supprimer" [attr.aria-label]="'Supprimer ' + c.label"><lucide-icon name="trash-2" [size]="16" /></button>
-                </td>
-              </tr>
-            } @empty {<tr><td colspan="6" class="empty">Aucune charge : créez-en une avec « Nouvelle charge ».</td></tr>}
-          </tbody>
-        </table>
-      </div>
-    </section>
   `,
-  styles: `.all-charges { margin-top: 18px; }`,
 })
 export class ChargesPage {
   private api = inject(ApiService);
@@ -115,7 +101,6 @@ export class ChargesPage {
   canManage = computed(() => this.auth.can('MANAGE_CHARGES'));
   month = signal(today(this.config).slice(0, 7));
   data = signal<ChargeMonth | null>(null);
-  charges = signal<ChargeView[]>([]);
   title = computed(() => `Charges de ${monthName(this.month())}`);
 
   constructor() {
@@ -124,9 +109,7 @@ export class ChargesPage {
 
   async reload(): Promise<void> {
     try {
-      const [m, all] = await Promise.all([this.api.chargeMonth(this.month()), this.api.charges()]);
-      this.data.set(m);
-      this.charges.set(all);
+      this.data.set(await this.api.chargeMonth(this.month()));
     } catch (e) {
       this.notify.error(e);
     }
@@ -134,7 +117,7 @@ export class ChargesPage {
 
   type(c: ChargeView): string {
     if (!c.permanent) return `Ponctuelle · ${monthName(c.period!)}`;
-    const since = `Permanente depuis ${monthName(c.startPeriod!)}`;
+    const since = `Permanente${c.autoPay ? ', réglée automatiquement,' : ''} depuis ${monthName(c.startPeriod!)}`;
     return c.endPeriod ? `${since}, arrêtée après ${monthName(c.endPeriod)}` : since;
   }
 

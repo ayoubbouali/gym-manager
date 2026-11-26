@@ -11,9 +11,13 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Dashboard, alerts and statistics (read only). */
 @Service
@@ -38,7 +42,7 @@ public class InsightService {
 
     /** Cashed amounts (non-cancelled payments) as revenue entries. */
     public static List<Rules.Sale> sales(ClubState st) {
-        java.util.Map<Long, MemberView> byId = new java.util.HashMap<>();
+        Map<Long, MemberView> byId = new HashMap<>();
         st.members().forEach(m -> byId.put(m.id(), m));
         return st.payments().stream().filter(p -> !p.cancelled())
                 .map(p -> new Rules.Sale(p.paidOn(), p.amount(), new HashSet<>(byId.get(p.memberId()).sportIds()))).toList();
@@ -152,5 +156,98 @@ public class InsightService {
                 st.activities().stream().filter(a -> w.contains(a.startsAt().toLocalDate()))
                         .map(a -> new ActivityAmount(a.id(), a.code(), a.name(), a.startsAt().toLocalDate(), a.price(),
                                 a.registrationCount(), a.revenue())).toList());
+    }
+
+    // ---------------------------------------------------------------- registrations (RG-INSCR)
+
+    public record LabelCount(String label, int count) {
+    }
+
+    public record SportRegistrations(Long id, String name, String color, int count) {
+    }
+
+    public record RegistrationMonth(String month, int newMembers, int renewals, int departures) {
+    }
+
+    public record NewMember(Long id, String code, String name, LocalDate registrationDate, List<Views.SportRef> sports, String packName) {
+    }
+
+    /**
+     * {@code ended}: subscription periods that ended in the window (up to today); {@code renewed}: those followed by a later period;
+     * {@code departures} = ended − renewed; {@code net} = new members − departures.
+     */
+    public record RegistrationStats(LocalDate from, LocalDate to, int newMembers, int renewals, int ended, int renewed, int departures,
+                                    Integer renewalRate, int net, List<RegistrationMonth> monthly, List<SportRegistrations> bySport,
+                                    List<LabelCount> byDuration, List<LabelCount> byAge, List<NewMember> newMemberRows) {
+    }
+
+    /**
+     * RG-INSCR. New member: registration date in the window. Renewal: any period but a member's first, by start date.
+     * Departure: a period ended in the window (end date reached) without a later period.
+     */
+    public RegistrationStats registrations(LocalDate from, LocalDate to) {
+        ClubState st = stateService.load();
+        LocalDate today = st.today();
+        if (from == null || to == null) {
+            from = YearMonth.from(today).atDay(1);
+            to = today;
+        }
+        if (from.isAfter(to)) throw ApiException.badRequest("La date de début doit précéder la date de fin.");
+        if (from.plusYears(20).isBefore(to)) throw ApiException.badRequest("Période trop longue (20 ans maximum).");
+        Rules.DateWindow w = new Rules.DateWindow(from, to);
+        LocalDate endedUntil = to.isAfter(today) ? today : to;
+
+        Map<YearMonth, int[]> months = new LinkedHashMap<>();
+        for (YearMonth ym = YearMonth.from(from); !ym.isAfter(YearMonth.from(to)); ym = ym.plusMonths(1)) months.put(ym, new int[3]);
+        Map<Integer, String> durationLabel = new HashMap<>();
+        st.durations().forEach(d -> durationLabel.putIfAbsent(d.months(), d.label()));
+        Map<Long, String> packName = new HashMap<>();
+        st.packs().forEach(p -> packName.put(p.id(), p.name()));
+
+        List<MemberView> fresh = st.members().stream().filter(m -> w.contains(m.registrationDate()))
+                .sorted(Comparator.comparing(MemberView::registrationDate).thenComparing(MemberView::code)).toList();
+        fresh.forEach(m -> months.get(YearMonth.from(m.registrationDate()))[0]++);
+
+        int renewals = 0, ended = 0, renewed = 0;
+        for (var periods : st.subsByMember().values()) {
+            for (int i = 0; i < periods.size(); i++) {
+                var p = periods.get(i);
+                if (i > 0 && w.contains(p.getStartDate())) {
+                    renewals++;
+                    months.get(YearMonth.from(p.getStartDate()))[1]++;
+                }
+                LocalDate end = Rules.subscriptionEnd(p.getStartDate(), p.getMonths());
+                if (end.isBefore(from) || end.isAfter(endedUntil)) continue;
+                ended++;
+                if (i < periods.size() - 1) renewed++;
+                else months.get(YearMonth.from(end))[2]++;
+            }
+        }
+
+        Map<String, Integer> byDuration = new LinkedHashMap<>();
+        Map<String, Integer> byAge = new LinkedHashMap<>();
+        Rules.AGE_BUCKETS.forEach(b -> byAge.put(b, 0));
+        List<NewMember> rows = new ArrayList<>();
+        for (MemberView m : fresh) {
+            var periods = st.subsByMember().getOrDefault(m.id(), List.of());
+            var first = periods.isEmpty() ? null : periods.getFirst();
+            String duration = first == null ? "Sans abonnement" : durationLabel.getOrDefault(first.getMonths(), first.getMonths() + " mois");
+            byDuration.merge(duration, 1, Integer::sum);
+            byAge.merge(Rules.ageBucket(m.birthDate(), m.registrationDate()), 1, Integer::sum);
+            rows.add(new NewMember(m.id(), m.code(), m.fullName(), m.registrationDate(), m.sports(),
+                    first == null ? null : packName.get(first.getPackId())));
+        }
+        List<SportRegistrations> bySport = st.sports().stream()
+                .map(s -> new SportRegistrations(s.id(), s.name(), s.color(), (int) fresh.stream().filter(m -> m.sportIds().contains(s.id())).count()))
+                .filter(s -> s.count() > 0).sorted(Comparator.comparingInt(SportRegistrations::count).reversed()).toList();
+        int departures = ended - renewed;
+        return new RegistrationStats(from, to, fresh.size(), renewals, ended, renewed, departures, Rules.renewalRate(ended, renewed),
+                fresh.size() - departures,
+                months.entrySet().stream().map(e -> new RegistrationMonth(e.getKey().toString(), e.getValue()[0], e.getValue()[1], e.getValue()[2])).toList(),
+                bySport,
+                byDuration.entrySet().stream().map(e -> new LabelCount(e.getKey(), e.getValue()))
+                        .sorted(Comparator.comparingInt(LabelCount::count).reversed()).toList(),
+                byAge.entrySet().stream().map(e -> new LabelCount(e.getKey(), e.getValue())).toList(),
+                rows.reversed());
     }
 }

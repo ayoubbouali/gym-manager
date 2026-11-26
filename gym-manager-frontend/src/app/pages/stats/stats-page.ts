@@ -16,6 +16,8 @@ import { NotifyService } from '../../core/notify.service';
 import { DateField } from '../../shared/date-field';
 import { SportChip } from '../../shared/badges';
 import { ChartComponent, barChart, cssColor } from '../../shared/chart';
+import { ChargeStats } from './charge-stats';
+import { RegistrationStats } from './registration-stats';
 import { StaffPayStats } from './staff-pay-stats';
 
 type Period = 'LAST12' | 'YEAR' | 'CUSTOM';
@@ -160,7 +162,7 @@ const HIDE_FIGURES_KEY = 'stats.hideFigures';
 
 @Component({
   selector: 'app-stats',
-  imports: [MatTabsModule, MatTooltipModule, LucideAngularModule, StaffPayStats, ClubStats],
+  imports: [MatTabsModule, MatTooltipModule, LucideAngularModule, StaffPayStats, ClubStats, RegistrationStats, ChargeStats],
   template: `
     <div class="stats-shell" [class.figures-hidden]="hidden()">
       <button type="button" class="figures-toggle" [class.on]="hidden()" (click)="toggle()" [attr.aria-pressed]="hidden()"
@@ -172,6 +174,8 @@ const HIDE_FIGURES_KEY = 'stats.hideFigures';
       <mat-tab-group [selectedIndex]="tab()" (selectedIndexChange)="tab.set($event)" animationDuration="0ms" mat-stretch-tabs="false">
         <mat-tab label="Suivi des salaires"><ng-template matTabContent><div class="stats-tab"><app-staff-pay-stats /></div></ng-template></mat-tab>
         <mat-tab label="Suivi des revenus"><ng-template matTabContent><div class="stats-tab"><app-club-stats /></div></ng-template></mat-tab>
+        <mat-tab label="Suivi des inscriptions"><ng-template matTabContent><div class="stats-tab"><app-registration-stats /></div></ng-template></mat-tab>
+        <mat-tab label="Suivi des charges"><ng-template matTabContent><div class="stats-tab"><app-charge-stats /></div></ng-template></mat-tab>
       </mat-tab-group>
     </div>
   `,
@@ -179,7 +183,7 @@ const HIDE_FIGURES_KEY = 'stats.hideFigures';
 })
 export class StatsPage {
   tab = signal(0);
-  /** Hides every figure of both tabs (e.g. when the screen is shared); remembered on this browser. */
+  /** Hides every figure of all tabs (e.g. when the screen is shared); remembered on this browser. */
   hidden = signal(localStorage.getItem(HIDE_FIGURES_KEY) === '1');
 
   toggle(): void {

@@ -312,6 +312,48 @@ class RulesTest {
     }
 
     @Nested
+    @DisplayName("RG-CHARGE")
+    class ChargeDue {
+        static final YearMonth NOV = YearMonth.of(2026, 11);
+
+        @ParameterizedTest(name = "{0} → due : {1}")
+        @CsvSource({"2026-08, false", "2026-09, true", "2026-11, true", "2026-12, false"})
+        void runningChargeIsDueFromItsStartToTheCurrentMonth(String month, boolean expected) {
+            assertThat(Rules.isChargeDue(YearMonth.of(2026, 9), null, YearMonth.parse(month), NOV)).isEqualTo(expected);
+        }
+
+        @Test
+        void aStoppedChargeIsNoLongerDueAfterItsLastMonth() {
+            YearMonth start = YearMonth.of(2026, 9), end = YearMonth.of(2026, 10);
+            assertThat(Rules.isChargeDue(start, end, end, NOV)).isTrue();
+            assertThat(Rules.isChargeDue(start, end, NOV, NOV)).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("RG-INSCR")
+    class Registrations {
+        @ParameterizedTest(name = "né le {0} → {1}")
+        @CsvSource({"2009-11-19, Moins de 18 ans", "2008-11-18, 18 à 25 ans", "2000-11-19, 18 à 25 ans", "2000-11-18, 26 à 35 ans",
+                "1976-11-18, 36 à 50 ans", "1975-11-18, Plus de 50 ans"})
+        void ageAtRegistration(LocalDate birth, String expected) {
+            assertThat(Rules.ageBucket(birth, d("2026-11-18"))).isEqualTo(expected);
+        }
+
+        @Test
+        void unknownBirthDate() {
+            assertThat(Rules.ageBucket(null, d("2026-11-18"))).isEqualTo("Non renseigné");
+        }
+
+        @Test
+        void renewalRate() {
+            assertThat(Rules.renewalRate(0, 0)).isNull();
+            assertThat(Rules.renewalRate(3, 2)).isEqualTo(67);
+            assertThat(Rules.renewalRate(4, 4)).isEqualTo(100);
+        }
+    }
+
+    @Nested
     @DisplayName("RG-SALAIRE")
     class Salary {
         static final long HAMZA = 1L, OTHER = 2L;

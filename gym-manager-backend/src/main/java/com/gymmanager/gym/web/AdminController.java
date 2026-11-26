@@ -5,6 +5,7 @@ import com.gymmanager.gym.domain.AppSetting;
 import com.gymmanager.gym.repository.SettingRepository;
 import com.gymmanager.gym.security.UserService;
 import com.gymmanager.gym.security.UserService.UserView;
+import com.gymmanager.gym.service.ChargeService;
 import com.gymmanager.gym.service.InsightService;
 import com.gymmanager.gym.service.MemberPurgeService;
 import com.gymmanager.gym.settings.RegionalCatalog;
@@ -40,6 +41,7 @@ public class AdminController {
     private final UserService users;
     private final FileStorage files;
     private final MemberPurgeService purge;
+    private final ChargeService chargeService;
 
     @GetMapping("/dashboard")
     public InsightService.Dashboard dashboard() {
@@ -55,6 +57,18 @@ public class AdminController {
     public InsightService.Stats stats(@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                                       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return insights.stats(from, to);
+    }
+
+    @GetMapping("/stats/registrations")
+    public InsightService.RegistrationStats registrations(@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                                          @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return insights.registrations(from, to);
+    }
+
+    /** Months "YYYY-MM"; default: the current month. */
+    @GetMapping("/stats/charges")
+    public ChargeService.ChargeStats charges(@RequestParam(required = false) String from, @RequestParam(required = false) String to) {
+        return chargeService.stats(from, to);
     }
 
     // ---------------------------------------------------------------- settings

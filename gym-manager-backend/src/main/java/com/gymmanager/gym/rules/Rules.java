@@ -261,6 +261,33 @@ public final class Rules {
                 .min(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(null);
     }
 
+    /**
+     * RG-CHARGE: a permanent charge is due every month from its start month to its end month (included, null while running),
+     * never after {@code lastDue} (the current month: a future month cannot be paid yet).
+     */
+    public static boolean isChargeDue(YearMonth start, YearMonth end, YearMonth month, YearMonth lastDue) {
+        return !month.isBefore(start) && (end == null || !month.isAfter(end)) && !month.isAfter(lastDue);
+    }
+
+    public static final List<String> AGE_BUCKETS = List.of("Moins de 18 ans", "18 à 25 ans", "26 à 35 ans", "36 à 50 ans", "Plus de 50 ans",
+            "Non renseigné");
+
+    /** RG-INSCR: age bracket of a member on a date (their registration date); last bucket without birth date. */
+    public static String ageBucket(LocalDate birthDate, LocalDate on) {
+        if (birthDate == null) return AGE_BUCKETS.getLast();
+        long age = ChronoUnit.YEARS.between(birthDate, on);
+        if (age < 18) return AGE_BUCKETS.get(0);
+        if (age <= 25) return AGE_BUCKETS.get(1);
+        if (age <= 35) return AGE_BUCKETS.get(2);
+        if (age <= 50) return AGE_BUCKETS.get(3);
+        return AGE_BUCKETS.get(4);
+    }
+
+    /** RG-INSCR: renewal rate in % (rounded) of the periods ended in a window; null when none ended. */
+    public static Integer renewalRate(int ended, int renewed) {
+        return ended == 0 ? null : (int) Math.round(renewed * 100.0 / ended);
+    }
+
     // ------------------------------------------------------------------ messages
 
     public static final List<String> MESSAGE_VARIABLES = List.of("prenom", "nom", "jours", "date_fin", "club", "pack");

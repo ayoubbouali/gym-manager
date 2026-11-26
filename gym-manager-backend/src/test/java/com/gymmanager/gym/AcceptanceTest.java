@@ -667,6 +667,124 @@ class AcceptanceTest {
     }
 
     @Test
+    @DisplayName("Charges : permanentes réglées chaque mois, ponctuelles à montant connu ou non, arrêt, corrections et droits")
+    void charges() throws Exception {
+        // permanent: created without a month, due from the current month (2026-11)
+        long elec = ((Number) read(send(admin, "POST", "/api/charges", Map.of("label", "Électricité", "category", "ELECTRICITE", "permanent", true))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.startPeriod").value("2026-11")).andExpect(jsonPath("$.period").doesNotExist()), "$.id")).longValue();
+        get(admin, "/api/charges/month?period=2026-11").andExpect(jsonPath("$.toPayCount").value(1))
+                .andExpect(jsonPath("$.rows[0].charge.label").value("Électricité")).andExpect(jsonPath("$.rows[0].payment").doesNotExist());
+        assertThat((List<Object>) read(get(admin, "/api/charges/month?period=2026-10"), "$.rows")).isEmpty();
+        long elecNov = ((Number) read(send(admin, "POST", "/api/charges/payments", Map.of("chargeId", elec, "period", "2026-11", "amount", 850, "method", "VIREMENT"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.paidOn").value("2026-11-18")), "$.id")).longValue();
+        send(admin, "POST", "/api/charges/payments", Map.of("chargeId", elec, "period", "2026-11", "amount", 850, "method", "VIREMENT"))
+                .andExpect(status().isBadRequest());
+        for (String month : List.of("2026-10", "2026-12")) {
+            send(admin, "POST", "/api/charges/payments", Map.of("chargeId", elec, "period", month, "amount", 10, "method", "ESPECES"))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("period"));
+        }
+
+        // one-off with a known amount, paid at once; one-off with an unknown amount, paid later
+        send(admin, "POST", "/api/charges", Map.of("label", "Réparation tapis", "category", "ENTRETIEN", "permanent", false,
+                        "period", "2026-11", "amount", 1200, "payNow", true, "method", "ESPECES"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.paymentCount").value(1)).andExpect(jsonPath("$.totalPaid").value(1200.0));
+        send(admin, "POST", "/api/charges", Map.of("label", "Ménage", "category", "MENAGE", "permanent", false, "period", "2026-11", "payNow", true,
+                "method", "ESPECES")).andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("amount"));
+        send(admin, "POST", "/api/charges", Map.of("label", "Sans mois", "category", "AUTRE", "permanent", false))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("period"));
+        long menage = ((Number) read(send(admin, "POST", "/api/charges", Map.of("label", "Ménage", "category", "MENAGE", "permanent", false, "period", "2026-11"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.amount").doesNotExist()), "$.id")).longValue();
+        get(admin, "/api/charges/month?period=2026-11").andExpect(jsonPath("$.rows.length()").value(3))
+                .andExpect(jsonPath("$.totalPaid").value(2050.0)).andExpect(jsonPath("$.toPayCount").value(1));
+
+        // statistics of November: charges by category, still to pay, profit = revenue − salaries − charges
+        get(admin, "/api/stats/charges?from=2026-11&to=2026-11").andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCharges").value(2050.0)).andExpect(jsonPath("$.toPayCount").value(1))
+                .andExpect(jsonPath("$.toPay[0].charge.label").value("Ménage"))
+                .andExpect(jsonPath("$.byCategory[0].label").value("Entretien du matériel")).andExpect(jsonPath("$.byCategory[0].amount").value(1200.0))
+                .andExpect(jsonPath("$.revenue").value(250.0)).andExpect(jsonPath("$.salaries").value(0.0))
+                .andExpect(jsonPath("$.profit").value(-1800.0))
+                .andExpect(jsonPath("$.monthly[0].month").value("2026-11")).andExpect(jsonPath("$.monthly[0].profit").value(-1800.0));
+        assertThat(((Number) read(get(admin, "/api/stats/charges?from=2026-10&to=2026-10"), "$.salaries")).doubleValue()).isPositive();
+        get(admin, "/api/stats/charges").andExpect(jsonPath("$.from").value("2026-11")).andExpect(jsonPath("$.to").value("2026-11"));
+
+        // a paid charge is not deleted; a stopped permanent charge is no longer due after its last month
+        send(admin, "DELETE", "/api/charges/" + elec, null).andExpect(status().isConflict());
+        send(admin, "PATCH", "/api/charges/" + elec + "/active", Map.of("active", false)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.endPeriod").value("2026-11")).andExpect(jsonPath("$.active").value(false));
+        clock.advance(Duration.ofDays(20));   // 2026-12-08
+        assertThat((List<Object>) read(get(admin, "/api/charges/month?period=2026-12"), "$.rows")).isEmpty();
+        send(admin, "PATCH", "/api/charges/" + elec + "/active", Map.of("active", true)).andExpect(status().isOk());
+        get(admin, "/api/charges/month").andExpect(jsonPath("$.period").value("2026-12")).andExpect(jsonPath("$.rows.length()").value(1));
+
+        // CHARGES without MANAGE_CHARGES: pays, but neither corrects nor deletes a payment; no access without CHARGES
+        long role = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Intendance", "permissions", List.of("CHARGES"))), "$.id")).longValue();
+        send(admin, "POST", "/api/users", Map.of("username", "intendant", "password", "Inten2026x", "roleId", role)).andExpect(status().isOk());
+        MockHttpSession intendant = login("intendant", "Inten2026x", "Inten2027x");
+        long menageNov = ((Number) read(send(intendant, "POST", "/api/charges/payments", Map.of("chargeId", menage, "amount", 300, "method", "ESPECES"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.period").value("2026-11")), "$.id")).longValue();
+        send(intendant, "PUT", "/api/charges/payments/" + menageNov, Map.of("amount", 350, "method", "ESPECES")).andExpect(status().isForbidden());
+        send(intendant, "DELETE", "/api/charges/payments/" + menageNov, null).andExpect(status().isForbidden());
+        get(intendant, "/api/stats/charges").andExpect(status().isForbidden());
+        MockHttpSession accueil = login("accueil", "accueil123", "Accueil2026");
+        get(accueil, "/api/charges").andExpect(status().isForbidden());
+
+        // ADMIN corrects then deletes a payment; the charge can then be deleted
+        send(admin, "PUT", "/api/charges/payments/" + elecNov, Map.of("amount", 900, "method", "CARTE", "paidOn", "2026-11-20"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.amount").value(900.0)).andExpect(jsonPath("$.period").value("2026-11"))
+                .andExpect(jsonPath("$.updatedBy").value("admin"));
+        send(admin, "DELETE", "/api/charges/payments/" + elecNov, null).andExpect(status().isNoContent());
+        send(admin, "DELETE", "/api/charges/" + elec, null).andExpect(status().isNoContent());
+        assertThat((List<Object>) read(get(admin, "/api/charges"), "$[*].label")).containsExactly("Ménage", "Réparation tapis");
+    }
+
+    @Test
+    @DisplayName("Suivi des inscriptions : nouvelles inscriptions, renouvellements, départs et répartitions")
+    void registrationStats() throws Exception {
+        String url = "/api/stats/registrations?from=2026-11-01&to=2026-11-18";
+        String before = body(get(admin, url).andExpect(status().isOk()));
+        long karate = id("/api/sports", "$[?(@.name=='Karaté')].id");
+        long monthly = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
+        // new member of the window, aged 26 at registration
+        Map<String, Object> fresh = member("Nouveau", "Inscrit", "0612000301", karate, monthly, null, "2026-11-17");
+        fresh.put("birthDate", "2000-01-01");
+        long m = ((Number) read(send(admin, "POST", "/api/members", fresh), "$.id")).longValue();
+        // membership ended on 2026-11-01 without renewal: a departure
+        long gone = ((Number) read(send(admin, "POST", "/api/members", member("Parti", "Test", "0612000302", karate, monthly, null, "2026-10-01")), "$.id")).longValue();
+
+        String after = body(get(admin, url));
+        assertThat(delta(before, after, "$.newMembers")).isEqualTo(1);
+        assertThat(delta(before, after, "$.ended")).isEqualTo(1);
+        assertThat(delta(before, after, "$.departures")).isEqualTo(1);
+        assertThat(delta(before, after, "$.net")).isZero();
+        assertThat(delta(before, after, "$.byAge[?(@.label=='26 à 35 ans')].count")).isEqualTo(1);
+        assertThat(delta(before, after, "$.byDuration[?(@.label=='Mensuel')].count")).isEqualTo(1);
+        assertThat(delta(before, after, "$.bySport[?(@.name=='Karaté')].count")).isEqualTo(1);
+        assertThat((List<Object>) JsonPath.read(after, "$.newMemberRows[?(@.id==" + m + ")].packName")).containsExactly("Karaté - Mensuel");
+        assertThat((List<Object>) JsonPath.read(after, "$.monthly[*].month")).containsExactly("2026-11");
+
+        // renewed today: a renewal, and the ended period is no longer a departure
+        send(admin, "POST", "/api/members/" + gone + "/renew", Map.of("packId", monthly)).andExpect(status().isOk());
+        String renewed = body(get(admin, url));
+        assertThat(delta(after, renewed, "$.renewals")).isEqualTo(1);
+        assertThat(delta(after, renewed, "$.renewed")).isEqualTo(1);
+        assertThat(delta(after, renewed, "$.departures")).isEqualTo(-1);
+        get(admin, "/api/stats/registrations").andExpect(jsonPath("$.from").value("2026-11-01")).andExpect(jsonPath("$.to").value("2026-11-18"));
+        get(admin, "/api/stats/registrations?from=2026-11-18&to=2026-11-01").andExpect(status().isBadRequest());
+    }
+
+    /** Difference of a count between two answers; a filter path sums its matches (0 when none). */
+    static int delta(String before, String after, String path) {
+        return count(after, path) - count(before, path);
+    }
+
+    static int count(String json, String path) {
+        Object v = JsonPath.read(json, path);
+        if (v instanceof List<?> l) return l.stream().mapToInt(x -> ((Number) x).intValue()).sum();
+        return ((Number) v).intValue();
+    }
+
+    @Test
     @DisplayName("Statistiques et tableau de bord sur les encaissements")
     void cashedRevenue() throws Exception {
         get(admin, "/api/stats").andExpect(jsonPath("$.kpis.revenue").value(18220.0))
@@ -1426,7 +1544,7 @@ class AcceptanceTest {
     }
 
     static final List<String> ALL_PERMISSIONS = List.of("MEMBERS", "MEMBER_CARD", "PACKS", "DISCOUNTS", "SPORTS", "ACTIVITIES",
-            "STAFF", "PAYROLL", "PAYMENTS", "ALERTS", "STATS", "SETTINGS", "EDIT_REFERENTIALS", "MANAGE_PAYMENTS");
+            "STAFF", "PAYROLL", "CHARGES", "PAYMENTS", "ALERTS", "STATS", "SETTINGS", "EDIT_REFERENTIALS", "MANAGE_PAYMENTS", "MANAGE_CHARGES");
 
     @Test
     @DisplayName("Rôles : nom libre et liste de pages et droits ; ADMIN et ACCUEIL gardent leurs droits d'avant")

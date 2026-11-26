@@ -32,6 +32,7 @@ export const NAV: NavGroup[] = [
       { path: '/activites', label: 'Activités', icon: 'calendar-days', permission: 'ACTIVITIES' },
       { path: '/personnel', label: 'Personnel', icon: 'briefcase', permission: 'STAFF' },
       { path: '/paie', label: 'Paie du personnel', icon: 'hand-coins', permission: 'PAYROLL' },
+      { path: '/charges', label: 'Charges', icon: 'receipt', permission: 'CHARGES' },
     ],
   },
   {
@@ -49,6 +50,7 @@ export const NAV: NavGroup[] = [
 export const WRITE_RIGHTS: { permission: Permission; label: string }[] = [
   { permission: 'EDIT_REFERENTIALS', label: 'Modifier packs, remises, durées, sports et activités' },
   { permission: 'MANAGE_PAYMENTS', label: 'Corriger, annuler ou supprimer un paiement ou une période' },
+  { permission: 'MANAGE_CHARGES', label: 'Corriger ou supprimer un règlement de charge' },
 ];
 
 /** Menu restricted to what the user may open; empty groups are dropped. */

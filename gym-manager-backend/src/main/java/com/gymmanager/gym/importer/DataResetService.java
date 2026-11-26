@@ -10,13 +10,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Deletes all the club data (members, payments, sports, staff, packs, referentials, payroll, activities)
+ * Deletes all the club data (members, payments, sports, staff, packs, referentials, payroll, charges, activities)
  * and resets the code counters. User accounts, settings and the club logo are kept.
  */
 @Service
 public class DataResetService {
     static final List<String> TABLES = List.of(
-            "payments", "salary_payments", "salary_bonuses", "activity_registrations", "subscriptions", "member_sports", "members",
+            "payments", "salary_payments", "salary_bonuses", "charge_payments", "charges", "activity_registrations", "subscriptions", "member_sports", "members",
             "activities", "packs", "sport_schedules", "sport_coaches", "sports", "staff", "staff_functions",
             "durations", "discounts", "code_counters");
 

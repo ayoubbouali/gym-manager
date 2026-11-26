@@ -1,5 +1,6 @@
 package com.gymmanager.gym.web.dto;
 
+import com.gymmanager.gym.domain.ChargeCategory;
 import com.gymmanager.gym.domain.Insurance;
 import com.gymmanager.gym.domain.PayMode;
 import com.gymmanager.gym.domain.PaymentMethod;
@@ -96,6 +97,18 @@ public final class Requests {
     }
 
     /** {@code amount} null removes the bonus of the month. */
+    /**
+     * Creates or edits a charge. {@code permanent} is ignored on edit (the type never changes). One-off only: {@code period},
+     * {@code amount} (null while unknown) and, at creation, {@code payNow} with {@code method} / {@code paidOn}.
+     */
+    public record ChargeRequest(String label, ChargeCategory category, Boolean permanent, String period, BigDecimal amount,
+                                String note, Boolean payNow, PaymentMethod method, LocalDate paidOn) {
+    }
+
+    /** Pays a charge for a month (the month of a one-off charge is its own). */
+    public record ChargePaymentRequest(Long chargeId, String period, BigDecimal amount, PaymentMethod method, LocalDate paidOn, String note) {
+    }
+
     public record SalaryBonusRequest(Long staffId, String period, BigDecimal amount, String note) {
     }
 

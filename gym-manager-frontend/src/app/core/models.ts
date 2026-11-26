@@ -2,8 +2,8 @@
 
 /** Menu pages a role opens (Accueil and Mon compte are open to everyone), then two write rights. Checked by the server. */
 export type Permission =
-  | 'MEMBERS' | 'MEMBER_CARD' | 'PACKS' | 'DISCOUNTS' | 'SPORTS' | 'ACTIVITIES' | 'STAFF' | 'PAYROLL' | 'PAYMENTS'
-  | 'ALERTS' | 'STATS' | 'SETTINGS' | 'EDIT_REFERENTIALS' | 'MANAGE_PAYMENTS';
+  | 'MEMBERS' | 'MEMBER_CARD' | 'PACKS' | 'DISCOUNTS' | 'SPORTS' | 'ACTIVITIES' | 'STAFF' | 'PAYROLL' | 'CHARGES' | 'PAYMENTS'
+  | 'ALERTS' | 'STATS' | 'SETTINGS' | 'EDIT_REFERENTIALS' | 'MANAGE_PAYMENTS' | 'MANAGE_CHARGES';
 export type PaymentStatus = 'PAYE' | 'PARTIEL' | 'IMPAYE';
 export type PaymentMethod = 'ESPECES' | 'CARTE' | 'VIREMENT';
 export type Insurance = 'PAYE' | 'IMPAYE';
@@ -246,3 +246,90 @@ export interface PhoneCountry { code: string; label: string; dialCode: string; e
 export interface RegionalOptions { currencies: CurrencyOption[]; countries: CountryOption[]; }
 
 export interface ApiError { message: string; field?: string; code?: string; }
+
+// ------------------------------------------------------------------ charges
+
+export type ChargeCategory = 'ELECTRICITE' | 'EAU' | 'INTERNET' | 'LOYER' | 'MENAGE' | 'ENTRETIEN' | 'AUTRE';
+
+/** Permanent: due every month from `startPeriod` to `endPeriod` (null while running). One-off: `period`, `amount` null while unknown. */
+export interface ChargeView {
+  id: number;
+  label: string;
+  category: ChargeCategory;
+  categoryLabel: string;
+  permanent: boolean;
+  period: string | null;
+  amount: number | null;
+  startPeriod: string | null;
+  endPeriod: string | null;
+  active: boolean;
+  note: string;
+  paymentCount: number;
+  totalPaid: number;
+}
+
+export interface ChargePaymentView {
+  id: number;
+  chargeId: number;
+  period: string;
+  amount: number;
+  method: PaymentMethod;
+  methodLabel: string;
+  paidOn: string;
+  note: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+/** A charge due for a month: paid (`payment`) or to pay (`expected`: known amount of a one-off charge). */
+export interface ChargeDue {
+  charge: ChargeView;
+  period: string;
+  expected: number | null;
+  payment: ChargePaymentView | null;
+}
+
+export interface ChargeMonth {
+  period: string;
+  currentMonth: boolean;
+  rows: ChargeDue[];
+  totalPaid: number;
+  toPayCount: number;
+  toPayKnown: number;
+}
+
+export interface ChargeStats {
+  from: string;
+  to: string;
+  totalCharges: number;
+  toPayCount: number;
+  toPayKnown: number;
+  revenue: number;
+  salaries: number;
+  profit: number;
+  monthly: { month: string; revenue: number; salaries: number; charges: number; profit: number }[];
+  byCategory: { category: ChargeCategory; label: string; amount: number }[];
+  toPay: ChargeDue[];
+  paid: ChargeDue[];
+}
+
+// ------------------------------------------------------------------ registrations
+
+export interface RegistrationStats {
+  from: string;
+  to: string;
+  newMembers: number;
+  renewals: number;
+  ended: number;
+  renewed: number;
+  departures: number;
+  renewalRate: number | null;
+  net: number;
+  monthly: { month: string; newMembers: number; renewals: number; departures: number }[];
+  bySport: { id: number; name: string; color: string; count: number }[];
+  byDuration: { label: string; count: number }[];
+  byAge: { label: string; count: number }[];
+  newMemberRows: { id: number; code: string; name: string; registrationDate: string; sports: SportRef[]; packName: string | null }[];
+}

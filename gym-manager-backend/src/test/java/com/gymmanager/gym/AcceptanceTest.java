@@ -1273,6 +1273,10 @@ class AcceptanceTest {
                 .andExpect(status().isOk());
 
         long hamza = id("/api/staff-options", "$[?(@.code=='E001')].id");
+        // only the "Coach" function supervises sports: the sport form offers coaches alone
+        assertThat((List<Object>) read(get(admin, "/api/staff-options"), "$[?(@.code=='E001')].coach")).containsExactly(true);
+        assertThat((List<Object>) read(get(admin, "/api/staff-options"), "$[?(@.name=='Bouzid Yassir')].coach"))
+                .containsExactly(false);
         long act = ((Number) read(send(admin, "POST", "/api/activities", Map.of("name", "Atelier", "price", 50,
                 "startsAt", "2026-12-01T18:00:00", "maxPlaces", 1, "managerId", hamza)), "$.id")).longValue();
         long a001 = id("/api/members", "$[?(@.code=='A001')].id");

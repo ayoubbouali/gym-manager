@@ -61,6 +61,8 @@ export interface AppConfig {
 
 export interface SportRef { id: number; code: string; name: string; color: string; active: boolean; }
 export interface StaffRef { id: number; code: string; name: string; active: boolean; }
+/** Staff offered in a picker; `coach`: their function is "Coach", the only one that supervises sports. */
+export interface StaffOption extends StaffRef { coach: boolean; }
 export interface FunctionView { id: number; label: string; active: boolean; }
 export interface DurationView { id: number; label: string; months: number; active: boolean; }
 export interface DiscountView { id: number; code: string; name: string; percent: number; active: boolean; system: boolean; }

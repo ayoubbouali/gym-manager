@@ -77,7 +77,7 @@ export class ApiService {
   functions = () => this.get<M.FunctionView[]>('/functions');
   sports = () => this.get<M.SportView[]>('/sports');
   staff = () => this.get<M.StaffList>('/staff');
-  staffOptions = () => this.get<M.StaffRef[]>('/staff-options');
+  staffOptions = () => this.get<M.StaffOption[]>('/staff-options');
   activities = () => this.get<M.ActivityView[]>('/activities');
   registrations = () => this.get<M.RegistrationView[]>('/registrations');
   dashboard = () => this.get<M.Dashboard>('/dashboard');

@@ -25,6 +25,10 @@ public final class Views {
     public record FunctionView(Long id, String label, boolean active) {
     }
 
+    /** A staff member offered in a picker; {@code coach}: their function is "Coach", the only one that supervises sports. */
+    public record StaffOption(Long id, String code, String name, boolean active, boolean coach) {
+    }
+
     public record DurationView(Long id, String label, int months, boolean active) {
     }
 

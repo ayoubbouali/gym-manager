@@ -1,6 +1,7 @@
 package com.gymmanager.gym.web;
 
 import com.gymmanager.gym.service.*;
+import com.gymmanager.gym.rules.Rules;
 import com.gymmanager.gym.service.Views.*;
 import com.gymmanager.gym.web.dto.Requests.*;
 import lombok.RequiredArgsConstructor;
@@ -224,8 +225,9 @@ public class CatalogController {
 
     /** Names of active staff, for the "Responsable" / "Coach(s)" pickers (no salary data). */
     @GetMapping("/staff-options")
-    public List<StaffRef> staffOptions() {
-        return state.load().staff().stream().map(s -> new StaffRef(s.id(), s.code(), s.name(), s.active())).toList();
+    public List<StaffOption> staffOptions() {
+        return state.load().staff().stream().map(s -> new StaffOption(s.id(), s.code(), s.name(), s.active(),
+                s.function() != null && Rules.normalize(s.function().label()).equals("coach"))).toList();
     }
 
     // ---------------------------------------------------------------- activities

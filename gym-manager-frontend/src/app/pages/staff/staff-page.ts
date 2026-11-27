@@ -19,7 +19,7 @@ import { NotifyService } from '../../core/notify.service';
 import { ActiveBadge, SportChip } from '../../shared/badges';
 import { ConfirmService } from '../../shared/confirm.service';
 import { Pager, SortHeader, TableState } from '../../shared/table';
-import { PREVIEW_DELAY_MS, PREVIEW_POSITIONS } from '../members/members-page';
+import { PREVIEW_DELAY_MS, PREVIEW_POSITIONS } from '../members/member-preview';
 import { FunctionManageDialog, StaffFormDialog } from './staff-dialogs';
 import { StaffPreview, payModeLabel } from './staff-preview';
 

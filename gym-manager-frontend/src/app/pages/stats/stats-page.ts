@@ -150,8 +150,8 @@ export class ClubStats {
   month = (ym: string) => formatMonth(ym, true);
   monthlyRows = new Paged(() => this.s()?.monthlyBySource ?? []);
   sportRows = new Paged(() => this.s()?.bySport ?? []);
-  quarterRows = new Paged(() => this.s()?.quarterly ?? [], 8);
-  yearRows = new Paged(() => this.s()?.yearly ?? [], 8);
+  quarterRows = new Paged(() => this.s()?.quarterly ?? []);
+  yearRows = new Paged(() => this.s()?.yearly ?? []);
   activityRows = new Paged(() => this.s()?.activities ?? []);
   readonly sourceStyle: Record<string, { icon: string; color: string }> = {
     SUBSCRIPTIONS: { icon: 'ticket', color: 'blue' }, ACTIVITIES: { icon: 'calendar-days', color: 'amber' }, BUSINESS: { icon: 'shopping-bag', color: 'green' },

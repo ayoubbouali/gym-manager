@@ -16,7 +16,7 @@ export class ConfigService {
   readonly phoneExample = computed(() => this.config()?.phoneExample ?? '');
   readonly country = computed(() => this.config()?.country ?? 'MA');
   readonly clubName = computed(() => this.config()?.clubName ?? this.publicName());
-  readonly pageSize = computed(() => this.config()?.pageSize ?? 20);
+  readonly pageSize = computed(() => this.config()?.pageSize ?? 10);
   /** Uploaded logo (Paramètres › Club), if any. */
   readonly customLogoUrl = computed(() => {
     const v = this.config()?.logoVersion;

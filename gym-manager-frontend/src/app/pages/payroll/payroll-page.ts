@@ -20,7 +20,7 @@ import { ActiveBadge, PaidBadge } from '../../shared/badges';
 import { ConfirmService } from '../../shared/confirm.service';
 import { DateField } from '../../shared/date-field';
 import { hasInvalid, salaryReceiptUrl } from '../../shared/payment-dialogs';
-import { PREVIEW_DELAY_MS, PREVIEW_POSITIONS } from '../members/members-page';
+import { PREVIEW_DELAY_MS, PREVIEW_POSITIONS } from '../members/member-preview';
 import { SalaryDetailDialog } from '../staff/staff-dialogs';
 import { StaffPreview } from '../staff/staff-preview';
 

@@ -10,8 +10,8 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { debounceTime, firstValueFrom, startWith } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
-import { FrDatePipe, MoneyPipe, formatAmount } from '../../core/format';
-import { DiscountView, MemberPreview, MemberView, PackView, SportView } from '../../core/models';
+import { FrDatePipe, MoneyPipe, PAYMENT_METHODS, formatAmount } from '../../core/format';
+import { DiscountView, MemberPreview, MemberView, PackView, PaymentMethod, SportView } from '../../core/models';
 import { NotifyService, apiError, errorMessage } from '../../core/notify.service';
 import { DateField } from '../../shared/date-field';
 import { MultiSelect, SelectOption } from '../../shared/multi-select';
@@ -79,6 +79,30 @@ import { PhoneInput, PhoneValue } from '../../shared/phone-input';
           </mat-button-toggle-group>
         </div>
         <mat-form-field class="span-2"><mat-label>Notes</mat-label><textarea matInput formControlName="notes" rows="1"></textarea></mat-form-field>
+        @if (offersPayment()) {
+          <div class="field-block span-2">
+            <span class="field-label">Encaisser maintenant ?</span>
+            <mat-button-toggle-group formControlName="payNow" aria-label="Encaisser maintenant">
+              <mat-button-toggle [value]="true">Oui</mat-button-toggle><mat-button-toggle [value]="false">Non, plus tard</mat-button-toggle>
+            </mat-button-toggle-group>
+          </div>
+          @if (values().payNow) {
+            <mat-form-field>
+              <mat-label>Montant encaissé</mat-label>
+              <input matInput type="number" min="0.01" step="0.01" formControlName="paymentAmount" (input)="amountEdited = true" required />
+              <span matTextSuffix>&nbsp;{{ config.currency() }}</span>
+              @if (paymentHint(); as h) {<mat-hint>{{ h }}</mat-hint>}
+              <mat-error>{{ form.controls.paymentAmount.errors?.['server'] ?? paymentAmountError() }}</mat-error>
+            </mat-form-field>
+            <app-date-field label="Date du paiement" formControlName="paidOn" [max]="today" required />
+            <div class="field-block span-2">
+              <span class="field-label">Mode de paiement</span>
+              <mat-button-toggle-group formControlName="paymentMethod" aria-label="Mode de paiement">
+                @for (m of methods; track m.value) {<mat-button-toggle [value]="m.value">{{ m.label }}</mat-button-toggle>}
+              </mat-button-toggle-group>
+            </div>
+          }
+        }
       </form>
       @if (!withoutSubscription) {
         <div class="computed-box" aria-live="polite">
@@ -106,6 +130,10 @@ export class MemberFormDialog {
   private ref = inject(MatDialogRef<MemberFormDialog>);
   private notify = inject(NotifyService);
   config = inject(ConfigService);
+  methods = PAYMENT_METHODS;
+  today = this.config.config()?.today ?? '';
+  /** The amount was typed by hand: it no longer follows the computed price. */
+  amountEdited = false;
 
   sports = signal<SportView[]>([]);
   packs = signal<PackView[]>([]);
@@ -130,6 +158,11 @@ export class MemberFormDialog {
     registrationDate: [this.member?.registrationDate ?? this.config.config()?.today ?? '', Validators.required],
     insurance: [this.member?.insurance ?? 'IMPAYE'],
     notes: [this.member?.notes ?? ''],
+    /** Creation only: first payment of the period, the computed price by default, lower for a partial payment. */
+    payNow: [false],
+    paymentAmount: [null as number | null],
+    paidOn: [this.config.config()?.today ?? ''],
+    paymentMethod: ['ESPECES' as PaymentMethod],
   });
   protected values = toSignal(this.form.valueChanges, { initialValue: this.form.value });
 
@@ -151,6 +184,24 @@ export class MemberFormDialog {
     return `soit −${formatAmount(pct)} % sur ${formatAmount(total)} ${this.config.currency()}`;
   });
 
+  /** A new member with something to pay. */
+  offersPayment = computed(() => !this.member && (this.preview()?.price ?? 0) > 0);
+  paymentHint = computed(() => {
+    const price = this.preview()?.price;
+    const amount = this.values().paymentAmount;
+    if (price == null || amount == null || amount <= 0 || amount > price) return '';
+    const left = Math.round((price - amount) * 100) / 100;
+    return left > 0 ? `Paiement partiel : reste ${formatAmount(left)} ${this.config.currency()} à payer`
+      : `Paiement complet (${formatAmount(price)} ${this.config.currency()})`;
+  });
+
+  paymentAmountError(): string {
+    const price = this.preview()?.price;
+    return this.form.controls.paymentAmount.hasError('max') && price != null
+      ? `Pas plus que le prix (${formatAmount(price)} ${this.config.currency()}).`
+      : 'Saisissez le montant encaissé.';
+  }
+
   constructor() {
     Promise.all([this.api.sports(), this.api.packs(), this.api.discounts()]).then(([s, p, d]) => {
       this.sports.set(s);
@@ -171,6 +222,21 @@ export class MemberFormDialog {
       amount.setValidators(m === 'AMOUNT' ? [Validators.required, Validators.min(0)] : []);
       amount.updateValueAndValidity({ emitEvent: false });
     });
+    const payNow = this.form.controls.payNow;
+    payNow.valueChanges.pipe(takeUntilDestroyed(destroy)).subscribe(() => this.updatePaymentValidators());
+  }
+
+  /** Payment fields are checked only when paying now; the amount may not exceed the computed price. */
+  private updatePaymentValidators(): void {
+    const on = !!this.form.controls.payNow.value && this.offersPayment();
+    const price = this.preview()?.price;
+    const amount = this.form.controls.paymentAmount;
+    amount.setValidators(on ? [Validators.required, Validators.min(0.01), ...(price != null ? [Validators.max(price)] : [])] : []);
+    amount.updateValueAndValidity({ emitEvent: false });
+    for (const c of [this.form.controls.paidOn, this.form.controls.paymentMethod]) {
+      c.setValidators(on ? [Validators.required] : []);
+      c.updateValueAndValidity({ emitEvent: false });
+    }
   }
 
   /** The typed price, or null when a discount of the list applies. */
@@ -191,6 +257,8 @@ export class MemberFormDialog {
     } catch {
       this.preview.set(null);
     }
+    if (!this.member && !this.amountEdited) this.form.controls.paymentAmount.setValue(this.preview()?.price ?? null, { emitEvent: false });
+    this.updatePaymentValidators();
   }
 
   /** The message sits above the fields: scroll back to it, the user may be at the bottom of the form. */
@@ -203,22 +271,29 @@ export class MemberFormDialog {
     this.error.set('');
     if (this.form.invalid || !(this.form.value.sportIds ?? []).length) {
       this.form.markAllAsTouched();
+      const paymentOnly = (this.form.value.sportIds ?? []).length > 0
+        && Object.entries(this.form.controls).every(([k, c]) => c.valid || k === 'paymentAmount' || k === 'paidOn');
+      if (paymentOnly) return this.showError('Vérifiez l’encaissement : le montant (pas plus que le prix) et la date du paiement.');
       this.showError(this.withoutSubscription
         ? 'Renseignez les champs obligatoires : nom, prénom, téléphone, au moins un sport et la date d\'inscription.'
         : 'Renseignez les champs obligatoires : nom, prénom, téléphone, au moins un sport, un abonnement et la date d\'inscription.');
       return;
     }
-    const { discountMode, ...v } = this.form.getRawValue();
+    const { discountMode, payNow, paymentAmount, paymentMethod, paidOn, ...v } = this.form.getRawValue();
+    const pays = !!payNow && this.offersPayment();
     this.busy.set(true);
     try {
       const saved = await this.api.save<MemberView>('members', this.member?.id,
         { ...v, customAmount: discountMode === 'AMOUNT' ? v.customAmount : null,
-          phone: v.phone?.number ?? '', phoneCountry: v.phone?.country ?? null, birthDate: v.birthDate || null });
-      this.notify.success(this.member ? 'Adhérent modifié.' : `Adhérent ${saved.code} créé.`);
+          phone: v.phone?.number ?? '', phoneCountry: v.phone?.country ?? null, birthDate: v.birthDate || null,
+          ...(pays ? { paymentAmount, paymentMethod, paidOn } : {}) });
+      this.notify.success(this.member ? 'Adhérent modifié.'
+        : pays ? `Adhérent ${saved.code} créé, ${formatAmount(paymentAmount!)} ${this.config.currency()} encaissés.` : `Adhérent ${saved.code} créé.`);
       this.ref.close(saved);
     } catch (e) {
       const err = apiError(e);
-      if (err?.field && this.form.get(err.field)) this.form.get(err.field)!.setErrors({ server: err.message });
+      const field = err?.field === 'amount' ? 'paymentAmount' : err?.field === 'method' ? 'paymentMethod' : err?.field;
+      if (field && this.form.get(field)) this.form.get(field)!.setErrors({ server: err!.message });
       this.showError(errorMessage(e));
     } finally {
       this.busy.set(false);

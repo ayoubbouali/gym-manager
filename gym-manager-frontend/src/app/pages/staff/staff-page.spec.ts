@@ -7,7 +7,7 @@ import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
 import { APP_ICONS } from '../../core/icons';
 import { StaffView } from '../../core/models';
-import { PREVIEW_DELAY_MS } from '../members/members-page';
+import { PREVIEW_DELAY_MS } from '../members/member-preview';
 import { StaffPage } from './staff-page';
 
 function staff(id: number, over: Partial<StaffView> = {}): StaffView {

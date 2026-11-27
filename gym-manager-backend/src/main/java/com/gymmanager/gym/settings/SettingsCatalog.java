@@ -90,7 +90,7 @@ public final class SettingsCatalog {
         l.add(SettingDef.required("documents.payslipPrefix", "documents", "prefix", "Préfixe des reçus de salaire", "SAL"));
         l.add(SettingDef.of("documents.footer", "documents", "string", "Mention en pied de reçu", "Merci de votre confiance."));
 
-        l.add(SettingDef.choice("display.pageSize", "display", "Lignes par page", "20",
+        l.add(SettingDef.choice("display.pageSize", "display", "Lignes par page", "10",
                 new Option("10", "10"), new Option("20", "20"), new Option("50", "50"), new Option("100", "100")));
 
         // Blank from/key fall back to MAIL_FROM / BREVO_API_KEY. SMTP values are stored only: sending uses the Brevo HTTP API.

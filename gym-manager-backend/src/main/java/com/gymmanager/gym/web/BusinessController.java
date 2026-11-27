@@ -36,6 +36,12 @@ public class BusinessController {
         return business.create(r, user.getName());
     }
 
+    /** One item per member of {@code memberIds}, all or none. */
+    @PostMapping("/batch")
+    public List<BusinessView> createForMembers(@RequestBody BusinessRequest r, Principal user) {
+        return business.createForMembers(r, user.getName());
+    }
+
     @PutMapping("/{id}")
     public BusinessView update(@PathVariable Long id, @RequestBody BusinessRequest r, Principal user) {
         return business.update(id, r, user.getName());

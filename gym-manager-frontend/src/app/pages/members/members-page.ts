@@ -1,5 +1,5 @@
 import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
-import { CdkConnectedOverlay, ConnectedPosition } from '@angular/cdk/overlay';
+import { CdkConnectedOverlay } from '@angular/cdk/overlay';
 import { CdkScrollable } from '@angular/cdk/scrolling';
 import { CdkDrag, CdkDropList } from '@angular/cdk/drag-drop';
 import { RouterLink } from '@angular/router';
@@ -26,7 +26,8 @@ import { Pager, SortHeader, TableState } from '../../shared/table';
 import { openMemberForm } from './member-form-dialog';
 import { openMemberNote } from './member-note-dialog';
 import { MemberColumnId, MemberColumns } from './member-columns';
-import { MemberPreview } from './member-preview';
+import { NoteReminders } from './note-reminders';
+import { MemberPreview, PREVIEW_DELAY_MS, PREVIEW_ID, PREVIEW_POSITIONS } from './member-preview';
 
 /** Shared by the table and the count pill, so the filtered count can never exceed the base. */
 const isActive = (m: MemberView) => m.active;
@@ -39,24 +40,15 @@ const DEFAULT_SORT = { key: 'code', dir: 'asc' } as const;
 const stateRank = (m: MemberView): number =>
   ({ EXPIRED: 0, UNPAID: 1, SOON: 2, UP_TO_DATE: m.balance > 0 ? 3 : 4, NONE: 5 })[m.state];
 
-/** Hover delay before the preview card opens, so sweeping the mouse across the ID column does not flicker. */
-export const PREVIEW_DELAY_MS = 300;
-export const PREVIEW_ID = 'member-preview';
-
-/** Right of the ID, then left, then below, then above: the card always stays in the viewport. */
-export const PREVIEW_POSITIONS: ConnectedPosition[] = [
-  { originX: 'end', originY: 'center', overlayX: 'start', overlayY: 'center', offsetX: 10 },
-  { originX: 'start', originY: 'center', overlayX: 'end', overlayY: 'center', offsetX: -10 },
-  { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 8 },
-  { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -8 },
-];
+export { PREVIEW_DELAY_MS, PREVIEW_ID, PREVIEW_POSITIONS } from './member-preview';
 
 @Component({
   selector: 'app-members',
   imports: [RouterLink, FormsModule, MatButtonModule, MatSelectModule, MatFormFieldModule, MatSlideToggleModule, MatTooltipModule,
     MatMenuModule, MatPseudoCheckbox, MatDividerModule, LucideAngularModule, SortHeader, Pager, SportChip, PaidBadge, StateBadge, DaysLeft, MoneyPipe,
-    FrDatePipe, CdkConnectedOverlay, CdkScrollable, CdkDropList, CdkDrag, MemberPreview],
+    FrDatePipe, CdkConnectedOverlay, CdkScrollable, CdkDropList, CdkDrag, MemberPreview, NoteReminders],
   template: `
+    <app-note-reminders [refresh]="t.rows()" (changed)="load()" />
     <div class="toolbar">
       <div class="count-pill" role="status">
         <lucide-icon name="users" [size]="18" aria-hidden="true" />

@@ -436,6 +436,34 @@ class AcceptanceTest {
     }
 
     @Test
+    @DisplayName("Création d'un adhérent avec un premier paiement, partiel ou non ; rien n'est créé si le paiement est refusé")
+    void memberCreatedWithPayment() throws Exception {
+        long karate = id("/api/sports", "$[?(@.name=='Karaté')].id");
+        long pack = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
+
+        Map<String, Object> partial = member("Avance", "Partielle", "0612000020", karate, pack, null, "2026-11-18");
+        partial.putAll(Map.of("paymentAmount", 100, "paymentMethod", "CARTE", "paidOn", "2026-11-18"));
+        String created = body(send(admin, "POST", "/api/members", partial).andExpect(status().isOk())
+                .andExpect(jsonPath("$.paymentStatus").value("PARTIEL")));
+        double price = ((Number) JsonPath.read(created, "$.price")).doubleValue();
+        assertThat(((Number) JsonPath.read(created, "$.balance")).doubleValue()).isEqualTo(price - 100);
+
+        Map<String, Object> full = member("Avance", "Totale", "0612000021", karate, pack, null, "2026-11-18");
+        full.putAll(Map.of("paymentAmount", price, "paymentMethod", "ESPECES"));
+        send(admin, "POST", "/api/members", full).andExpect(status().isOk()).andExpect(jsonPath("$.paymentStatus").value("PAYE"));
+
+        // without payment: unchanged behaviour
+        send(admin, "POST", "/api/members", member("Sans", "Paiement", "0612000022", karate, pack, null, "2026-11-18"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.paymentStatus").value("IMPAYE"));
+
+        // more than the price: refused, and the member is not created either
+        Map<String, Object> tooMuch = member("Trop", "Paye", "0612000023", karate, pack, null, "2026-11-18");
+        tooMuch.putAll(Map.of("paymentAmount", price + 1, "paymentMethod", "ESPECES"));
+        send(admin, "POST", "/api/members", tooMuch).andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("amount"));
+        assertThat((List<Object>) read(get(admin, "/api/members"), "$[?(@.phone=='0612000023')].id")).isEmpty();
+    }
+
+    @Test
     @DisplayName("Renouvellement : nouvelle période, historique conservé, arriérés")
     void renewal() throws Exception {
         long a001 = id("/api/members", "$[?(@.code=='A001')].id");
@@ -803,6 +831,19 @@ class AcceptanceTest {
                 .andExpect(jsonPath("$.businessByCategory[0].label").value("Équipement / kimonos"));
         assertThat(num(get(admin, nov), "$.kpis.revenue")).isEqualTo(revenueBefore + 650);
         get(admin, "/api/business/month?period=2027-01").andExpect(jsonPath("$.rows[0].scheduled").value(true));
+
+        // several members at once: one item each; nothing created if one of them is unknown
+        long a002 = id("/api/members", "$[?(@.code=='A002')].id");
+        send(admin, "POST", "/api/business/batch", Map.of("label", "Gourde", "category", "EQUIPEMENT", "permanent", false, "period", "2026-12"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("memberIds"));
+        send(admin, "POST", "/api/business/batch", Map.of("label", "Gourde", "category", "EQUIPEMENT", "permanent", false, "period", "2026-12", "amount", 50,
+                        "memberIds", List.of(a001, 999999)))
+                .andExpect(status().isBadRequest());
+        get(admin, "/api/business/month?period=2026-12").andExpect(jsonPath("$.rows[?(@.item.label=='Gourde')]").isEmpty());
+        send(admin, "POST", "/api/business/batch", Map.of("label", "Gourde", "category", "EQUIPEMENT", "permanent", false, "period", "2026-12", "amount", 50,
+                        "memberIds", List.of(a001, a002, a002)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].member.code").value("A001")).andExpect(jsonPath("$[1].member.code").value("A002"));
 
         // BUSINESS without MANAGE_BUSINESS collects but neither corrects nor deletes; no access without BUSINESS
         long role = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Boutique", "permissions", List.of("BUSINESS"))), "$.id")).longValue();
@@ -1270,6 +1311,36 @@ class AcceptanceTest {
                 .andExpect(jsonPath("$.message").value("Adhérent introuvable."));
         assertThat(jdbc.queryForObject("SELECT amount FROM subscriptions WHERE id = ?", java.math.BigDecimal.class, sub))
                 .as("montant de la période").isEqualByComparingTo(amount);
+    }
+
+    @Test
+    @DisplayName("Rappel des notes : pas le jour même, traitée = effacée, à relancer = masquée jusqu'au lendemain")
+    void noteReminders() throws Exception {
+        long a003 = id("/api/members", "$[?(@.code=='A003')].id");
+        long a004 = id("/api/members", "$[?(@.code=='A004')].id");
+        String a003Reminder = "$[?(@.code=='A003')]";
+        send(admin, "PATCH", "/api/members/" + a003 + "/notes", Map.of("notes", "Rappeler pour le kimono")).andExpect(status().isOk());
+        send(admin, "PATCH", "/api/members/" + a004 + "/notes", Map.of("notes", "Certificat médical manquant")).andExpect(status().isOk());
+        assertThat((List<Object>) read(get(admin, "/api/members/note-reminders"), a003Reminder)).as("note du jour").isEmpty();
+
+        clock.advance(Duration.ofDays(1));   // 2026-11-19: both notes are one day late
+        get(admin, "/api/members/note-reminders")
+                .andExpect(jsonPath(a003Reminder + ".notes").value("Rappeler pour le kimono"))
+                .andExpect(jsonPath(a003Reminder + ".notesUpdatedOn").value("2026-11-18"));
+
+        send(admin, "POST", "/api/members/note-reminders", List.of(Map.of("memberId", a003, "action", "DONE"),
+                Map.of("memberId", a004, "action", "LATER"))).andExpect(status().isNoContent());
+        get(admin, "/api/members/by-code/A003").andExpect(jsonPath("$.member.notes").value(""));
+        get(admin, "/api/members/by-code/A004").andExpect(jsonPath("$.member.notes").value("Certificat médical manquant"));
+        assertThat((List<Object>) read(get(admin, "/api/members/note-reminders"), "$[*].code")).doesNotContain("A003", "A004");
+
+        clock.advance(Duration.ofDays(1));   // 2026-11-20: the postponed note comes back
+        assertThat((List<Object>) read(get(admin, "/api/members/note-reminders"), "$[*].code")).contains("A004").doesNotContain("A003");
+
+        // an unknown action changes nothing, not even the valid ones sent with it
+        send(admin, "POST", "/api/members/note-reminders", List.of(Map.of("memberId", a004, "action", "DONE"),
+                Map.of("memberId", a004, "action", "OUPS"))).andExpect(status().isBadRequest());
+        get(admin, "/api/members/by-code/A004").andExpect(jsonPath("$.member.notes").value("Certificat médical manquant"));
     }
 
     // ------------------------------------------------------------------ regional settings

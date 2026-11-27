@@ -8,7 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { ApiService } from '../../core/api.service';
-import { FrDatePipe, MoneyPipe, formatAmount, monthName } from '../../core/format';
+import { FrDatePipe, MoneyPipe, formatAmount, monthName, norm } from '../../core/format';
 import { FunctionView, SportView, StaffView } from '../../core/models';
 import { NotifyService, errorMessage } from '../../core/notify.service';
 import { MultiSelect, SelectOption } from '../../shared/multi-select';
@@ -30,7 +30,10 @@ import { Pager, Paged } from '../../shared/table';
             @for (f of functions; track f.id) {<mat-option [value]="f.id">{{ f.label }}</mat-option>}
           </mat-select>
         </mat-form-field>
-        <app-multi-select class="span-2" label="Sports encadrés" name="sports" [(ngModel)]="v.sportIds" [options]="sportOptions" />
+        @if (isCoach()) {
+          <app-multi-select class="span-2" label="Sports encadrés *" name="sports" [(ngModel)]="v.sportIds" [options]="sportOptions"
+                            [hint]="hasActiveSport ? 'Au moins un sport, obligatoire pour un coach' : 'Aucun sport actif : créez d’abord un sport'" />
+        }
         <div class="field-block">
           <span class="field-label">Personnel interne ?</span>
           <mat-button-toggle-group name="internal" [(ngModel)]="v.internal" aria-label="Personnel interne">
@@ -80,15 +83,27 @@ export class StaffFormDialog {
     payMode: this.d.staff?.payMode ?? 'COMMISSION',
     fixedSalary: this.d.staff?.fixedSalary ?? (null as number | null),
   };
+  hasActiveSport = this.d.sports.some((s) => s.active);
   busy = signal(false);
   error = signal('');
 
+  /** Only a coach supervises sports: the field is shown, and required, for the "Coach" function alone. */
+  isCoach(): boolean {
+    return norm(this.functions.find((f) => f.id === this.v.functionId)?.label) === 'coach';
+  }
+
   async save(): Promise<void> {
+    const coach = this.isCoach();
+    if (coach && !this.v.sportIds.length) {
+      this.error.set('Choisissez au moins un sport encadré : il est obligatoire pour un coach.');
+      return;
+    }
     this.busy.set(true);
     this.error.set('');
     try {
       const pay = this.v.internal ? { payMode: null, fixedSalary: null } : {};
-      await this.api.save('staff', this.d.staff?.id, { ...this.v, ...pay, phone: this.v.phone.number, phoneCountry: this.v.phone.country });
+      await this.api.save('staff', this.d.staff?.id, { ...this.v, ...pay, sportIds: coach ? this.v.sportIds : [],
+        phone: this.v.phone.number, phoneCountry: this.v.phone.country });
       this.notify.success(this.d.staff ? 'Fiche mise à jour.' : 'Membre du personnel ajouté.');
       this.ref.close(true);
     } catch (e) {

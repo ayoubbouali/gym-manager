@@ -1,18 +1,17 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { LucideAngularModule } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
 import { csvNumber, exportCsv } from '../../core/csv';
-import { FrDatePipe, MoneyPipe, formatAmount, formatMonth } from '../../core/format';
+import { MoneyPipe, formatAmount, formatMonth } from '../../core/format';
 import { ChargeCategory, ChargeStats as Stats } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ChartComponent, pieChart, seriesChart, seriesColor, share } from '../../shared/chart';
 import { DateField } from '../../shared/date-field';
-
-type Period = 'LAST12' | 'YEAR' | 'CUSTOM';
+import { StatsPeriod, StatsPeriodToggle, monthsBack, rollingMonths } from '../../shared/stats-period';
+import { Pager, Paged } from '../../shared/table';
 
 /** Fixed slice order and color slot of each category: a category keeps its color whatever the period. */
 const CATEGORY_ORDER: ChargeCategory[] = ['ELECTRICITE', 'EAU', 'INTERNET', 'LOYER', 'MENAGE', 'ENTRETIEN', 'AUTRE'];
@@ -20,14 +19,10 @@ const CATEGORY_ORDER: ChargeCategory[] = ['ELECTRICITE', 'EAU', 'INTERNET', 'LOY
 /** Charges by month concerned, still to pay, and profit = revenue − salaries − charges (RG-CHARGE). */
 @Component({
   selector: 'app-charge-stats',
-  imports: [FormsModule, MatButtonModule, MatButtonToggleModule, LucideAngularModule, DateField, ChartComponent, MoneyPipe, FrDatePipe],
+  imports: [FormsModule, MatButtonModule, LucideAngularModule, DateField, ChartComponent, StatsPeriodToggle, Pager, MoneyPipe],
   template: `
     <div class="toolbar">
-      <mat-button-toggle-group [ngModel]="period()" (ngModelChange)="setPeriod($event)" aria-label="Période">
-        <mat-button-toggle value="LAST12">12 derniers mois</mat-button-toggle>
-        <mat-button-toggle value="YEAR">Année en cours</mat-button-toggle>
-        <mat-button-toggle value="CUSTOM">Période personnalisée</mat-button-toggle>
-      </mat-button-toggle-group>
+      <app-stats-period [value]="period()" (changed)="setPeriod($event)" />
       @if (period() === 'CUSTOM') {
         <app-date-field mode="month" label="Du mois" subscriptSizing="dynamic" [(ngModel)]="from" [max]="currentMonth" #fromField="ngModel" />
         <app-date-field mode="month" label="Au mois" subscriptSizing="dynamic" [(ngModel)]="to" [max]="currentMonth" #toField="ngModel" />
@@ -58,8 +53,9 @@ const CATEGORY_ORDER: ChargeCategory[] = ['ELECTRICITE', 'EAU', 'INTERNET', 'LOY
           <details class="data-table-toggle">
             <summary>Voir le tableau</summary>
             <table class="table compact"><thead><tr><th>Mois</th><th class="num">Revenus</th><th class="num">Salaires</th><th class="num">Charges</th><th class="num">Bénéfice</th></tr></thead>
-              <tbody>@for (m of d.monthly; track m.month) {<tr><td>{{ month(m.month) }}</td><td class="num">{{ m.revenue | money }}</td><td class="num">{{ m.salaries | money }}</td>
+              <tbody>@for (m of monthlyRows.page(); track m.month) {<tr><td>{{ month(m.month) }}</td><td class="num">{{ m.revenue | money }}</td><td class="num">{{ m.salaries | money }}</td>
                 <td class="num">{{ m.charges | money }}</td><td class="num strong" [class.red]="m.profit < 0">{{ m.profit | money }}</td></tr>}</tbody></table>
+            <app-pager [table]="monthlyRows" [auto]="true" />
           </details>
         </section>
         <section class="card">
@@ -81,7 +77,7 @@ const CATEGORY_ORDER: ChargeCategory[] = ['ELECTRICITE', 'EAU', 'INTERNET', 'LOY
           <table class="table compact">
             <thead><tr><th>Mois</th><th>Charge</th><th>Catégorie</th><th>Type</th><th class="num">Montant connu</th></tr></thead>
             <tbody>
-              @for (r of d.toPay; track r.charge.id + r.period) {
+              @for (r of toPayRows.page(); track r.charge.id + r.period) {
                 <tr><td>{{ month(r.period) }}</td><td class="strong">{{ r.charge.label }}</td><td>{{ r.charge.categoryLabel }}</td>
                   <td>{{ r.charge.permanent ? 'Permanente' : 'Ponctuelle' }}</td>
                   <td class="num">@if (r.expected !== null) {{{ r.expected | money }}} @else {<span class="muted">À saisir</span>}</td></tr>
@@ -89,23 +85,7 @@ const CATEGORY_ORDER: ChargeCategory[] = ['ELECTRICITE', 'EAU', 'INTERNET', 'LOY
             </tbody>
           </table>
         </div>
-      </section>
-
-      <section class="card">
-        <div class="card-head"><h3>Règlements de la période</h3><span class="grow"></span>
-          <button mat-stroked-button (click)="csvPaid()"><lucide-icon name="download" [size]="16" /> CSV</button></div>
-        <div class="table-wrap">
-          <table class="table compact">
-            <thead><tr><th>Mois</th><th>Charge</th><th>Catégorie</th><th>Réglée le</th><th>Mode</th><th>Note</th><th class="num">Montant</th></tr></thead>
-            <tbody>
-              @for (r of d.paid; track r.payment!.id) {
-                <tr><td>{{ month(r.period) }}</td><td class="strong">{{ r.charge.label }}</td><td>{{ r.charge.categoryLabel }}</td>
-                  <td>{{ r.payment!.paidOn | frDate }}</td><td>{{ r.payment!.methodLabel }}</td><td class="muted">{{ r.payment!.note }}</td>
-                  <td class="num strong">{{ r.payment!.amount | money }}</td></tr>
-              } @empty {<tr><td colspan="7" class="empty">Aucun règlement sur la période.</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <app-pager [table]="toPayRows" [auto]="true" />
       </section>
     } @else {
       <div class="loading">Chargement…</div>
@@ -120,10 +100,12 @@ export class ChargeStats {
   currentMonth = (this.config.config()?.today ?? new Date().toISOString()).slice(0, 7);
   s = signal<Stats | null>(null);
   /** Default: custom period on the current month. */
-  period = signal<Period>('CUSTOM');
+  period = signal<StatsPeriod>('CUSTOM');
   from: string | null = this.currentMonth;
   to: string | null = this.currentMonth;
   month = (ym: string) => formatMonth(ym, true);
+  monthlyRows = new Paged(() => this.s()?.monthly ?? []);
+  toPayRows = new Paged(() => this.s()?.toPay ?? []);
 
   private money = (v: number) => `${formatAmount(v, 0)} ${this.config.currency()}`;
   monthlyChart = computed(() => {
@@ -151,14 +133,11 @@ export class ChargeStats {
     this.load();
   }
 
-  setPeriod(p: Period): void {
+  setPeriod(p: StatsPeriod): void {
     this.period.set(p);
+    const n = rollingMonths(p);
     if (p === 'YEAR') this.from = `${this.currentMonth.slice(0, 4)}-01`;
-    if (p === 'LAST12') {
-      const [y, m] = this.currentMonth.split('-').map(Number);
-      const d = new Date(Date.UTC(y, m - 12, 1));
-      this.from = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-    }
+    if (n) this.from = monthsBack(this.currentMonth, n);
     if (p !== 'CUSTOM') {
       this.to = this.currentMonth;
       this.load();
@@ -180,15 +159,5 @@ export class ChargeStats {
       { header: 'Salaires', value: (m) => csvNumber(m.salaries) }, { header: 'Charges', value: (m) => csvNumber(m.charges) },
       { header: 'Bénéfice', value: (m) => csvNumber(m.profit) },
     ], d?.monthly ?? []);
-  }
-
-  csvPaid(): void {
-    const d = this.s();
-    exportCsv(`charges-reglees-${d?.from}_${d?.to}`, [
-      { header: 'Mois', value: (r) => formatMonth(r.period, true) }, { header: 'Charge', value: (r) => r.charge.label },
-      { header: 'Catégorie', value: (r) => r.charge.categoryLabel }, { header: 'Réglée le', value: (r) => r.payment!.paidOn },
-      { header: 'Mode', value: (r) => r.payment!.methodLabel }, { header: 'Montant', value: (r) => csvNumber(r.payment!.amount) },
-      { header: 'Note', value: (r) => r.payment!.note },
-    ], d?.paid ?? []);
   }
 }

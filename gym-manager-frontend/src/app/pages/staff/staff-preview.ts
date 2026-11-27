@@ -8,6 +8,11 @@ export function staffInitials(s: Pick<StaffView, 'firstName' | 'lastName'>): str
   return `${s.firstName?.charAt(0) ?? ''}${s.lastName?.charAt(0) ?? ''}`.toUpperCase();
 }
 
+/** Pay mode as shown to the user; internal staff (club owners) have none. */
+export function payModeLabel(s: Pick<StaffView, 'internal' | 'payMode'>): string {
+  return s.internal ? 'Interne' : s.payMode === 'FIXED' ? 'Fixe' : 'Commission';
+}
+
 /** Read-only summary card shown when hovering or focusing a staff ID; same look as the member preview. */
 @Component({
   selector: 'app-staff-preview',
@@ -28,8 +33,8 @@ export function staffInitials(s: Pick<StaffView, 'firstName' | 'lastName'>): str
     </div>
     <dl class="mp-grid">
       <dt>Fonction</dt><dd>{{ s.function?.label ?? '—' }}</dd>
-      <dt>Mode de paie</dt><dd>{{ s.payMode === 'FIXED' ? 'Fixe' : 'Commission' }}</dd>
-      <dt>Salaire du mois</dt><dd><span class="strong">{{ monthSalary() | money }}</span> <span class="mp-sep">·</span> {{ monthLabel() }}</dd>
+      <dt>Mode de paie</dt><dd>{{ payModeLabel(s) }}</dd>
+      @if (!s.internal) {<dt>Salaire du mois</dt><dd><span class="strong">{{ monthSalary() | money }}</span> <span class="mp-sep">·</span> {{ monthLabel() }}</dd>}
       <dt>Téléphone</dt><dd>{{ s.phone || '—' }}</dd>
     </dl>
     @if (s.sports.length) {
@@ -38,6 +43,7 @@ export function staffInitials(s: Pick<StaffView, 'firstName' | 'lastName'>): str
   `,
 })
 export class StaffPreview {
+  payModeLabel = payModeLabel;
   staff = input.required<StaffView>();
   /** Salary of the month shown by the page; defaults to the current month's ({@code staff.salary}). */
   salary = input<number | null>(null);

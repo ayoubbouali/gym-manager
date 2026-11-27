@@ -85,6 +85,8 @@ export class ApiService {
   registrationStats = (from?: string, to?: string) => this.get<M.RegistrationStats>('/stats/registrations', from && to ? { from, to } : undefined);
   chargeStats = (from?: string, to?: string) => this.get<M.ChargeStats>('/stats/charges', from && to ? { from, to } : undefined);
   chargeMonth = (period: string) => this.get<M.ChargeMonth>('/charges/month', { period });
+  businessMonth = (period: string) => this.get<M.BusinessMonth>('/business/month', { period });
+  memberBusiness = (memberId: number) => this.get<M.BusinessView[]>(`/business/member/${memberId}`);
   payments = (from?: string, to?: string) => this.get<M.PaymentView[]>('/payments', from && to ? { from, to } : undefined);
   payroll = (month?: string) => this.get<M.PayrollMonth>('/payroll', month ? { month } : undefined);
   payrollStats = (from?: string, to?: string, staffId?: number | null) =>

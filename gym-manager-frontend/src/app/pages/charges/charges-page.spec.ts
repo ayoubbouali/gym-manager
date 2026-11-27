@@ -12,7 +12,7 @@ import { ChargeMonth, ChargeView } from '../../core/models';
 import { ChargeFormDialog } from './charge-dialogs';
 import { ChargesPage } from './charges-page';
 
-const config = { config: signal({ today: '2026-11-26' }), currency: signal('DH') };
+const config = { config: signal({ today: '2026-11-26' }), currency: signal('DH'), pageSize: signal(20) };
 
 function charge(over: Partial<ChargeView> = {}): ChargeView {
   return { id: 1, label: 'Électricité', category: 'ELECTRICITE', categoryLabel: 'Électricité', permanent: true, period: null, amount: null,

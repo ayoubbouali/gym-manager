@@ -44,6 +44,7 @@ public final class Views {
      * {@code paid}, {@code balance} and {@code paymentStatus} cover all periods (arrears included).
      * Without any period, the subscription fields (period, pack, discount, price, end, remaining days)
      * and the payment status are null: situation and state NONE. {@code customAmount}: price typed by hand for the current period.
+     * {@code servicesPrice}: business items linked to the member, due this month; what is left to collect of them is in {@code balance}.
      */
     public record MemberView(Long id, String code, String lastName, String firstName, String phone,
                              LocalDate birthDate, LocalDate registrationDate,
@@ -51,7 +52,7 @@ public final class Views {
                              Long subscriptionId, LocalDate periodStart, int periodCount,
                              Long packId, PackRef pack, Long discountId, DiscountView discount, BigDecimal customAmount,
                              Insurance insurance, boolean hasPhoto, String notes, boolean active, List<Long> activityIds,
-                             BigDecimal price, LocalDate endDate, Long remainingDays,
+                             BigDecimal price, BigDecimal servicesPrice, LocalDate endDate, Long remainingDays,
                              BigDecimal paid, BigDecimal balance,
                              Rules.PaymentStatus paymentStatus, boolean activeMember, Rules.Situation situation,
                              Rules.MemberState state) {
@@ -102,13 +103,13 @@ public final class Views {
 
     public record StaffView(Long id, String code, String lastName, String firstName, String name, String phone,
                             Long functionId, FunctionView function, List<Long> sportIds, List<SportRef> sports,
-                            PayMode payMode, BigDecimal fixedSalary, boolean active, BigDecimal salary, SalaryDetail salaryDetail,
+                            boolean internal, PayMode payMode, BigDecimal fixedSalary, boolean active, BigDecimal salary, SalaryDetail salaryDetail,
                             Integer activeMembers) {
     }
 
     public record ActivityView(Long id, String code, String name, String description, BigDecimal price,
                                LocalDateTime startsAt, String location, Integer maxPlaces, Long managerId, StaffRef manager,
-                               boolean active, boolean past, int registrationCount, Integer remainingPlaces, boolean full,
+                               boolean active, boolean paid, boolean past, int registrationCount, Integer remainingPlaces, boolean full,
                                BigDecimal revenue) {
     }
 

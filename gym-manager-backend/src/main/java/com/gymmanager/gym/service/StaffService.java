@@ -42,7 +42,8 @@ public class StaffService {
         Check.required(r.functionId(), "functionId", "Fonction");
         StaffFunction fn = functions.findById(r.functionId()).orElseThrow(() -> ApiException.invalid("functionId", "Fonction introuvable."));
         Check.activeOrUnchanged(fn.isActive(), fn.getId(), s.getFunctionId(), "functionId", "Cette fonction est inactive.");
-        PayMode mode = Check.required(r.payMode(), "payMode", "Mode de rémunération");
+        boolean internal = Boolean.TRUE.equals(r.internal());
+        PayMode mode = internal ? null : Check.required(r.payMode(), "payMode", "Mode de rémunération");
         if (mode == PayMode.FIXED) {
             Check.amount(r.fixedSalary(), "fixedSalary", "Salaire fixe");
         }
@@ -60,6 +61,7 @@ public class StaffService {
         s.setFirstName(first);
         s.setPhone(phone);
         s.setFunctionId(fn.getId());
+        s.setInternal(internal);
         s.setPayMode(mode);
         s.setFixedSalary(mode == PayMode.FIXED ? r.fixedSalary() : null);
         Staff saved = staff.save(s);

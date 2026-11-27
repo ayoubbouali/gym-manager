@@ -146,7 +146,7 @@ export const PREVIEW_POSITIONS: ConnectedPosition[] = [
                   @case ('sports') {<td>@for (s of m.sports; track s.id) {<app-sport-chip [name]="s.name" [color]="s.color" [inactive]="!s.active" />}</td>}
                   @case ('registrationDate') {<td>{{ m.registrationDate | frDate }}</td>}
                   @case ('pack') {<td>{{ m.pack?.name ?? '—' }}</td>}
-                  @case ('price') {<td class="num">{{ m.price | money }}</td>}
+                  @case ('price') {<td class="num">{{ m.price | money }}@if (m.servicesPrice > 0) {<div class="muted small" matTooltip="Services liés (Business), dus ce mois-ci">+ {{ m.servicesPrice | money }} services</div>}</td>}
                   @case ('discount') {<td>{{ m.discount?.name ?? '—' }}</td>}
                   @case ('status') {<td><app-paid-badge [value]="m.paymentStatus" /></td>}
                   @case ('paid') {<td class="num">{{ m.paid | money }}</td>}

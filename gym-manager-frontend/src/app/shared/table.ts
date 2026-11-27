@@ -1,4 +1,4 @@
-import { Component, Signal, computed, input, signal } from '@angular/core';
+import { Component, Signal, WritableSignal, computed, input, linkedSignal, signal } from '@angular/core';
 import { LucideAngularModule } from 'lucide-angular';
 import { norm } from '../core/format';
 
@@ -17,8 +17,36 @@ export interface TableOptions<T> {
   pageSize: Signal<number>;
 }
 
+/** What the pager reads: the rows to page through, the page size and the current page. */
+export interface Pageable {
+  filtered: Signal<readonly unknown[]>;
+  pageSize: Signal<number>;
+  pageCount: Signal<number>;
+  pageIndex: WritableSignal<number>;
+}
+
+/** Pagination of a plain list (no search nor sort): back to the first page whenever the list changes. */
+export class Paged<T> implements Pageable {
+  readonly filtered: Signal<T[]>;
+  readonly pageSize: Signal<number>;
+  readonly pageIndex: WritableSignal<number>;
+  readonly pageCount: Signal<number>;
+  readonly page: Signal<T[]>;
+
+  constructor(source: () => T[], size: number | (() => number) = 10) {
+    this.filtered = computed(source);
+    this.pageSize = computed(typeof size === 'number' ? () => size : size);
+    this.pageIndex = linkedSignal({ source: this.filtered, computation: () => 0 });
+    this.pageCount = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize())));
+    this.page = computed(() => {
+      const i = Math.min(this.pageIndex(), this.pageCount() - 1);
+      return this.filtered().slice(i * this.pageSize(), (i + 1) * this.pageSize());
+    });
+  }
+}
+
 /** Client-side state of a list page: search, filters, sort, pagination. */
-export class TableState<T> {
+export class TableState<T> implements Pageable {
   readonly rows = signal<T[]>([]);
   readonly search = signal('');
   readonly showInactive = signal(false);
@@ -111,6 +139,7 @@ export class SortHeader {
   selector: 'app-pager',
   imports: [LucideAngularModule],
   template: `
+    @if (!auto() || table().pageCount() > 1) {
     <nav class="pager" aria-label="Pagination">
       <span class="muted">{{ table().filtered().length }} ligne(s) · {{ table().pageSize() }} / page</span>
       <span class="grow"></span>
@@ -124,10 +153,13 @@ export class SortHeader {
         <lucide-icon name="chevron-right" [size]="16" />
       </button>
     </nav>
+    }
   `,
 })
 export class Pager {
-  table = input.required<TableState<any>>();
+  table = input.required<Pageable>();
+  /** Hidden while everything fits on one page (secondary tables). */
+  auto = input(false);
   current = computed(() => Math.min(this.table().pageIndex(), this.table().pageCount() - 1));
   pages = computed(() => {
     const n = this.table().pageCount();

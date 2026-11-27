@@ -32,10 +32,11 @@ const VARIABLES = ['prenom', 'nom', 'jours', 'date_fin', 'club', 'pack'];
 const RESET_TEMPLATE = 'mail.reset.template';
 const RESET_VARIABLES = ['identifiant', 'mot_de_passe', 'duree', 'club'];
 const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'Sport'], ['pack', 'Pack'], ['discount', 'Remise'], ['activity', 'Activité'], ['staff', 'Personnel']];
+import { Pager, Paged } from '../../shared/table';
 
 @Component({
   selector: 'app-settings',
-  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatRadioModule, MatSelectModule, MatSlideToggleModule,
+  imports: [Pager, FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatRadioModule, MatSelectModule, MatSlideToggleModule,
     MatTabsModule, MatTooltipModule, LucideAngularModule, ActiveBadge, FrDatePipe, DataImport, ListPicker, PhoneInput],
   template: `
     @if (payload(); as p) {
@@ -165,11 +166,12 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                       <table class="table compact max-640">
                         <thead><tr><th>Code</th><th>Adhérent</th><th>Motif</th><th>Depuis le</th></tr></thead>
                         <tbody>
-                          @for (m of pp.members; track m.id) {
+                          @for (m of purgeRows.page(); track m.id) {
                             <tr><td class="code">{{ m.code }}</td><td>{{ m.name }}</td><td>{{ purgeReasons[m.reason] }}</td><td>{{ m.since | frDate }}</td></tr>
                           }
                         </tbody>
                       </table>
+                      <app-pager class="max-640" [table]="purgeRows" [auto]="true" />
                     }
                   }
                 }
@@ -189,7 +191,7 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
               <table class="table compact max-640">
                 <thead><tr><th>Fonction</th><th>Actif</th><th><span class="sr-only">Actions</span></th></tr></thead>
                 <tbody>
-                  @for (f of functions(); track f.id) {
+                  @for (f of functionRows.page(); track f.id) {
                     <tr [class.inactive]="!f.active">
                       <td class="strong">{{ f.label }}</td><td><app-active-badge [active]="f.active" /></td>
                       <td class="actions">
@@ -201,6 +203,7 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                   }
                 </tbody>
               </table>
+              <app-pager class="max-640" [table]="functionRows" [auto]="true" />
               <button mat-flat-button class="mt" (click)="editFunction()"><lucide-icon name="plus" [size]="16" /> Ajouter une fonction</button>
             </div>
           </mat-tab>
@@ -214,7 +217,7 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
               <table class="table compact">
                 <thead><tr><th>Identifiant</th><th>E-mail</th><th>Téléphone</th><th>Rôle</th><th>Actif</th><th>Mot de passe</th><th><span class="sr-only">Actions</span></th></tr></thead>
                 <tbody>
-                  @for (u of users(); track u.id) {
+                  @for (u of userRows.page(); track u.id) {
                     <tr [class.inactive]="!u.active">
                       <td class="strong">
                         <span class="user-cell">
@@ -242,6 +245,7 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                   }
                 </tbody>
               </table>
+              <app-pager [table]="userRows" [auto]="true" />
               <button mat-flat-button class="mt" (click)="addUser()"><lucide-icon name="user-plus" [size]="16" /> Nouvel utilisateur</button>
 
               <h3 class="mt-lg">Rôles</h3>
@@ -250,7 +254,7 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
               <table class="table compact max-640">
                 <thead><tr><th>Rôle</th><th>Pages et droits</th><th>Utilisateurs</th><th><span class="sr-only">Actions</span></th></tr></thead>
                 <tbody>
-                  @for (r of roles(); track r.id) {
+                  @for (r of roleRows.page(); track r.id) {
                     <tr>
                       <td class="strong">{{ r.name }}</td>
                       <td><span [matTooltip]="permissionList(r)">{{ summary(r.permissions) }}</span></td>
@@ -263,6 +267,7 @@ const CODE_ENTITIES: [string, string][] = [['member', 'Adhérent'], ['sport', 'S
                   }
                 </tbody>
               </table>
+              <app-pager class="max-640" [table]="roleRows" [auto]="true" />
               <button mat-flat-button class="mt" (click)="editRole()"><lucide-icon name="plus" [size]="16" /> Nouveau rôle</button>
             </div>
           </mat-tab>
@@ -288,6 +293,10 @@ export class SettingsPage {
   summary = permissionSummary;
   tab = signal(0);
   purgePreview = signal<PurgePreview | null>(null);
+  purgeRows = new Paged(() => this.purgePreview()?.members ?? []);
+  functionRows = new Paged(() => this.functions());
+  userRows = new Paged(() => this.users());
+  roleRows = new Paged(() => this.roles());
   readonly purgeReasons: Record<PurgeReason, string> = { INACTIVE: 'Désactivé', EXPIRED: 'Expiré', NO_SUBSCRIPTION: 'Sans abonnement' };
   busy = signal(false);
   fieldError = signal<{ field?: string; message: string } | null>(null);

@@ -14,12 +14,13 @@ import { ChargeDue, ChargeMonth, ChargeView } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ConfirmService } from '../../shared/confirm.service';
 import { DateField } from '../../shared/date-field';
+import { Pager, Paged } from '../../shared/table';
 import { ChargeFormDialog, ChargePayDialog, today } from './charge-dialogs';
 
 /** Club charges of a month, past or coming: their payments and the actions on each charge (edit, stop, delete). */
 @Component({
   selector: 'app-charges',
-  imports: [FormsModule, MatButtonModule, MatMenuModule, MatTooltipModule, LucideAngularModule, DateField, MoneyPipe, FrDatePipe],
+  imports: [FormsModule, MatButtonModule, MatMenuModule, MatTooltipModule, LucideAngularModule, DateField, Pager, MoneyPipe, FrDatePipe],
   template: `
     <div class="toolbar">
       <button class="icon-btn" (click)="shift(-1)" aria-label="Mois précédent"><lucide-icon name="chevron-left" /></button>
@@ -44,7 +45,7 @@ import { ChargeFormDialog, ChargePayDialog, today } from './charge-dialogs';
         <table class="table compact">
           <thead><tr><th>Charge</th><th>Catégorie</th><th>Type</th><th class="num">Montant</th><th>Statut</th><th>Réglée le</th><th>Mode</th><th><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
-            @for (r of d.rows; track r.charge.id) {
+            @for (r of rows.page(); track r.charge.id) {
               <tr>
                 <td class="strong">{{ r.charge.label }}@if (r.charge.note) {<div class="muted small">{{ r.charge.note }}</div>}</td>
                 <td>{{ r.charge.categoryLabel }}</td>
@@ -86,6 +87,7 @@ import { ChargeFormDialog, ChargePayDialog, today } from './charge-dialogs';
           </tbody>
         </table>
       </div>
+      <app-pager [table]="rows" />
     } @else {
       <div class="loading">Chargement…</div>
     }
@@ -101,6 +103,7 @@ export class ChargesPage {
   canManage = computed(() => this.auth.can('MANAGE_CHARGES'));
   month = signal(today(this.config).slice(0, 7));
   data = signal<ChargeMonth | null>(null);
+  rows = new Paged(() => this.data()?.rows ?? [], () => this.config.pageSize());
   title = computed(() => `Charges de ${monthName(this.month())}`);
 
   constructor() {

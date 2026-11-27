@@ -1,5 +1,6 @@
 package com.gymmanager.gym.web.dto;
 
+import com.gymmanager.gym.domain.BusinessCategory;
 import com.gymmanager.gym.domain.ChargeCategory;
 import com.gymmanager.gym.domain.Insurance;
 import com.gymmanager.gym.domain.PayMode;
@@ -42,8 +43,9 @@ public final class Requests {
     }
 
     /** {@code phoneCountry}: ISO country chosen in the phone field, null = the club's country. */
+    /** {@code internal}: one of the club's owners, without pay mode (never in the payroll). */
     public record StaffRequest(String lastName, String firstName, String phone, Long functionId, List<Long> sportIds,
-                               PayMode payMode, BigDecimal fixedSalary, String phoneCountry) {
+                               PayMode payMode, BigDecimal fixedSalary, String phoneCountry, Boolean internal) {
     }
 
     public record PackRequest(String name, Long sportId, Long durationId, BigDecimal monthlyPrice, Long discountId) {
@@ -70,8 +72,9 @@ public final class Requests {
     public record MemberPreviewRequest(Long packId, Long discountId, LocalDate registrationDate, BigDecimal customAmount) {
     }
 
+    /** {@code paid}: a paying activity has a price; a free one (false or null) costs 0. */
     public record ActivityRequest(String name, String description, BigDecimal price, LocalDateTime startsAt, String location,
-                                  Integer maxPlaces, Long managerId) {
+                                  Integer maxPlaces, Long managerId, Boolean paid) {
     }
 
     public record RegistrationRequest(Long memberId, Long activityId) {
@@ -107,6 +110,18 @@ public final class Requests {
 
     /** Pays a charge for a month (the month of a one-off charge is its own). */
     public record ChargePaymentRequest(Long chargeId, String period, BigDecimal amount, PaymentMethod method, LocalDate paidOn, String note) {
+    }
+
+    /**
+     * Creates or edits a business item, like {@link ChargeRequest}; a permanent item keeps its {@code amount} as the expected
+     * monthly amount. {@code memberId}: member the item is sold to, null when none.
+     */
+    public record BusinessRequest(String label, BusinessCategory category, Boolean permanent, String period, BigDecimal amount,
+                                  String note, Boolean payNow, Boolean autoPay, PaymentMethod method, LocalDate paidOn, Long memberId) {
+    }
+
+    /** Collects a business item for a month (the month of a one-off item is its own). */
+    public record BusinessPaymentRequest(Long businessId, String period, BigDecimal amount, PaymentMethod method, LocalDate paidOn, String note) {
     }
 
     /** {@code amount} null removes the bonus of the month. */

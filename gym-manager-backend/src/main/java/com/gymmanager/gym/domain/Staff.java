@@ -24,5 +24,7 @@ public class Staff {
     private PayMode payMode;
 
     private BigDecimal fixedSalary;
+    /** One of the club's owners: no pay mode, never in the payroll. */
+    private boolean internal;
     private boolean active = true;
 }

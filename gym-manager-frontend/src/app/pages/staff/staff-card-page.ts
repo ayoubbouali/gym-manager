@@ -47,7 +47,7 @@ import { Pager, Paged } from '../../shared/table';
               <dt>Mode de paie</dt>
               <dd><span class="badge" [class.info]="s.payMode === 'FIXED'" [class.warn]="s.payMode === 'COMMISSION'" [class.neutral]="s.internal">{{ payModeLabel(s) }}</span></dd>
               @if (s.internal) {
-                <dt>Salaire</dt><dd class="muted">Aucun : fait partie des propriétaires du club</dd>
+                <dt>Salaire</dt><dd class="muted">Aucun (personnel interne)</dd>
               } @else {
                 @if (s.payMode === 'FIXED') {<dt>Salaire fixe</dt><dd>{{ s.fixedSalary | money }}</dd>}
                 <dt>Salaire de {{ month(s.salaryDetail.month) }}</dt>

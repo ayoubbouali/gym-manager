@@ -68,8 +68,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/business/payments/**").hasAuthority(a(Permission.MANAGE_BUSINESS))
                         .requestMatchers("/api/business/**").hasAuthority(a(Permission.BUSINESS))
                         .requestMatchers("/api/stats/**").hasAuthority(a(Permission.STATS))
-                        // a function can be created from the staff form
+                        // functions can be added and deleted from the staff page
                         .requestMatchers(HttpMethod.POST, "/api/functions").hasAnyAuthority(a(Permission.STAFF), a(Permission.SETTINGS))
+                        .requestMatchers(HttpMethod.DELETE, "/api/functions/*").hasAnyAuthority(a(Permission.STAFF), a(Permission.SETTINGS))
                         .requestMatchers("/api/settings/**", "/api/users/**", "/api/roles/**", "/api/functions/**", "/api/data/**", "/api/admin/**")
                         .hasAuthority(a(Permission.SETTINGS))
                         // payments: recording one is open; correcting / cancelling / deleting is not

@@ -1152,6 +1152,10 @@ class AcceptanceTest {
 
         var pdf = get(admin, "/api/payroll/payments/" + slip + "/receipt.pdf").andExpect(status().isOk()).andReturn().getResponse();
         assertThat(new String(pdf.getContentAsByteArray(), 0, 5)).isEqualTo("%PDF-");
+        String slipText = pdfText(pdf.getContentAsByteArray());
+        assertThat(slipText).contains("Personnel", "Employeur", "Salaire brut", "4 500,00", "Prime", "Net à verser", "4 700,00",
+                "Merci pour votre engagement, votre travail et la qualité de votre collaboration");
+        assertThat(slipText).doesNotContain("Bénéficiaire", "Signature", "Document interne", "Merci de votre confiance", "Commission");
         assertThat((List<Object>) read(get(admin, "/api/payroll/staff/" + bouzid + "/history"), "$[*].period")).containsExactly("2026-11", "2026-10");
 
         // cancel = the slip is deleted, the bonus is kept, the month is unpaid again; the slip number is not reused
@@ -1171,6 +1175,27 @@ class AcceptanceTest {
         send(admin, "DELETE", "/api/payroll/staff/" + bouzid + "/months/2026-10", null).andExpect(status().isNotFound());
         get(admin, "/api/payroll?month=2026-10").andExpect(jsonPath(e006 + ".bonus").value(50.0));
         send(admin, "DELETE", "/api/staff/" + bouzid, null).andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("Reçu de salaire d'un coach à la commission : brut, charges, part du club, part du coach, net, sans prime vide")
+    void commissionSalaryReceipt() throws Exception {
+        long oumaima = id("/api/staff", "$.rows[?(@.code=='E002')].id");
+        long slip = ((Number) read(send(admin, "POST", "/api/payroll/payments",
+                Map.of("staffId", oumaima, "period", "2026-11", "method", "ESPECES", "paidOn", "2026-11-17")).andExpect(status().isOk()), "$.id")).longValue();
+        String text = pdfText(get(admin, "/api/payroll/payments/" + slip + "/receipt.pdf").andReturn().getResponse().getContentAsByteArray());
+        // gross 250 × 1/3 = 83,33 for the coach; the club keeps 166,67: 83,34 of charges and 83,33 for itself
+        assertThat(text).contains("Salaire brut", "250,00", "Charges (1/3)", "83,34", "Part du club (1/3)", "Part du coach (1/3)", "83,33", "Net à verser");
+        assertThat(text).doesNotContain("Prime", "× 1/3 =", "Aucun adhérent");
+    }
+
+    static String pdfText(byte[] pdf) throws Exception {
+        var reader = new com.lowagie.text.pdf.PdfReader(pdf);
+        var extractor = new com.lowagie.text.pdf.parser.PdfTextExtractor(reader);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 1; i <= reader.getNumberOfPages(); i++) sb.append(extractor.getTextFromPage(i)).append('\n');
+        // the PDF groups digits with a non-breaking space in some fonts: normalise it
+        return sb.toString().replace('\u00a0', ' ');
     }
 
     @Test

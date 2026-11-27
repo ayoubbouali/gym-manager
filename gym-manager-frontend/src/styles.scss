@@ -299,6 +299,8 @@ a.kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 .page-btn { border: 1px solid transparent; background: transparent; color: var(--ink); min-width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font: inherit; }
 .page-btn:hover { background: var(--neutral-bg); }
 .page-btn.on { background: var(--brand); color: #fff; font-weight: 600; }
+.page-size { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; }
+.page-size select { border: 1px solid var(--line-strong); border-radius: 8px; padding: 4px 6px; font: inherit; background: var(--card); color: var(--ink); cursor: pointer; }
 .cell-input { border: 1px solid var(--line-strong); border-radius: 8px; padding: 6px 8px; font: inherit; background: var(--card); color: var(--ink); width: 100%; min-width: 70px; }
 .cell-input.num { text-align: right; }
 

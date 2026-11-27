@@ -17,10 +17,13 @@ export interface TableOptions<T> {
   pageSize: Signal<number>;
 }
 
-/** What the pager reads: the rows to page through, the page size and the current page. */
+/** Page sizes offered by the pager; the first one is also the smallest table that shows a pager in auto mode. */
+export const PAGE_SIZES = [10, 20, 50, 100];
+
+/** What the pager reads: the rows to page through, the page size (the user may change it) and the current page. */
 export interface Pageable {
   filtered: Signal<readonly unknown[]>;
-  pageSize: Signal<number>;
+  pageSize: WritableSignal<number>;
   pageCount: Signal<number>;
   pageIndex: WritableSignal<number>;
 }
@@ -28,14 +31,14 @@ export interface Pageable {
 /** Pagination of a plain list (no search nor sort): back to the first page whenever the list changes. */
 export class Paged<T> implements Pageable {
   readonly filtered: Signal<T[]>;
-  readonly pageSize: Signal<number>;
+  readonly pageSize: WritableSignal<number>;
   readonly pageIndex: WritableSignal<number>;
   readonly pageCount: Signal<number>;
   readonly page: Signal<T[]>;
 
   constructor(source: () => T[], size: number | (() => number) = 10) {
     this.filtered = computed(source);
-    this.pageSize = computed(typeof size === 'number' ? () => size : size);
+    this.pageSize = linkedSignal(typeof size === 'number' ? () => size : size);
     this.pageIndex = linkedSignal({ source: this.filtered, computation: () => 0 });
     this.pageCount = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize())));
     this.page = computed(() => {
@@ -78,7 +81,7 @@ export class TableState<T> implements Pageable {
     return list;
   });
 
-  readonly pageSize = computed(() => this.opts.pageSize());
+  readonly pageSize = linkedSignal(() => this.opts.pageSize());
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.filtered().length / this.pageSize())));
   readonly page = computed(() => {
     const i = Math.min(this.pageIndex(), this.pageCount() - 1);
@@ -139,9 +142,14 @@ export class SortHeader {
   selector: 'app-pager',
   imports: [LucideAngularModule],
   template: `
-    @if (!auto() || table().pageCount() > 1) {
+    @if (!auto() || table().filtered().length > sizes[0]) {
     <nav class="pager" aria-label="Pagination">
-      <span class="muted">{{ table().filtered().length }} ligne(s) · {{ table().pageSize() }} / page</span>
+      <span class="muted">{{ table().filtered().length }} ligne(s)</span>
+      <label class="page-size"><span class="muted">Afficher</span>
+        <select [value]="table().pageSize()" (change)="setSize(+$any($event.target).value)" aria-label="Lignes par page">
+          @for (n of sizeOptions(); track n) {<option [value]="n" [selected]="n === table().pageSize()">{{ n }}</option>}
+        </select>
+        <span class="muted">par page</span></label>
       <span class="grow"></span>
       <button type="button" class="icon-btn" [disabled]="current() === 0" (click)="go(current() - 1)" aria-label="Page précédente">
         <lucide-icon name="chevron-left" [size]="16" />
@@ -160,6 +168,12 @@ export class Pager {
   table = input.required<Pageable>();
   /** Hidden while everything fits on one page (secondary tables). */
   auto = input(false);
+  readonly sizes = PAGE_SIZES;
+  /** The usual sizes, plus the table's own if it is another one. */
+  sizeOptions = computed(() => {
+    const n = this.table().pageSize();
+    return PAGE_SIZES.includes(n) ? PAGE_SIZES : [...PAGE_SIZES, n].sort((a, b) => a - b);
+  });
   current = computed(() => Math.min(this.table().pageIndex(), this.table().pageCount() - 1));
   pages = computed(() => {
     const n = this.table().pageCount();
@@ -169,5 +183,12 @@ export class Pager {
   });
   go(p: number): void {
     this.table().pageIndex.set(p);
+  }
+  /** Keeps the first row of the current page in view. */
+  setSize(n: number): void {
+    const t = this.table();
+    const first = this.current() * t.pageSize();
+    t.pageSize.set(n);
+    t.pageIndex.set(Math.floor(first / n));
   }
 }

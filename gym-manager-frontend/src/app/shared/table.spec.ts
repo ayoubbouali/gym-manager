@@ -1,6 +1,9 @@
-import { signal } from '@angular/core';
+import { importProvidersFrom, signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { LucideAngularModule } from 'lucide-angular';
 import { describe, expect, it } from 'vitest';
-import { Paged, TableState } from './table';
+import { APP_ICONS } from '../core/icons';
+import { Pager, Paged, TableState } from './table';
 
 interface Row { code: string; name: string; price: number; active: boolean; }
 
@@ -75,5 +78,47 @@ describe('Paged', () => {
     expect(p.pageCount()).toBe(3);
     size.set(5);
     expect(p.pageCount()).toBe(1);
+  });
+
+  it('la taille choisie par l’utilisateur remplace celle par défaut, jusqu’au prochain changement de celle-ci', () => {
+    const size = signal(10);
+    const p = new Paged(() => Array.from({ length: 45 }, (_, i) => i), () => size());
+    p.pageSize.set(20);
+    expect(p.pageCount()).toBe(3);
+    size.set(50);
+    expect(p.pageCount()).toBe(1);
+  });
+});
+
+describe('Pager : nombre de lignes par page', () => {
+  it('propose 10, 20, 50, 100 et garde la première ligne visible en changeant de taille', () => {
+    TestBed.configureTestingModule({ providers: [importProvidersFrom(LucideAngularModule.pick(APP_ICONS))] });
+    const rows = new Paged(() => Array.from({ length: 45 }, (_, i) => i), 10);
+    rows.pageIndex.set(3);
+    const f = TestBed.createComponent(Pager);
+    f.componentRef.setInput('table', rows);
+    f.detectChanges();
+    const select = (f.nativeElement as HTMLElement).querySelector('select')!;
+    expect([...select.options].map((o) => o.value)).toEqual(['10', '20', '50', '100']);
+    expect(select.value).toBe('10');
+    select.value = '20';
+    select.dispatchEvent(new Event('change'));
+    f.detectChanges();
+    expect(rows.pageSize()).toBe(20);
+    expect(rows.page()[0]).toBe(20); // row 30 was shown first: it is on page 2 of 20
+    expect(rows.page()).toContain(30);
+  });
+
+  it('en mode auto, masqué tant que la liste tient sur la plus petite page', () => {
+    TestBed.configureTestingModule({ providers: [importProvidersFrom(LucideAngularModule.pick(APP_ICONS))] });
+    const list = signal(Array.from({ length: 10 }, (_, i) => i));
+    const f = TestBed.createComponent(Pager);
+    f.componentRef.setInput('table', new Paged(() => list(), 10));
+    f.componentRef.setInput('auto', true);
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).querySelector('nav')).toBeNull();
+    list.set(Array.from({ length: 11 }, (_, i) => i));
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).querySelector('nav')).not.toBeNull();
   });
 });

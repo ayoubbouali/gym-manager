@@ -26,6 +26,10 @@ public final class Requests {
     public record NotesRequest(String notes) {
     }
 
+    /** {@code action}: DONE clears the note, LATER recalls it again tomorrow. */
+    public record NoteReminderAction(Long memberId, String action) {
+    }
+
     public record FunctionRequest(String label) {
     }
 
@@ -64,9 +68,11 @@ public final class Requests {
      * {@code phoneCountry}: ISO country chosen in the phone field, null = the club's country.
      * {@code customAmount}: price typed by hand for the period, null = pack price with {@code discountId}.
      */
+    /** {@code paymentAmount}, {@code paymentMethod}, {@code paidOn}: optional first payment, at creation only (may be partial). */
     public record MemberRequest(String lastName, String firstName, String phone, LocalDate birthDate, LocalDate registrationDate,
                                 List<Long> sportIds, Long packId, Long discountId, Insurance insurance, String notes,
-                                String phoneCountry, BigDecimal customAmount) {
+                                String phoneCountry, BigDecimal customAmount,
+                                BigDecimal paymentAmount, PaymentMethod paymentMethod, LocalDate paidOn) {
     }
 
     public record MemberPreviewRequest(Long packId, Long discountId, LocalDate registrationDate, BigDecimal customAmount) {
@@ -117,7 +123,8 @@ public final class Requests {
      * monthly amount. {@code memberId}: member the item is sold to, null when none.
      */
     public record BusinessRequest(String label, BusinessCategory category, Boolean permanent, String period, BigDecimal amount,
-                                  String note, Boolean payNow, Boolean autoPay, PaymentMethod method, LocalDate paidOn, Long memberId) {
+                                  String note, Boolean payNow, Boolean autoPay, PaymentMethod method, LocalDate paidOn, Long memberId,
+                                  List<Long> memberIds) {
     }
 
     /** Collects a business item for a month (the month of a one-off item is its own). */

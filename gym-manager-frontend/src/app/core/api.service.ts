@@ -66,6 +66,8 @@ export class ApiService {
 
   members = () => this.get<M.MemberView[]>('/members');
   memberCard = (code: string) => this.get<M.MemberCard>(`/members/by-code/${encodeURIComponent(code)}`);
+  noteReminders = () => this.get<M.NoteReminder[]>('/members/note-reminders');
+  treatNoteReminders = (actions: { memberId: number; action: M.NoteReminderChoice }[]) => this.post<void>('/members/note-reminders', actions);
   memberNotes = (id: Id, notes: string) => this.patch<M.MemberView>(`/members/${id}/notes`, { notes });
   memberPreview = (body: { packId: Id | null; discountId: Id | null; registrationDate: string | null; customAmount?: number | null }) =>
     this.post<M.MemberPreview | null>('/members/preview', body);

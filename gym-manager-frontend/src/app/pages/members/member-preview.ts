@@ -1,7 +1,20 @@
+import { ConnectedPosition } from '@angular/cdk/overlay';
 import { Component, computed, input, signal } from '@angular/core';
 import { FrDatePipe, MoneyPipe } from '../../core/format';
 import { MemberView } from '../../core/models';
 import { DaysLeft, PaidBadge, SportChip, StateBadge } from '../../shared/badges';
+
+/** Hover delay before the preview card opens, so sweeping the mouse across the ID column does not flicker. */
+export const PREVIEW_DELAY_MS = 300;
+export const PREVIEW_ID = 'member-preview';
+
+/** Right of the ID, then left, then below, then above: the card always stays in the viewport. */
+export const PREVIEW_POSITIONS: ConnectedPosition[] = [
+  { originX: 'end', originY: 'center', overlayX: 'start', overlayY: 'center', offsetX: 10 },
+  { originX: 'start', originY: 'center', overlayX: 'end', overlayY: 'center', offsetX: -10 },
+  { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 8 },
+  { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -8 },
+];
 
 /** Read-only summary card shown when hovering or focusing a member ID. */
 @Component({

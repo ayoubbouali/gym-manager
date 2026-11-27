@@ -208,3 +208,98 @@ describe('popup adhérent : remise saisie à la main', () => {
     expect(api['save']).toHaveBeenCalledWith('members', undefined, expect.objectContaining({ customAmount: null, discountId: 5 }));
   });
 });
+
+describe('popup adhérent : encaisser à la création', () => {
+  let api: Record<string, ReturnType<typeof vi.fn>>;
+  let notify: { success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
+
+  function setup(member?: Partial<MemberView>) {
+    api = {
+      sports: vi.fn().mockResolvedValue([{ id: 1, name: 'Karaté', color: '#E53935', active: true }]),
+      packs: vi.fn().mockResolvedValue([{ id: 1, name: 'Karaté - Mensuel', sportId: 1, active: true, total: 150 }]),
+      discounts: vi.fn().mockResolvedValue([{ id: 5, code: 'R1', name: 'Aucune', percent: 0, active: true, system: true }]),
+      memberPreview: vi.fn().mockResolvedValue({ price: 150, endDate: '2026-12-21', remainingDays: 30 }),
+      save: vi.fn().mockResolvedValue({ code: 'A020' }),
+    };
+    notify = { success: vi.fn(), error: vi.fn() };
+    TestBed.configureTestingModule({
+      imports: [MemberFormDialog],
+      providers: [
+        provideFrDates(),
+        importProvidersFrom(LucideAngularModule.pick(APP_ICONS)),
+        { provide: ApiService, useValue: api },
+        { provide: MatDialogRef, useValue: { close: vi.fn() } },
+        { provide: MAT_DIALOG_DATA, useValue: { member } },
+        { provide: NotifyService, useValue: notify },
+        { provide: ConfigService, useValue: config() },
+      ],
+    });
+  }
+
+  async function create() {
+    const f = TestBed.createComponent(MemberFormDialog);
+    f.detectChanges();
+    await f.whenStable();
+    f.componentInstance.form.patchValue({ lastName: 'Bennis', firstName: 'Lina', phone: { country: 'MA', number: '0650123456' },
+      sportIds: [1], packId: 1 });
+    await (f.componentInstance as unknown as { refreshPreview(): Promise<void> }).refreshPreview();
+    f.detectChanges();
+    return f;
+  }
+
+  const amountInput = (f: { nativeElement: HTMLElement }) => f.nativeElement.querySelector<HTMLInputElement>('input[formcontrolname="paymentAmount"]');
+
+  it('« Non » par défaut : rien n’est encaissé', async () => {
+    setup();
+    const f = await create();
+    expect(f.nativeElement.textContent).toContain('Encaisser maintenant ?');
+    expect(amountInput(f)).toBeNull();
+    await f.componentInstance.save();
+    expect(api['save'].mock.calls[0][2]).not.toHaveProperty('paymentAmount');
+  });
+
+  it('« Oui » : le prix calculé est proposé, et enregistré tel quel', async () => {
+    setup();
+    const f = await create();
+    f.componentInstance.form.patchValue({ payNow: true });
+    f.detectChanges();
+    expect(amountInput(f)!.value).toBe('150');
+    expect(f.nativeElement.textContent).toContain('Paiement complet');
+    await f.componentInstance.save();
+    expect(api['save']).toHaveBeenCalledWith('members', undefined, expect.objectContaining({
+      paymentAmount: 150, paymentMethod: 'ESPECES', paidOn: '2026-11-22' }));
+    expect(notify.success).toHaveBeenCalledWith(expect.stringContaining('150,00 DH encaissés'));
+  });
+
+  it('montant modifié : paiement partiel, le reste à payer est affiché, et le prix ne l’écrase plus', async () => {
+    setup();
+    const f = await create();
+    f.componentInstance.form.patchValue({ payNow: true, paymentMethod: 'CARTE' });
+    f.detectChanges();
+    const input = amountInput(f)!;
+    input.value = '60';
+    input.dispatchEvent(new Event('input'));
+    f.detectChanges();
+    expect(f.nativeElement.textContent).toContain('Paiement partiel : reste 90,00 DH à payer');
+    await (f.componentInstance as unknown as { refreshPreview(): Promise<void> }).refreshPreview();
+    expect(f.componentInstance.form.value.paymentAmount).toBe(60);
+    await f.componentInstance.save();
+    expect(api['save']).toHaveBeenCalledWith('members', undefined, expect.objectContaining({ paymentAmount: 60, paymentMethod: 'CARTE' }));
+  });
+
+  it('plus que le prix : refusé avant l’envoi', async () => {
+    setup();
+    const f = await create();
+    f.componentInstance.form.patchValue({ payNow: true, paymentAmount: 200 });
+    await f.componentInstance.save();
+    expect(api['save']).not.toHaveBeenCalled();
+    expect(f.componentInstance.error()).toContain('Vérifiez l’encaissement');
+  });
+
+  it('modification d’un adhérent : pas d’encaissement proposé', async () => {
+    setup({ id: 3, code: 'A003', lastName: 'Alami', firstName: 'Sara', phone: '0650123456', sportIds: [1], packId: 1,
+      registrationDate: '2026-11-01' });
+    const f = await create();
+    expect(f.nativeElement.textContent).not.toContain('Encaisser maintenant ?');
+  });
+});

@@ -30,6 +30,10 @@ public class Member {
     /** File name of the photo in the uploads directory (never the image itself). */
     private String photo;
     private String notes = "";
+    /** Day the note was last written; null for a note older than the reminders. */
+    private LocalDate notesUpdatedOn;
+    /** A note postponed from the reminder comes back on this day. */
+    private LocalDate notesRemindOn;
     private boolean active = true;
     /** Start of the automatic deletion delay of a deactivated member (RG-PURGE). */
     private LocalDate deactivatedOn;

@@ -5,11 +5,13 @@ import com.gymmanager.gym.common.FileStorage;
 import com.gymmanager.gym.service.ClubState;
 import com.gymmanager.gym.service.ClubStateService;
 import com.gymmanager.gym.service.MemberService;
+import com.gymmanager.gym.service.PaymentService;
 import com.gymmanager.gym.service.Views.ActivityView;
 import com.gymmanager.gym.service.Views.MemberView;
 import com.gymmanager.gym.web.dto.Requests.ActiveRequest;
 import com.gymmanager.gym.web.dto.Requests.MemberPreviewRequest;
 import com.gymmanager.gym.web.dto.Requests.MemberRequest;
+import com.gymmanager.gym.web.dto.Requests.NoteReminderAction;
 import com.gymmanager.gym.web.dto.Requests.NotesRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
@@ -27,6 +29,7 @@ import java.util.List;
 public class MemberController {
     private final ClubStateService state;
     private final MemberService service;
+    private final PaymentService payments;
     private final FileStorage files;
 
     @GetMapping
@@ -61,7 +64,7 @@ public class MemberController {
 
     @PostMapping
     public MemberView create(@RequestBody MemberRequest r, java.security.Principal user) {
-        Long id = service.save(null, r, user.getName()).getId();
+        Long id = payments.enroll(r, user.getName()).getId();
         return state.load().member(id).orElseThrow();
     }
 
@@ -74,6 +77,17 @@ public class MemberController {
     @PatchMapping("/{id}/active")
     public ResponseEntity<Void> active(@PathVariable Long id, @RequestBody ActiveRequest r) {
         service.setActive(id, Boolean.TRUE.equals(r.active()));
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/note-reminders")
+    public List<MemberService.NoteReminder> noteReminders() {
+        return service.noteReminders();
+    }
+
+    @PostMapping("/note-reminders")
+    public ResponseEntity<Void> treatNoteReminders(@RequestBody List<NoteReminderAction> actions) {
+        service.treatNoteReminders(actions);
         return ResponseEntity.noContent().build();
     }
 

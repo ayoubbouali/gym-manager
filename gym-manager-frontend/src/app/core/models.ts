@@ -72,6 +72,13 @@ export interface PackView {
   monthlyPrice: number; discountId: number; discount: DiscountView; total: number;
 }
 
+/** A member's note left untreated for at least a day; `notesUpdatedOn` null: written before the reminders existed. */
+export interface NoteReminder {
+  memberId: number; code: string; name: string; notes: string; notesUpdatedOn: string | null;
+}
+
+export type NoteReminderChoice = 'DONE' | 'LATER';
+
 export interface MemberView {
   id: number; code: string; lastName: string; firstName: string; phone: string;
   birthDate: string | null; registrationDate: string;

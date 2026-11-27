@@ -1313,6 +1313,36 @@ class AcceptanceTest {
                 .as("montant de la période").isEqualByComparingTo(amount);
     }
 
+    @Test
+    @DisplayName("Rappel des notes : pas le jour même, traitée = effacée, à relancer = masquée jusqu'au lendemain")
+    void noteReminders() throws Exception {
+        long a003 = id("/api/members", "$[?(@.code=='A003')].id");
+        long a004 = id("/api/members", "$[?(@.code=='A004')].id");
+        String a003Reminder = "$[?(@.code=='A003')]";
+        send(admin, "PATCH", "/api/members/" + a003 + "/notes", Map.of("notes", "Rappeler pour le kimono")).andExpect(status().isOk());
+        send(admin, "PATCH", "/api/members/" + a004 + "/notes", Map.of("notes", "Certificat médical manquant")).andExpect(status().isOk());
+        assertThat((List<Object>) read(get(admin, "/api/members/note-reminders"), a003Reminder)).as("note du jour").isEmpty();
+
+        clock.advance(Duration.ofDays(1));   // 2026-11-19: both notes are one day late
+        get(admin, "/api/members/note-reminders")
+                .andExpect(jsonPath(a003Reminder + ".notes").value("Rappeler pour le kimono"))
+                .andExpect(jsonPath(a003Reminder + ".notesUpdatedOn").value("2026-11-18"));
+
+        send(admin, "POST", "/api/members/note-reminders", List.of(Map.of("memberId", a003, "action", "DONE"),
+                Map.of("memberId", a004, "action", "LATER"))).andExpect(status().isNoContent());
+        get(admin, "/api/members/by-code/A003").andExpect(jsonPath("$.member.notes").value(""));
+        get(admin, "/api/members/by-code/A004").andExpect(jsonPath("$.member.notes").value("Certificat médical manquant"));
+        assertThat((List<Object>) read(get(admin, "/api/members/note-reminders"), "$[*].code")).doesNotContain("A003", "A004");
+
+        clock.advance(Duration.ofDays(1));   // 2026-11-20: the postponed note comes back
+        assertThat((List<Object>) read(get(admin, "/api/members/note-reminders"), "$[*].code")).contains("A004").doesNotContain("A003");
+
+        // an unknown action changes nothing, not even the valid ones sent with it
+        send(admin, "POST", "/api/members/note-reminders", List.of(Map.of("memberId", a004, "action", "DONE"),
+                Map.of("memberId", a004, "action", "OUPS"))).andExpect(status().isBadRequest());
+        get(admin, "/api/members/by-code/A004").andExpect(jsonPath("$.member.notes").value("Certificat médical manquant"));
+    }
+
     // ------------------------------------------------------------------ regional settings
 
     @Test

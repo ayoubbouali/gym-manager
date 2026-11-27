@@ -11,6 +11,7 @@ import com.gymmanager.gym.settings.ClubConfig;
 import com.gymmanager.gym.settings.SettingsService;
 import com.gymmanager.gym.web.dto.Requests.MemberPreviewRequest;
 import com.gymmanager.gym.web.dto.Requests.MemberRequest;
+import com.gymmanager.gym.web.dto.Requests.NoteReminderAction;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -110,7 +112,7 @@ public class MemberService {
         m.getSportIds().clear();
         m.getSportIds().addAll(sportIds);
         m.setInsurance(r.insurance() == null ? Insurance.IMPAYE : r.insurance());
-        m.setNotes(Check.text(r.notes(), "notes", "Notes", 2000, false));
+        writeNotes(m, r.notes(), cfg);
         Member saved = members.save(m);
         if (withoutSubscription) return saved;
 
@@ -184,7 +186,55 @@ public class MemberService {
     /** Edits the note alone: unlike {@link #save}, the current period is neither re-priced nor re-validated. */
     public void setNotes(Long id, String notes) {
         Member m = members.findById(id).orElseThrow(() -> ApiException.notFound("Adhérent introuvable."));
-        m.setNotes(Check.text(notes, "notes", "Notes", 2000, false));
+        writeNotes(m, notes, settings.config());
+    }
+
+    /** A note written or changed starts a new reminder delay; an unchanged one keeps its date. */
+    private static void writeNotes(Member m, String notes, ClubConfig cfg) {
+        String text = Check.text(notes, "notes", "Notes", 2000, false);
+        if (text.equals(m.getNotes())) return;
+        m.setNotes(text);
+        m.setNotesUpdatedOn(text.isBlank() ? null : cfg.today());
+        m.setNotesRemindOn(null);
+    }
+
+    public record NoteReminder(Long memberId, String code, String name, String notes, LocalDate notesUpdatedOn) {
+    }
+
+    /**
+     * Notes of active members to recall: written before today (a note of the day is not late yet) and not postponed
+     * past today. Oldest first.
+     */
+    @Transactional(readOnly = true)
+    public List<NoteReminder> noteReminders() {
+        LocalDate today = settings.config().today();
+        return members.findAll().stream()
+                .filter(m -> m.isActive() && m.getNotes() != null && !m.getNotes().isBlank())
+                .filter(m -> m.getNotesUpdatedOn() == null || m.getNotesUpdatedOn().isBefore(today))
+                .filter(m -> m.getNotesRemindOn() == null || !m.getNotesRemindOn().isAfter(today))
+                .sorted(Comparator.comparing(Member::getNotesUpdatedOn, Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(Member::getCode))
+                .map(m -> new NoteReminder(m.getId(), m.getCode(), (m.getLastName() + " " + m.getFirstName()).trim(), m.getNotes(),
+                        m.getNotesUpdatedOn()))
+                .toList();
+    }
+
+    /** DONE: the note is treated, so cleared. LATER: kept, and recalled again tomorrow. All or nothing. */
+    public void treatNoteReminders(List<NoteReminderAction> actions) {
+        LocalDate tomorrow = settings.config().today().plusDays(1);
+        for (NoteReminderAction a : Objects.requireNonNullElse(actions, List.<NoteReminderAction>of())) {
+            Member m = members.findById(Check.required(a.memberId(), "memberId", "Adhérent"))
+                    .orElseThrow(() -> ApiException.notFound("Adhérent introuvable."));
+            switch (Objects.requireNonNullElse(a.action(), "")) {
+                case "DONE" -> {
+                    m.setNotes("");
+                    m.setNotesUpdatedOn(null);
+                    m.setNotesRemindOn(null);
+                }
+                case "LATER" -> m.setNotesRemindOn(tomorrow);
+                default -> throw ApiException.invalid("action", "Choisissez « Traité » ou « À relancer demain ».");
+            }
+        }
     }
 
     public void setActive(Long id, boolean active) {

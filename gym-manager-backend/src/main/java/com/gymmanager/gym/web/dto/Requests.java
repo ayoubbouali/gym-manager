@@ -26,6 +26,10 @@ public final class Requests {
     public record NotesRequest(String notes) {
     }
 
+    /** {@code action}: DONE clears the note, LATER recalls it again tomorrow. */
+    public record NoteReminderAction(Long memberId, String action) {
+    }
+
     public record FunctionRequest(String label) {
     }
 

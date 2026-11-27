@@ -11,6 +11,7 @@ import com.gymmanager.gym.service.Views.MemberView;
 import com.gymmanager.gym.web.dto.Requests.ActiveRequest;
 import com.gymmanager.gym.web.dto.Requests.MemberPreviewRequest;
 import com.gymmanager.gym.web.dto.Requests.MemberRequest;
+import com.gymmanager.gym.web.dto.Requests.NoteReminderAction;
 import com.gymmanager.gym.web.dto.Requests.NotesRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
@@ -76,6 +77,17 @@ public class MemberController {
     @PatchMapping("/{id}/active")
     public ResponseEntity<Void> active(@PathVariable Long id, @RequestBody ActiveRequest r) {
         service.setActive(id, Boolean.TRUE.equals(r.active()));
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/note-reminders")
+    public List<MemberService.NoteReminder> noteReminders() {
+        return service.noteReminders();
+    }
+
+    @PostMapping("/note-reminders")
+    public ResponseEntity<Void> treatNoteReminders(@RequestBody List<NoteReminderAction> actions) {
+        service.treatNoteReminders(actions);
         return ResponseEntity.noContent().build();
     }
 

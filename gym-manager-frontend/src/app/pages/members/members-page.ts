@@ -26,6 +26,7 @@ import { Pager, SortHeader, TableState } from '../../shared/table';
 import { openMemberForm } from './member-form-dialog';
 import { openMemberNote } from './member-note-dialog';
 import { MemberColumnId, MemberColumns } from './member-columns';
+import { NoteReminders } from './note-reminders';
 import { MemberPreview, PREVIEW_DELAY_MS, PREVIEW_ID, PREVIEW_POSITIONS } from './member-preview';
 
 /** Shared by the table and the count pill, so the filtered count can never exceed the base. */
@@ -45,8 +46,9 @@ export { PREVIEW_DELAY_MS, PREVIEW_ID, PREVIEW_POSITIONS } from './member-previe
   selector: 'app-members',
   imports: [RouterLink, FormsModule, MatButtonModule, MatSelectModule, MatFormFieldModule, MatSlideToggleModule, MatTooltipModule,
     MatMenuModule, MatPseudoCheckbox, MatDividerModule, LucideAngularModule, SortHeader, Pager, SportChip, PaidBadge, StateBadge, DaysLeft, MoneyPipe,
-    FrDatePipe, CdkConnectedOverlay, CdkScrollable, CdkDropList, CdkDrag, MemberPreview],
+    FrDatePipe, CdkConnectedOverlay, CdkScrollable, CdkDropList, CdkDrag, MemberPreview, NoteReminders],
   template: `
+    <app-note-reminders [refresh]="t.rows()" (changed)="load()" />
     <div class="toolbar">
       <div class="count-pill" role="status">
         <lucide-icon name="users" [size]="18" aria-hidden="true" />

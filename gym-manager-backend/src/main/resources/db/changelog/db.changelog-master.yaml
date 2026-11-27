@@ -35,3 +35,6 @@ databaseChangeLog:
   - include:
       file: sql/V12__business_staff_internal.sql
       relativeToChangelogFile: true
+  - include:
+      file: sql/V13__member_note_reminders.sql
+      relativeToChangelogFile: true

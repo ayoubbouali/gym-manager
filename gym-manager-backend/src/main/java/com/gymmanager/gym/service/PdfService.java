@@ -3,6 +3,7 @@ package com.gymmanager.gym.service;
 import com.gymmanager.gym.common.FileStorage;
 import com.gymmanager.gym.domain.AppSetting;
 import com.gymmanager.gym.repository.SettingRepository;
+import com.gymmanager.gym.rules.Rules;
 import com.gymmanager.gym.service.Views.*;
 import com.gymmanager.gym.settings.ClubConfig;
 import com.lowagie.text.*;
@@ -31,7 +32,6 @@ public class PdfService {
     private static final Color SOFT = new Color(0xF7, 0xF7, 0xF9);
 
     private static final Font TITLE = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, BRAND);
-    private static final Font CLUB = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, Color.BLACK);
     private static final Font BOLD = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, Color.BLACK);
     private static final Font NORMAL = FontFactory.getFont(FontFactory.HELVETICA, 9, Color.BLACK);
     private static final Font SMALL = FontFactory.getFont(FontFactory.HELVETICA, 7.5f, MUTED);
@@ -73,9 +73,9 @@ public class PdfService {
     public byte[] receipt(ReceiptData d, ClubConfig cfg) {
         PaymentView p = d.payment();
         BigDecimal remaining = d.period().amount().subtract(d.paidUpToThis()).max(BigDecimal.ZERO);
-        return render(cfg, "REÇU DE PAIEMENT", p.receiptNumber(), p.paidOn(), p.cancelled(), p.cancelReason(), doc -> {
-            doc.add(parties("Adhérent", d.member().code() + " — " + d.member().firstName() + " " + d.member().lastName().toUpperCase(),
-                    "Téléphone : " + d.member().phone()));
+        return render(cfg, "REÇU DE PAIEMENT", p.receiptNumber(), p.paidOn(), p.cancelled(), p.cancelReason(), cfg.documentFooter(), doc -> {
+            doc.add(partyAndAdministration("Adhérent", d.member().code() + " — " + d.member().firstName() + " " + d.member().lastName().toUpperCase(),
+                    "", cfg, true));
 
             PdfPTable t = table(new float[]{3.2f, 1.4f, 1.4f});
             header(t, "Désignation", "Mode", "Montant");
@@ -98,68 +98,75 @@ public class PdfService {
                     + (p.updatedAt() != null ? " · modifié par " + p.updatedBy() + " le " + p.updatedAt().format(FR_TIME) : ""), SMALL);
             by.setSpacingBefore(6);
             doc.add(by);
+            doc.add(stampBox());
         });
     }
 
     // ---------------------------------------------------------------- salary receipts
 
-    /** {@code due} = {@code salary} + {@code bonus}: the month is paid in one go. */
+    /** {@code due} = {@code salary} + {@code bonus} + {@code activityShare} (null when none): the month is paid in one go. */
     public record SalaryReceiptData(SalaryPaymentView payment, StaffView staff, BigDecimal salary, BigDecimal bonus, String bonusNote,
-                                    BigDecimal due, SalaryDetail detail) {
+                                    BigDecimal activityShare, BigDecimal due, SalaryDetail detail) {
     }
+
+    static final String SALARY_FOOTER = "Merci pour votre engagement, votre travail et la qualité de votre collaboration.";
 
     public byte[] salaryReceipt(SalaryReceiptData d, ClubConfig cfg) {
         SalaryPaymentView p = d.payment();
-        return render(cfg, "REÇU DE SALAIRE", p.slipNumber(), p.paidOn(), p.cancelled(), p.cancelReason(), doc -> {
+        String cur = cfg.currency();
+        return render(cfg, "REÇU DE SALAIRE", p.slipNumber(), p.paidOn(), p.cancelled(), p.cancelReason(), SALARY_FOOTER, doc -> {
             StaffView s = d.staff();
-            doc.add(parties("Bénéficiaire", s.code() + " — " + s.name(),
-                    (s.function() != null ? s.function().label() : "") + (s.phone() == null || s.phone().isBlank() ? "" : " · " + s.phone())));
+            doc.add(partyAndAdministration("Personnel", s.code() + " — " + s.name(), s.function() != null ? s.function().label() : "", cfg, false));
 
-            Paragraph m = new Paragraph("Salaire de " + month(p.period()), BOLD);
-            m.setSpacingAfter(4);
-            doc.add(m);
+            PdfPTable t = table(new float[]{3.2f, 1.6f});
+            header(t, "Détail du salaire de " + month(p.period()), "Montant");
             if (s.payMode() == com.gymmanager.gym.domain.PayMode.COMMISSION) {
-                SalaryDetail det = d.detail();
-                doc.add(new Paragraph("Commission : " + det.shareRaw() + " (" + det.sharePercent().toPlainString().replace('.', ',')
-                        + " %) du prix mensuel des adhérents dont l'abonnement est en cours ce mois-ci. Un adhérent inscrit à partir du "
-                        + det.cutoffDay() + " du mois ne compte qu'à partir du mois suivant.", LABEL));
-                PdfPTable t = table(new float[]{2.6f, 2.2f, 1.2f, 1.4f});
-                header(t, "Adhérent", "Pack", "Début", "Prix / mois");
-                for (SalaryLineView l : det.lines()) {
-                    cell(t, l.code() + " " + l.name(), NORMAL, Element.ALIGN_LEFT);
-                    cell(t, l.pack(), NORMAL, Element.ALIGN_LEFT);
-                    cell(t, date(l.registrationDate()), NORMAL, Element.ALIGN_LEFT);
-                    cell(t, money(l.price(), cfg.currency()), NORMAL, Element.ALIGN_RIGHT);
-                }
-                if (det.lines().isEmpty()) {
-                    PdfPCell c = new PdfPCell(new Phrase("Aucun adhérent en cours ce mois-ci.", LABEL));
-                    c.setColspan(4);
-                    c.setBorderColor(LINE);
-                    c.setPadding(5);
-                    t.addCell(c);
-                }
-                doc.add(t);
-                doc.add(new Paragraph(money(det.base(), cfg.currency()) + " × " + det.shareRaw() + " = " + money(d.salary(), cfg.currency()), BOLD));
+                // gross = monthly prices of the coached members; the club keeps the rest, half charges and half its own part
+                BigDecimal gross = d.detail().base().setScale(2, RoundingMode.HALF_UP);
+                BigDecimal kept = gross.subtract(d.salary()).max(BigDecimal.ZERO);
+                BigDecimal charges = kept.divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP);
+                Rules.Share share = cfg.salaryShare();
+                String half = fraction(share.denominator().subtract(share.numerator()), share.denominator().multiply(BigDecimal.valueOf(2)));
+                cell(t, "Salaire brut", BOLD, Element.ALIGN_LEFT);
+                cell(t, money(gross, cur), BOLD, Element.ALIGN_RIGHT);
+                cell(t, "Charges (" + half + ")", NORMAL, Element.ALIGN_LEFT);
+                cell(t, "- " + money(charges, cur), NORMAL, Element.ALIGN_RIGHT);
+                cell(t, "Part du club (" + half + ")", NORMAL, Element.ALIGN_LEFT);
+                cell(t, "- " + money(kept.subtract(charges), cur), NORMAL, Element.ALIGN_RIGHT);
+                cell(t, "Part du coach (" + fraction(share.numerator(), share.denominator()) + ")", NORMAL, Element.ALIGN_LEFT);
+                cell(t, money(d.salary(), cur), NORMAL, Element.ALIGN_RIGHT);
             } else {
-                doc.add(new Paragraph("Salaire fixe mensuel", LABEL));
+                cell(t, "Salaire brut", BOLD, Element.ALIGN_LEFT);
+                cell(t, money(d.salary(), cur), BOLD, Element.ALIGN_RIGHT);
             }
+            if (d.bonus() != null && d.bonus().signum() > 0) {
+                String note = d.bonusNote() == null || d.bonusNote().isBlank() ? "" : " — " + d.bonusNote();
+                cell(t, "Prime" + note, NORMAL, Element.ALIGN_LEFT);
+                cell(t, "+ " + money(d.bonus(), cur), NORMAL, Element.ALIGN_RIGHT);
+            }
+            if (d.activityShare() != null && d.activityShare().signum() > 0) {
+                cell(t, "Part des activités", NORMAL, Element.ALIGN_LEFT);
+                cell(t, "+ " + money(d.activityShare(), cur), NORMAL, Element.ALIGN_RIGHT);
+            }
+            netRow(t, "Net à verser", money(p.amount(), cur));
+            doc.add(t);
 
-            PdfPTable sum = summary();
-            sumRow(sum, "Salaire du mois", money(d.salary(), cfg.currency()), NORMAL);
-            sumRow(sum, "Prime", money(d.bonus(), cfg.currency()), NORMAL);
-            sumRow(sum, "Total", money(d.due(), cfg.currency()), BOLD);
-            doc.add(sum);
-            if (d.bonusNote() != null && !d.bonusNote().isBlank()) doc.add(new Paragraph("Prime : " + d.bonusNote(), LABEL));
-
-            Paragraph paid = new Paragraph("Montant versé : " + money(p.amount(), cfg.currency()) + " · " + p.methodLabel(), BIG);
-            paid.setSpacingBefore(10);
-            doc.add(paid);
+            Paragraph by = new Paragraph("Versé le " + date(p.paidOn()) + " · " + p.methodLabel(), NORMAL);
+            doc.add(by);
             if (p.note() != null && !p.note().isBlank()) doc.add(new Paragraph("Note : " + p.note(), NORMAL));
-            Paragraph sign = new Paragraph("\nSignature du bénéficiaire :\n\n\n", NORMAL);
-            doc.add(sign);
-            doc.add(new Paragraph("Document interne de suivi des versements : il ne remplace pas un bulletin de paie légal. Saisi par "
-                    + p.createdBy() + " le " + p.createdAt().format(FR_TIME) + ".", SMALL));
         });
+    }
+
+    /** "1/3" when both terms are whole numbers (reduced), otherwise a percentage. */
+    static String fraction(BigDecimal num, BigDecimal den) {
+        try {
+            java.math.BigInteger n = num.toBigIntegerExact(), m = den.toBigIntegerExact();
+            java.math.BigInteger g = n.gcd(m);
+            if (g.signum() == 0) return "0";
+            return n.divide(g) + "/" + m.divide(g);
+        } catch (ArithmeticException e) {
+            return num.multiply(BigDecimal.valueOf(100)).divide(den, 2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().replace('.', ',') + " %";
+        }
     }
 
     // ---------------------------------------------------------------- layout helpers
@@ -168,7 +175,9 @@ public class PdfService {
         void write(Document doc) throws DocumentException;
     }
 
-    private byte[] render(ClubConfig cfg, String title, String number, LocalDate date, boolean cancelled, String cancelReason, Body body) {
+    /** Header = logo and document number only: the club is shown in the body, as the administration. */
+    private byte[] render(ClubConfig cfg, String title, String number, LocalDate date, boolean cancelled, String cancelReason,
+                          String footer, Body body) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         Document doc = new Document(PageSize.A5, 32, 32, 30, 40);
         try {
@@ -200,12 +209,9 @@ public class PdfService {
                 logo.addElement(box);
             }
             head.addCell(logo);
-            PdfPCell club = new PdfPCell();
-            club.setBorder(Rectangle.NO_BORDER);
-            club.addElement(new Paragraph(cfg.clubName(), CLUB));
-            if (!cfg.clubAddress().isBlank()) club.addElement(new Paragraph(cfg.clubAddress(), SMALL));
-            if (!cfg.clubPhone().isBlank()) club.addElement(new Paragraph("Tél. " + cfg.clubPhone(), SMALL));
-            head.addCell(club);
+            PdfPCell spacer = new PdfPCell();
+            spacer.setBorder(Rectangle.NO_BORDER);
+            head.addCell(spacer);
             PdfPCell right = new PdfPCell();
             right.setBorder(Rectangle.NO_BORDER);
             Paragraph t = new Paragraph(title, TITLE);
@@ -220,8 +226,8 @@ public class PdfService {
 
             body.write(doc);
 
-            if (cfg.documentFooter() != null && !cfg.documentFooter().isBlank()) {
-                Paragraph f = new Paragraph(cfg.documentFooter(), LABEL);
+            if (footer != null && !footer.isBlank()) {
+                Paragraph f = new Paragraph(footer, LABEL);
                 f.setAlignment(Element.ALIGN_CENTER);
                 f.setSpacingBefore(14);
                 doc.add(f);
@@ -274,10 +280,34 @@ public class PdfService {
         doc.add(l);
     }
 
-    private static PdfPTable parties(String label, String name, String sub) {
-        PdfPTable t = new PdfPTable(1);
+    /** The member or staff member on the left (never their phone), the club's administration on the right. */
+    private static PdfPTable partyAndAdministration(String label, String name, String sub, ClubConfig cfg, boolean clubPhone) {
+        PdfPTable t = new PdfPTable(2);
         t.setWidthPercentage(100);
         t.setSpacingAfter(10);
+        PdfPCell left = partyCell(label, name, sub);
+        PdfPCell right = partyCell("Administration", cfg.clubName(), cfg.clubAddress());
+        if (clubPhone && !cfg.clubPhone().isBlank()) right.addElement(new Paragraph("Tél. " + cfg.clubPhone(), NORMAL));
+        t.addCell(left);
+        t.addCell(right);
+        return t;
+    }
+
+    /** Empty framed space, on the right, for the administration's stamp. */
+    private static PdfPTable stampBox() {
+        PdfPTable t = new PdfPTable(1);
+        t.setWidthPercentage(45);
+        t.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        t.setSpacingBefore(12);
+        PdfPCell c = new PdfPCell(new Phrase("Cachet de l'Administration", LABEL));
+        c.setBorderColor(LINE);
+        c.setPadding(6);
+        c.setFixedHeight(70);
+        t.addCell(c);
+        return t;
+    }
+
+    private static PdfPCell partyCell(String label, String name, String sub) {
         PdfPCell c = new PdfPCell();
         c.setBackgroundColor(SOFT);
         c.setBorderColor(LINE);
@@ -285,8 +315,19 @@ public class PdfService {
         c.addElement(new Paragraph(label, LABEL));
         c.addElement(new Paragraph(name, BOLD));
         if (sub != null && !sub.isBlank()) c.addElement(new Paragraph(sub, NORMAL));
-        t.addCell(c);
-        return t;
+        return c;
+    }
+
+    private static void netRow(PdfPTable t, String label, String value) {
+        String[] texts = {label, value};
+        for (int i = 0; i < texts.length; i++) {
+            PdfPCell c = new PdfPCell(new Phrase(texts[i], BIG));
+            c.setBackgroundColor(SOFT);
+            c.setBorderColor(LINE);
+            c.setPadding(6);
+            c.setHorizontalAlignment(i == 0 ? Element.ALIGN_LEFT : Element.ALIGN_RIGHT);
+            t.addCell(c);
+        }
     }
 
     private static PdfPTable table(float[] widths) {

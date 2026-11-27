@@ -25,8 +25,11 @@ public final class Views {
     public record FunctionView(Long id, String label, boolean active) {
     }
 
-    /** A staff member offered in a picker; {@code coach}: their function is "Coach", the only one that supervises sports. */
-    public record StaffOption(Long id, String code, String name, boolean active, boolean coach) {
+    /**
+     * A staff member offered in a picker; {@code coach}: their function is "Coach", the only one that supervises sports;
+     * {@code internal}: a club owner, who earns no share of the activities they manage.
+     */
+    public record StaffOption(Long id, String code, String name, boolean active, boolean coach, boolean internal) {
     }
 
     public record DurationView(Long id, String label, int months, boolean active) {
@@ -79,7 +82,7 @@ public final class Views {
     }
 
     public record SalaryPaymentView(Long id, String slipNumber, Long staffId, String staffCode, String staffName, String period,
-                                    BigDecimal amount, PaymentMethod method, String methodLabel, LocalDate paidOn, String note,
+                                    BigDecimal amount, BigDecimal activityShare, PaymentMethod method, String methodLabel, LocalDate paidOn, String note,
                                     LocalDateTime createdAt, String createdBy,
                                     boolean cancelled, LocalDateTime cancelledAt, String cancelledBy, String cancelReason) {
     }
@@ -108,13 +111,18 @@ public final class Views {
     public record StaffView(Long id, String code, String lastName, String firstName, String name, String phone,
                             Long functionId, FunctionView function, List<Long> sportIds, List<SportRef> sports,
                             boolean internal, PayMode payMode, BigDecimal fixedSalary, boolean active, BigDecimal salary, SalaryDetail salaryDetail,
-                            Integer activeMembers) {
+                            Integer activeMembers, BigDecimal activityShare) {
     }
 
     public record ActivityView(Long id, String code, String name, String description, BigDecimal price,
                                LocalDateTime startsAt, String location, Integer maxPlaces, Long managerId, StaffRef manager,
                                boolean active, boolean paid, boolean past, int registrationCount, Integer remainingPlaces, boolean full,
-                               BigDecimal revenue) {
+                               BigDecimal revenue, BigDecimal managerPercent, BigDecimal managerShare) {
+    }
+
+    /** Part of a paying activity earned by its manager in the activity's month. */
+    public record ActivityShareView(Long id, String code, String name, LocalDate date, int registrationCount, BigDecimal price,
+                                    BigDecimal revenue, BigDecimal percent, BigDecimal amount) {
     }
 
     public record RegistrationView(Long id, Long memberId, Long activityId, LocalDateTime createdAt,

@@ -22,6 +22,8 @@ public class SalaryPayment {
     /** Month paid, "YYYY-MM". */
     private String period;
     private BigDecimal amount;
+    /** Part of {@code amount} earned on the paying activities of the month; null when none. */
+    private BigDecimal activityShare;
 
     @Enumerated(EnumType.STRING)
     private PaymentMethod method;

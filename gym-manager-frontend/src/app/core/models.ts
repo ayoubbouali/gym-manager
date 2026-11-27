@@ -62,7 +62,7 @@ export interface AppConfig {
 export interface SportRef { id: number; code: string; name: string; color: string; active: boolean; }
 export interface StaffRef { id: number; code: string; name: string; active: boolean; }
 /** Staff offered in a picker; `coach`: their function is "Coach", the only one that supervises sports. */
-export interface StaffOption extends StaffRef { coach: boolean; }
+export interface StaffOption extends StaffRef { coach: boolean; internal: boolean; }
 export interface FunctionView { id: number; label: string; active: boolean; }
 export interface DurationView { id: number; label: string; months: number; active: boolean; }
 export interface DiscountView { id: number; code: string; name: string; percent: number; active: boolean; system: boolean; }
@@ -103,7 +103,8 @@ export interface MemberView {
 export interface PaymentView {
   id: number; receiptNumber: string; memberId: number; memberCode: string; memberName: string;
   subscriptionId: number; packName: string; periodStart: string; periodEnd: string;
-  amount: number; method: PaymentMethod; methodLabel: string; paidOn: string; note: string;
+  /** Part of `amount` earned on the month's paying activities; null when none. */
+  amount: number; activityShare: number | null; method: PaymentMethod; methodLabel: string; paidOn: string; note: string;
   createdAt: string; createdBy: string; updatedAt: string | null; updatedBy: string | null;
   cancelled: boolean; cancelledAt: string | null; cancelledBy: string | null; cancelReason: string | null;
 }
@@ -127,9 +128,15 @@ export interface SalaryPaymentView {
  * sports the staff member coaches, null when they coach none. {@code paidOn}: date of the month's payment, null while unpaid.
  */
 export interface PayrollRow {
-  staff: StaffView; salary: number; bonus: number; bonusNote: string | null; revenue: number | null;
+  staff: StaffView; salary: number; bonus: number; bonusNote: string | null;
+  /** Part of the month's paying activities the staff member manages (`activities`); null when none. `due` includes it. */
+  activityShare: number | null; activities: ActivityShareView[]; revenue: number | null;
   due: number; paid: number; balance: number; status: PaymentStatus; paidOn: string | null;
   detail: SalaryDetail; payments: SalaryPaymentView[];
+}
+
+export interface ActivityShareView {
+  id: number; code: string; name: string; date: string; registrationCount: number; price: number; revenue: number; percent: number; amount: number;
 }
 
 export interface PayrollMonth {
@@ -165,6 +172,8 @@ export interface StaffView {
   payMode: PayMode | null; fixedSalary: number | null; active: boolean; salary: number; salaryDetail: SalaryDetail;
   /** Distinct active members with a paid or partial subscription in the coached sports; null when coaching none. */
   activeMembers: number | null;
+  /** Part of this month's paying activities they manage; null when none. Not included in `salary`. */
+  activityShare: number | null;
 }
 
 export interface StaffList { rows: StaffView[]; payroll: number; activeCount: number; }
@@ -174,6 +183,8 @@ export interface ActivityView {
   startsAt: string; location: string; maxPlaces: number | null; managerId: number; manager: StaffRef | null;
   /** Paying activity (price > 0); its revenue = price × registered members, counted in the month of the activity. */
   active: boolean; paid: boolean; past: boolean; registrationCount: number; remainingPlaces: number | null; full: boolean; revenue: number;
+  /** Manager's percent of `revenue`; null for a free activity or an internal manager. `managerShare` also null when inactive. */
+  managerPercent: number | null; managerShare: number | null;
 }
 
 export interface RegistrationView {
@@ -223,7 +234,7 @@ export interface Stats {
   quarterly: { year: number; quarter: number; amount: number }[];
   yearly: { year: number; amount: number }[];
   bySport: { id: number; name: string; color: string; active: boolean; amount: number }[];
-  activities: { id: number; code: string; name: string; date: string; price: number; count: number; revenue: number }[];
+  activities: { id: number; code: string; name: string; date: string; price: number; count: number; revenue: number; managerShare: number | null }[];
   bySource: { key: 'SUBSCRIPTIONS' | 'ACTIVITIES' | 'BUSINESS'; label: string; amount: number }[];
   monthlyBySource: { month: string; subscriptions: number; activities: number; business: number; total: number }[];
   businessByCategory: { category: BusinessCategory; label: string; amount: number }[];

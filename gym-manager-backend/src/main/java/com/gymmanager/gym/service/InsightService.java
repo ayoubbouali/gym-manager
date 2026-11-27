@@ -127,7 +127,9 @@ public class InsightService {
     public record SportAmount(Long id, String name, String color, boolean active, BigDecimal amount) {
     }
 
-    public record ActivityAmount(Long id, String code, String name, LocalDate date, BigDecimal price, int count, BigDecimal revenue) {
+    /** {@code managerShare}: part paid to the manager with their salary, null when none (free activity, internal manager). */
+    public record ActivityAmount(Long id, String code, String name, LocalDate date, BigDecimal price, int count, BigDecimal revenue,
+                                 BigDecimal managerShare) {
     }
 
     public record MethodAmount(String method, String label, BigDecimal amount, int count) {
@@ -199,7 +201,7 @@ public class InsightService {
                         Rules.revenueForSport(memberSales, s.id(), f, t))).toList(),
                 st.activities().stream().filter(a -> w.contains(a.startsAt().toLocalDate()))
                         .map(a -> new ActivityAmount(a.id(), a.code(), a.name(), a.startsAt().toLocalDate(), a.price(),
-                                a.registrationCount(), a.revenue())).toList(),
+                                a.registrationCount(), a.revenue(), a.managerShare())).toList(),
                 List.of(new SourceAmount("SUBSCRIPTIONS", "Abonnements", Rules.revenue(memberSales, from, to)),
                         new SourceAmount("ACTIVITIES", "Activités payantes", Rules.revenue(activitySales, from, to)),
                         new SourceAmount("BUSINESS", "Business", Rules.revenue(businessSales, from, to))),

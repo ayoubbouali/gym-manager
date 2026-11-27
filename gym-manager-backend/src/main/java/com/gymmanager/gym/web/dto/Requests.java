@@ -80,7 +80,7 @@ public final class Requests {
 
     /** {@code paid}: a paying activity has a price; a free one (false or null) costs 0. */
     public record ActivityRequest(String name, String description, BigDecimal price, LocalDateTime startsAt, String location,
-                                  Integer maxPlaces, Long managerId, Boolean paid) {
+                                  Integer maxPlaces, Long managerId, Boolean paid, BigDecimal managerPercent) {
     }
 
     public record RegistrationRequest(Long memberId, Long activityId) {

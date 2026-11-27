@@ -8,8 +8,11 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
-import { ActivityView, StaffRef } from '../../core/models';
+import { ActivityView, StaffOption } from '../../core/models';
 import { NotifyService, errorMessage } from '../../core/notify.service';
+
+/** Share of a paying activity's revenue offered to its manager by default, in %. */
+export const DEFAULT_MANAGER_PERCENT = 50;
 
 @Component({
   selector: 'app-activity-form',
@@ -34,11 +37,21 @@ import { NotifyService, errorMessage } from '../../core/notify.service';
             <span matTextSuffix>&nbsp;{{ currency() }}</span>
             <mat-hint>Prix × inscrits compte dans le CA du mois de l’activité</mat-hint></mat-form-field>
         } @else {<span></span>}
-        <mat-form-field class="span-2"><mat-label>Responsable</mat-label>
+        <mat-form-field [class.span-2]="!v.paid"><mat-label>Responsable</mat-label>
           <mat-select name="manager" [(ngModel)]="v.managerId" required>
-            @for (s of staff; track s.id) {<mat-option [value]="s.id">{{ s.name }} <small class="muted">· {{ s.code }}</small></mat-option>}
+            @for (s of staff; track s.id) {<mat-option [value]="s.id">{{ s.name }} <small class="muted">· {{ s.code }}@if (s.internal) { · interne}</small></mat-option>}
           </mat-select>
         </mat-form-field>
+        @if (v.paid) {
+          @if (managerInternal()) {
+            <p class="muted small internal-note">Personnel interne : pas de pourcentage sur cette activité.</p>
+          } @else {
+            <mat-form-field><mat-label>Part du responsable</mat-label>
+              <input matInput type="number" min="0" max="100" step="0.01" name="managerPercent" [(ngModel)]="v.managerPercent" required />
+              <span matTextSuffix>&nbsp;%</span>
+              <mat-hint>Du prix × inscrits, versée avec son salaire du mois</mat-hint></mat-form-field>
+          }
+        }
         <mat-form-field class="span-2"><mat-label>Description</mat-label><textarea matInput rows="2" name="description" [(ngModel)]="v.description"></textarea></mat-form-field>
       </form>
       @if (error()) {<p class="form-error" role="alert">{{ error() }}</p>}
@@ -50,7 +63,7 @@ import { NotifyService, errorMessage } from '../../core/notify.service';
   `,
 })
 export class ActivityFormDialog {
-  d = inject<{ activity?: ActivityView; staff: StaffRef[] }>(MAT_DIALOG_DATA);
+  d = inject<{ activity?: ActivityView; staff: StaffOption[] }>(MAT_DIALOG_DATA);
   private api = inject(ApiService);
   private ref = inject(MatDialogRef<ActivityFormDialog>);
   private notify = inject(NotifyService);
@@ -64,9 +77,15 @@ export class ActivityFormDialog {
     location: this.d.activity?.location ?? '',
     maxPlaces: this.d.activity?.maxPlaces ?? (null as number | null),
     managerId: this.d.activity?.managerId ?? (null as number | null),
+    managerPercent: (this.d.activity?.managerPercent ?? DEFAULT_MANAGER_PERCENT) as number | null,
     description: this.d.activity?.description ?? '',
   };
   busy = signal(false);
+
+  /** Internal staff (club owners) earn no share of the activities they manage. */
+  managerInternal(): boolean {
+    return this.staff.find((s) => s.id === this.v.managerId)?.internal ?? false;
+  }
   error = signal('');
 
   async save(): Promise<void> {
@@ -74,6 +93,7 @@ export class ActivityFormDialog {
     this.error.set('');
     try {
       const body = { ...this.v, price: this.v.paid ? this.v.price : 0, maxPlaces: this.v.maxPlaces || null,
+        managerPercent: this.v.paid && !this.managerInternal() ? this.v.managerPercent : null,
         startsAt: this.v.startsAt ? `${this.v.startsAt}:00`.slice(0, 19) : null };
       await this.api.save('activities', this.d.activity?.id, body);
       this.notify.success(this.d.activity ? 'Activité modifiée.' : 'Activité créée.');

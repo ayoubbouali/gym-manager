@@ -57,6 +57,7 @@ import { Pager, Paged } from '../../shared/table';
                     <button class="link-btn" (click)="detail(s)" [attr.aria-label]="'Détail du calcul du salaire de ' + s.name"><lucide-icon name="info" [size]="14" /> Détail</button>
                   }
                 </dd>
+                @if (s.activityShare !== null) {<dt>Part des activités</dt><dd>{{ s.activityShare | money }}</dd>}
               }
             </dl>
           </div>

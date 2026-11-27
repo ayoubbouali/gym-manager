@@ -210,6 +210,20 @@ public class ClubStateService {
         sportRows.forEach(x -> sportNames.put(x.getId(), x.getName()));
         Map<Long, String> packNames = new HashMap<>();
         packs.forEach(x -> packNames.put(x.id(), x.name()));
+        List<ActivityView> activities = activityRepo.findAll().stream()
+                .sorted(Comparator.comparing(Activity::getStartsAt).thenComparing(Activity::getCode)).map(a -> {
+                    Rules.ActivityStats st = Rules.activityStats(a.getMaxPlaces(), regCount.getOrDefault(a.getId(), 0));
+                    BigDecimal revenue = a.getPrice().multiply(BigDecimal.valueOf(st.count())).setScale(2, RoundingMode.HALF_UP);
+                    Staff manager = staffById.get(a.getManagerId());
+                    // internal staff (club owners) earn nothing, even with a percent saved before they became internal
+                    BigDecimal percent = a.getPrice().signum() > 0 && manager != null && !manager.isInternal() ? a.getManagerPercent() : null;
+                    BigDecimal share = percent == null || !a.isActive() ? null : Rules.activityManagerShare(revenue, percent);
+                    return new ActivityView(a.getId(), a.getCode(), a.getName(), a.getDescription(), a.getPrice(), a.getStartsAt(),
+                            a.getLocation(), a.getMaxPlaces(), a.getManagerId(), staffRef.apply(a.getManagerId()), a.isActive(),
+                            a.getPrice().signum() > 0, a.getStartsAt().isBefore(now), st.count(), st.remaining(), st.full(),
+                            revenue, percent == null ? null : percent.stripTrailingZeros(), share);
+                }).toList();
+        YearMonth currentMonth = YearMonth.from(today);
         List<StaffView> staff = staffRows.stream().map(s -> {
             SalaryComputation sc = salary(s.getId(), s.getPayMode(), s.isInternal() ? null : s.getFixedSalary(), members, subsByMember,
                     coachesBySport, sportNames, packNames, cfg, today);
@@ -220,17 +234,10 @@ public class ClubStateService {
                     .filter(m -> m.sportIds().stream().anyMatch(coached::contains)).count();
             return new StaffView(s.getId(), s.getCode(), s.getLastName(), s.getFirstName(), staffName(s), s.getPhone(),
                     s.getFunctionId(), fnById.get(s.getFunctionId()), coached, coached.stream().map(sportRef).toList(),
-                    s.isInternal(), s.getPayMode(), s.getFixedSalary(), s.isActive(), sc.amount(), sc.detail(), enrolled);
+                    s.isInternal(), s.getPayMode(), s.getFixedSalary(), s.isActive(), sc.amount(), sc.detail(), enrolled,
+                    activityShareTotal(activityShares(activities, s.getId(), currentMonth)));
         }).toList();
 
-        List<ActivityView> activities = activityRepo.findAll().stream()
-                .sorted(Comparator.comparing(Activity::getStartsAt).thenComparing(Activity::getCode)).map(a -> {
-                    Rules.ActivityStats st = Rules.activityStats(a.getMaxPlaces(), regCount.getOrDefault(a.getId(), 0));
-                    return new ActivityView(a.getId(), a.getCode(), a.getName(), a.getDescription(), a.getPrice(), a.getStartsAt(),
-                            a.getLocation(), a.getMaxPlaces(), a.getManagerId(), staffRef.apply(a.getManagerId()), a.isActive(),
-                            a.getPrice().signum() > 0, a.getStartsAt().isBefore(now), st.count(), st.remaining(), st.full(),
-                            a.getPrice().multiply(BigDecimal.valueOf(st.count())).setScale(2, RoundingMode.HALF_UP));
-                }).toList();
         Map<Long, ActivityView> actById = byId(activities, ActivityView::id);
 
         List<RegistrationView> registrations = regRows.stream().map(r -> {
@@ -317,6 +324,21 @@ public class ClubStateService {
         c.setCreatedAt(x.getCreatedAt());
         c.setCreatedBy(x.getCreatedBy());
         return c;
+    }
+
+    /** Paying activities of {@code month} managed by {@code staffId} that earn them a share, by date. */
+    public static List<ActivityShareView> activityShares(List<ActivityView> activities, Long staffId, YearMonth month) {
+        return activities.stream()
+                .filter(a -> a.managerShare() != null && staffId.equals(a.managerId()) && YearMonth.from(a.startsAt()).equals(month))
+                .map(a -> new ActivityShareView(a.id(), a.code(), a.name(), a.startsAt().toLocalDate(), a.registrationCount(), a.price(),
+                        a.revenue(), a.managerPercent(), a.managerShare()))
+                .toList();
+    }
+
+    /** Sum of the shares, null when there is no activity (shown as nothing rather than 0). */
+    public static BigDecimal activityShareTotal(List<ActivityShareView> shares) {
+        return shares.isEmpty() ? null
+                : shares.stream().map(ActivityShareView::amount).reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
     }
 
     public record SalaryComputation(BigDecimal amount, SalaryDetail detail) {

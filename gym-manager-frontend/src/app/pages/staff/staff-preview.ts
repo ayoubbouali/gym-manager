@@ -35,6 +35,7 @@ export function payModeLabel(s: Pick<StaffView, 'internal' | 'payMode'>): string
       <dt>Fonction</dt><dd>{{ s.function?.label ?? '—' }}</dd>
       <dt>Mode de paie</dt><dd>{{ payModeLabel(s) }}</dd>
       @if (!s.internal) {<dt>Salaire du mois</dt><dd><span class="strong">{{ monthSalary() | money }}</span> <span class="mp-sep">·</span> {{ monthLabel() }}</dd>}
+      @if (monthActivityShare() !== null) {<dt>Part activités</dt><dd>{{ monthActivityShare() | money }}</dd>}
       <dt>Téléphone</dt><dd>{{ s.phone || '—' }}</dd>
     </dl>
     @if (s.sports.length) {
@@ -49,8 +50,11 @@ export class StaffPreview {
   salary = input<number | null>(null);
   /** "YYYY-MM" of {@code salary}; defaults to the current month. */
   month = input<string | null>(null);
+  /** Activity share of {@code month}; read from the staff member (current month) when no month is given. */
+  activityShare = input<number | null>(null);
 
   initials = computed(() => staffInitials(this.staff()));
   monthSalary = computed(() => this.salary() ?? this.staff().salary);
+  monthActivityShare = computed(() => (this.month() ? this.activityShare() : this.staff().activityShare));
   monthLabel = computed(() => monthName(this.month() ?? this.staff().salaryDetail.month));
 }

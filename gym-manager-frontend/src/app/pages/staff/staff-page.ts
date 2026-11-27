@@ -20,7 +20,7 @@ import { ActiveBadge, SportChip } from '../../shared/badges';
 import { ConfirmService } from '../../shared/confirm.service';
 import { Pager, SortHeader, TableState } from '../../shared/table';
 import { PREVIEW_DELAY_MS, PREVIEW_POSITIONS } from '../members/members-page';
-import { StaffFormDialog } from './staff-dialogs';
+import { FunctionManageDialog, StaffFormDialog } from './staff-dialogs';
 import { StaffPreview, payModeLabel } from './staff-preview';
 
 @Component({
@@ -31,6 +31,7 @@ import { StaffPreview, payModeLabel } from './staff-preview';
     <div class="toolbar">
       <label class="search grow"><lucide-icon name="search" [size]="18" />
         <input type="search" placeholder="Rechercher" [ngModel]="t.search()" (ngModelChange)="t.setSearch($event)" aria-label="Rechercher un membre du personnel" /></label>
+      <button class="icon-btn" (click)="manageFunctions()" matTooltip="Ajouter ou supprimer des fonctions" aria-label="Ajouter ou supprimer des fonctions"><lucide-icon name="pencil" [size]="18" /></button>
       <mat-form-field subscriptSizing="dynamic" class="w-200"><mat-label>Fonction</mat-label>
         <mat-select [ngModel]="fFunction()" (ngModelChange)="fFunction.set($event); t.resetPage()">
           <mat-option [value]="null">Toutes</mat-option>
@@ -150,6 +151,16 @@ export class StaffPage {
     } catch (e) {
       this.notify.error(e);
     }
+  }
+
+  /** Adds or deletes functions; those given to a staff member (active or not) cannot be deleted. */
+  async manageFunctions(): Promise<void> {
+    const used = new Set((this.list()?.rows ?? []).map((s) => s.functionId));
+    const ref = this.dialog.open(FunctionManageDialog, { data: { functions: this.functions(), used }, width: '440px', maxWidth: '96vw' });
+    if (!(await firstValueFrom(ref.afterClosed()))) return;
+    await this.load();
+    const f = this.fFunction();
+    if (f && !this.functions().some((x) => x.id === f)) this.fFunction.set(null);
   }
 
   async edit(staff?: StaffView): Promise<void> {

@@ -6,8 +6,7 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { MatTooltipModule } from '@angular/material/tooltip';
-import { LucideAngularModule } from 'lucide-angular';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { ApiService } from '../../core/api.service';
 import { FrDatePipe, MoneyPipe, formatAmount, monthName } from '../../core/format';
 import { FunctionView, SportView, StaffView } from '../../core/models';
@@ -18,8 +17,7 @@ import { Pager, Paged } from '../../shared/table';
 
 @Component({
   selector: 'app-staff-form',
-  imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatTooltipModule,
-    LucideAngularModule, MultiSelect, PhoneInput],
+  imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, MatSelectModule, MultiSelect, PhoneInput],
   template: `
     <h2 mat-dialog-title>{{ d.staff ? 'Modifier ' + d.staff.code + ' — ' + d.staff.name : 'Nouveau membre du personnel' }}</h2>
     <mat-dialog-content>
@@ -27,33 +25,21 @@ import { Pager, Paged } from '../../shared/table';
         <mat-form-field><mat-label>Nom</mat-label><input matInput name="last" [(ngModel)]="v.lastName" required /></mat-form-field>
         <mat-form-field><mat-label>Prénom</mat-label><input matInput name="first" [(ngModel)]="v.firstName" /></mat-form-field>
         <app-phone-input label="Téléphone" name="phone" [(ngModel)]="v.phone" />
-        @if (adding()) {
-          <div class="fn-new">
-            <mat-form-field class="grow"><mat-label>Nouvelle fonction</mat-label>
-              <input matInput name="newFn" [(ngModel)]="newFunction" maxlength="80" placeholder="Ex. : Kinésithérapeute" (keydown.enter)="$event.preventDefault(); addFunction()" /></mat-form-field>
-            <button mat-flat-button type="button" (click)="addFunction()" [disabled]="!newFunction.trim() || busy()">Ajouter</button>
-            <button mat-button type="button" (click)="adding.set(false)">Annuler</button>
-          </div>
-        } @else {
-          <div class="fn-new">
-            <mat-form-field class="grow"><mat-label>Fonction</mat-label>
-              <mat-select name="fn" [(ngModel)]="v.functionId" required>
-                @for (f of functions(); track f.id) {<mat-option [value]="f.id">{{ f.label }}</mat-option>}
-              </mat-select>
-            </mat-form-field>
-            <button class="icon-btn" type="button" (click)="adding.set(true)" matTooltip="Ajouter une fonction" aria-label="Ajouter une fonction"><lucide-icon name="plus" [size]="18" /></button>
-          </div>
-        }
+        <mat-form-field><mat-label>Fonction</mat-label>
+          <mat-select name="fn" [(ngModel)]="v.functionId" required>
+            @for (f of functions; track f.id) {<mat-option [value]="f.id">{{ f.label }}</mat-option>}
+          </mat-select>
+        </mat-form-field>
         <app-multi-select class="span-2" label="Sports encadrés" name="sports" [(ngModel)]="v.sportIds" [options]="sportOptions" />
         <div class="field-block">
           <span class="field-label">Personnel interne ?</span>
           <mat-button-toggle-group name="internal" [(ngModel)]="v.internal" aria-label="Personnel interne">
             <mat-button-toggle [value]="false">Non</mat-button-toggle>
-            <mat-button-toggle [value]="true">Oui, propriétaire du club</mat-button-toggle>
+            <mat-button-toggle [value]="true">Interne</mat-button-toggle>
           </mat-button-toggle-group>
         </div>
         @if (v.internal) {
-          <p class="muted small">Fait partie des propriétaires du club : aucune rémunération, n’apparaît pas dans la paie du personnel.</p>
+          <p class="muted small">Aucune rémunération : n’apparaît pas dans la paie du personnel.</p>
         } @else {
           <div class="field-block">
             <span class="field-label">Mode de rémunération</span>
@@ -76,16 +62,13 @@ import { Pager, Paged } from '../../shared/table';
       <button mat-flat-button type="submit" form="staff-form" [disabled]="busy()">Enregistrer</button>
     </mat-dialog-actions>
   `,
-  styles: `.fn-new { display: flex; align-items: center; gap: 8px; } .fn-new .grow { flex: 1; min-width: 0; }`,
 })
 export class StaffFormDialog {
   d = inject<{ staff?: StaffView; functions: FunctionView[]; sports: SportView[] }>(MAT_DIALOG_DATA);
   private api = inject(ApiService);
   private ref = inject(MatDialogRef<StaffFormDialog>);
   private notify = inject(NotifyService);
-  functions = signal(this.d.functions.filter((f) => f.active || f.id === this.d.staff?.functionId));
-  adding = signal(false);
-  newFunction = '';
+  functions = this.d.functions.filter((f) => f.active || f.id === this.d.staff?.functionId);
   sportOptions: SelectOption[] = this.d.sports.map((s) => ({ id: s.id, label: s.name, color: s.color, disabled: !s.active }));
   v = {
     lastName: this.d.staff?.lastName ?? '',
@@ -100,30 +83,7 @@ export class StaffFormDialog {
   busy = signal(false);
   error = signal('');
 
-  /** Creates a function from the form and selects it: the list of functions is not fixed. */
-  async addFunction(): Promise<void> {
-    const label = this.newFunction.trim();
-    if (!label) return;
-    this.busy.set(true);
-    this.error.set('');
-    try {
-      const { id } = await this.api.post<{ id: number }>('/functions', { label });
-      this.functions.update((l) => [...l, { id, label, active: true }].sort((a, b) => a.label.localeCompare(b.label, 'fr')));
-      this.v.functionId = id;
-      this.newFunction = '';
-      this.adding.set(false);
-    } catch (e) {
-      this.error.set(errorMessage(e));
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
   async save(): Promise<void> {
-    if (this.adding()) {
-      this.error.set('Ajoutez ou annulez la nouvelle fonction avant d’enregistrer.');
-      return;
-    }
     this.busy.set(true);
     this.error.set('');
     try {
@@ -175,4 +135,102 @@ export class SalaryDetailDialog {
   pct = formatAmount(this.s.salaryDetail.sharePercent);
   sportNames = this.s.sports.map((x) => x.name).join(', ');
   lines = new Paged(() => this.s.salaryDetail.lines);
+}
+
+/**
+ * Adds a function, or deletes one or several of them. A function given to a staff member (active or not) cannot be deleted:
+ * it is shown greyed out.
+ */
+@Component({
+  selector: 'app-function-manage',
+  imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, MatCheckboxModule],
+  template: `
+    <h2 mat-dialog-title>Fonctions</h2>
+    <mat-dialog-content>
+      <mat-button-toggle-group class="fn-mode" [ngModel]="mode()" (ngModelChange)="mode.set($event); error.set('')" aria-label="Action">
+        <mat-button-toggle value="ADD">Ajouter</mat-button-toggle><mat-button-toggle value="DELETE">Supprimer</mat-button-toggle>
+      </mat-button-toggle-group>
+      @if (mode() === 'ADD') {
+        <form id="fn-form" (ngSubmit)="add()">
+          <mat-form-field class="w-full"><mat-label>Nouvelle fonction</mat-label>
+            <input matInput name="label" [(ngModel)]="label" required maxlength="80" cdkFocusInitial placeholder="Ex. : Kinésithérapeute" /></mat-form-field>
+        </form>
+      } @else {
+        <p class="muted small">Cochez les fonctions à supprimer. Celles affectées à un membre du personnel sont grisées.</p>
+        <div class="fn-list">
+          @for (f of d.functions; track f.id) {
+            <mat-checkbox [disabled]="d.used.has(f.id)" [checked]="selected.has(f.id)" (change)="toggle(f.id, $event.checked)">
+              {{ f.label }}@if (d.used.has(f.id)) {<span class="muted small"> (affectée)</span>}@if (!f.active) {<span class="muted small"> (inactive)</span>}
+            </mat-checkbox>
+          } @empty {<p class="muted">Aucune fonction.</p>}
+        </div>
+      }
+      @if (error()) {<p class="form-error" role="alert">{{ error() }}</p>}
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button mat-button type="button" (click)="close()">Fermer</button>
+      @if (mode() === 'ADD') {
+        <button mat-flat-button type="submit" form="fn-form" [disabled]="busy() || !label.trim()">Ajouter</button>
+      } @else {
+        <button mat-flat-button class="danger" type="button" (click)="remove()" [disabled]="busy() || !selected.size">Supprimer{{ selected.size ? ' (' + selected.size + ')' : '' }}</button>
+      }
+    </mat-dialog-actions>
+  `,
+  styles: `.fn-mode { margin-bottom: 16px; } .fn-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow: auto; }`,
+})
+export class FunctionManageDialog {
+  d = inject<{ functions: FunctionView[]; used: Set<number> }>(MAT_DIALOG_DATA);
+  private api = inject(ApiService);
+  private ref = inject(MatDialogRef<FunctionManageDialog>);
+  private notify = inject(NotifyService);
+  mode = signal<'ADD' | 'DELETE'>('ADD');
+  label = '';
+  selected = new Set<number>();
+  busy = signal(false);
+  error = signal('');
+  private changed = false;
+
+  toggle(id: number, on: boolean): void {
+    if (on) this.selected.add(id);
+    else this.selected.delete(id);
+  }
+
+  async add(): Promise<void> {
+    const label = this.label.trim();
+    if (!label) return;
+    await this.run(async () => {
+      await this.api.post('/functions', { label });
+      this.notify.success(`Fonction « ${label} » ajoutée.`);
+    });
+  }
+
+  async remove(): Promise<void> {
+    const ids = [...this.selected];
+    await this.run(async () => {
+      for (const id of ids) {
+        await this.api.remove('functions', id);
+        this.selected.delete(id);
+        this.changed = true;
+      }
+      this.notify.success(ids.length > 1 ? `${ids.length} fonctions supprimées.` : 'Fonction supprimée.');
+    });
+  }
+
+  close(): void {
+    this.ref.close(this.changed);
+  }
+
+  private async run(action: () => Promise<void>): Promise<void> {
+    this.busy.set(true);
+    this.error.set('');
+    try {
+      await action();
+      this.changed = true;
+      this.ref.close(true);
+    } catch (e) {
+      this.error.set(errorMessage(e));
+    } finally {
+      this.busy.set(false);
+    }
+  }
 }

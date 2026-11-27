@@ -849,6 +849,8 @@ class AcceptanceTest {
         MockHttpSession rh = login("gestionrh", "Rh2026xyz", "Rh2027xyz");
         long fn = ((Number) read(send(rh, "POST", "/api/functions", Map.of("label", "Directeur")).andExpect(status().isOk()), "$.id")).longValue();
         send(rh, "PUT", "/api/functions/" + fn, Map.of("label", "Gérant")).andExpect(status().isForbidden());
+        long spare = ((Number) read(send(rh, "POST", "/api/functions", Map.of("label", "Stagiaire")), "$.id")).longValue();
+        send(rh, "DELETE", "/api/functions/" + spare, null).andExpect(status().isNoContent());
 
         send(rh, "POST", "/api/staff", Map.of("lastName", "Sans", "functionId", fn)).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.field").value("payMode"));
@@ -859,6 +861,8 @@ class AcceptanceTest {
         assertThat((List<Object>) read(get(admin, "/api/staff"), "$.rows[?(@.id==" + owner + ")].payMode")).containsExactly((Object) null);
         assertThat((List<Object>) read(get(admin, "/api/payroll?month=2026-11"), "$.rows[?(@.staff.id==" + owner + ")]")).isEmpty();
         send(admin, "POST", "/api/payroll/payments", Map.of("staffId", owner, "period", "2026-11", "method", "ESPECES")).andExpect(status().isBadRequest());
+        // a function given to a staff member is not deleted
+        send(rh, "DELETE", "/api/functions/" + fn, null).andExpect(status().isConflict());
     }
 
     @Test

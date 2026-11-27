@@ -2,8 +2,8 @@
 
 /** Menu pages a role opens (Accueil and Mon compte are open to everyone), then two write rights. Checked by the server. */
 export type Permission =
-  | 'MEMBERS' | 'MEMBER_CARD' | 'PACKS' | 'DISCOUNTS' | 'SPORTS' | 'ACTIVITIES' | 'STAFF' | 'PAYROLL' | 'CHARGES' | 'PAYMENTS'
-  | 'ALERTS' | 'STATS' | 'SETTINGS' | 'EDIT_REFERENTIALS' | 'MANAGE_PAYMENTS' | 'MANAGE_CHARGES';
+  | 'MEMBERS' | 'MEMBER_CARD' | 'PACKS' | 'DISCOUNTS' | 'SPORTS' | 'ACTIVITIES' | 'STAFF' | 'PAYROLL' | 'CHARGES' | 'BUSINESS' | 'PAYMENTS'
+  | 'ALERTS' | 'STATS' | 'SETTINGS' | 'EDIT_REFERENTIALS' | 'MANAGE_PAYMENTS' | 'MANAGE_CHARGES' | 'MANAGE_BUSINESS';
 export type PaymentStatus = 'PAYE' | 'PARTIEL' | 'IMPAYE';
 export type PaymentMethod = 'ESPECES' | 'CARTE' | 'VIREMENT';
 export type Insurance = 'PAYE' | 'IMPAYE';
@@ -82,7 +82,10 @@ export interface MemberView {
   /** Price typed by hand for the current period (replaces pack price and discount), null otherwise. */
   customAmount: number | null;
   insurance: Insurance; hasPhoto: boolean; notes: string; active: boolean; activityIds: number[];
-  price: number | null; endDate: string | null; remainingDays: number | null;
+  price: number | null;
+  /** Business items linked to the member and due this month; what is left to collect of them is in `balance`. */
+  servicesPrice: number;
+  endDate: string | null; remainingDays: number | null;
   paid: number; balance: number;
   /** Null without subscription: nothing is due, so there is no payment status. */
   paymentStatus: PaymentStatus | null; activeMember: boolean; situation: Situation; state: MemberState;
@@ -148,7 +151,9 @@ export interface SalaryDetail {
 export interface StaffView {
   id: number; code: string; lastName: string; firstName: string; name: string; phone: string;
   functionId: number; function: FunctionView | null; sportIds: number[]; sports: SportRef[];
-  payMode: PayMode; fixedSalary: number | null; active: boolean; salary: number; salaryDetail: SalaryDetail;
+  /** One of the club's owners: no pay mode (`payMode` null), never in the payroll. */
+  internal: boolean;
+  payMode: PayMode | null; fixedSalary: number | null; active: boolean; salary: number; salaryDetail: SalaryDetail;
   /** Distinct active members with a paid or partial subscription in the coached sports; null when coaching none. */
   activeMembers: number | null;
 }
@@ -158,7 +163,8 @@ export interface StaffList { rows: StaffView[]; payroll: number; activeCount: nu
 export interface ActivityView {
   id: number; code: string; name: string; description: string; price: number;
   startsAt: string; location: string; maxPlaces: number | null; managerId: number; manager: StaffRef | null;
-  active: boolean; past: boolean; registrationCount: number; remainingPlaces: number | null; full: boolean; revenue: number;
+  /** Paying activity (price > 0); its revenue = price × registered members, counted in the month of the activity. */
+  active: boolean; paid: boolean; past: boolean; registrationCount: number; remainingPlaces: number | null; full: boolean; revenue: number;
 }
 
 export interface RegistrationView {
@@ -195,7 +201,7 @@ export interface PayrollStats {
   from: string; to: string; staffId: number | null;
   totalDue: number; totalPaid: number; totalBalance: number; paymentCount: number;
   monthly: { month: string; due: number; paid: number; balance: number }[];
-  byStaff: { staffId: number; code: string; name: string; function: string | null; payMode: PayMode; active: boolean;
+  byStaff: { staffId: number; code: string; name: string; function: string | null; payMode: PayMode | 'INTERNAL'; active: boolean;
     due: number; paid: number; balance: number; paymentCount: number }[];
   payments: SalaryPaymentView[];
 }
@@ -209,6 +215,9 @@ export interface Stats {
   yearly: { year: number; amount: number }[];
   bySport: { id: number; name: string; color: string; active: boolean; amount: number }[];
   activities: { id: number; code: string; name: string; date: string; price: number; count: number; revenue: number }[];
+  bySource: { key: 'SUBSCRIPTIONS' | 'ACTIVITIES' | 'BUSINESS'; label: string; amount: number }[];
+  monthlyBySource: { month: string; subscriptions: number; activities: number; business: number; total: number }[];
+  businessByCategory: { category: BusinessCategory; label: string; amount: number }[];
 }
 
 export interface SettingDef {
@@ -338,4 +347,52 @@ export interface RegistrationStats {
   byDuration: { label: string; count: number }[];
   byAge: { label: string; count: number }[];
   newMemberRows: { id: number; code: string; name: string; registrationDate: string; sports: SportRef[]; packName: string | null }[];
+}
+
+// ------------------------------------------------------------------ business
+
+export type BusinessCategory = 'EQUIPEMENT' | 'VETEMENTS' | 'NUTRITION' | 'COACHING' | 'SEANCE_PRIVEE' | 'PROGRAMME' | 'AUTRE';
+
+/**
+ * Sale or service of the club, the revenue mirror of a charge. Permanent: due every month from `startPeriod` to `endPeriod`, `amount`
+ * being the expected monthly amount; with `autoPay`, collected every month. One-off: `period`. `member`: member it is sold to.
+ */
+export interface BusinessView {
+  id: number;
+  label: string;
+  category: BusinessCategory;
+  categoryLabel: string;
+  permanent: boolean;
+  period: string | null;
+  amount: number | null;
+  startPeriod: string | null;
+  endPeriod: string | null;
+  active: boolean;
+  autoPay: boolean;
+  autoMethod: PaymentMethod | null;
+  memberId: number | null;
+  member: { id: number; code: string; name: string } | null;
+  note: string;
+  paymentCount: number;
+  totalPaid: number;
+}
+
+export type BusinessPaymentView = ChargePaymentView & { businessId: number };
+
+/** An item due for a month: collected (`payment`) or to collect (`expected`: known amount). `scheduled`: coming month of an automatic item. */
+export interface BusinessDue {
+  item: BusinessView;
+  period: string;
+  expected: number | null;
+  payment: BusinessPaymentView | null;
+  scheduled: boolean;
+}
+
+export interface BusinessMonth {
+  period: string;
+  currentMonth: boolean;
+  rows: BusinessDue[];
+  totalPaid: number;
+  toCollectCount: number;
+  toCollectKnown: number;
 }

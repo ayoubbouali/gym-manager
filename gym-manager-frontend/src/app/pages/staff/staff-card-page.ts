@@ -10,12 +10,13 @@ import { SalaryPaymentView, StaffView } from '../../core/models';
 import { SportChip } from '../../shared/badges';
 import { salaryReceiptUrl } from '../../shared/payment-dialogs';
 import { SalaryDetailDialog } from './staff-dialogs';
-import { staffInitials } from './staff-preview';
+import { payModeLabel, staffInitials } from './staff-preview';
+import { Pager, Paged } from '../../shared/table';
 
 /** Staff card: identity, coached sports, pay mode, salary of the current month and pay slip history. */
 @Component({
   selector: 'app-staff-card',
-  imports: [RouterLink, MatButtonModule, MatTooltipModule, LucideAngularModule, SportChip, MoneyPipe, FrDatePipe],
+  imports: [RouterLink, MatButtonModule, MatTooltipModule, LucideAngularModule, SportChip, Pager, MoneyPipe, FrDatePipe],
   template: `
     <div class="toolbar">
       <a mat-stroked-button routerLink="/paie"><lucide-icon name="chevron-left" [size]="16" /> Paie du personnel</a>
@@ -44,15 +45,19 @@ import { staffInitials } from './staff-preview';
             <h4>Rémunération</h4>
             <dl>
               <dt>Mode de paie</dt>
-              <dd><span class="badge" [class.info]="s.payMode === 'FIXED'" [class.warn]="s.payMode === 'COMMISSION'">{{ s.payMode === 'FIXED' ? 'Fixe' : 'Commission' }}</span></dd>
-              @if (s.payMode === 'FIXED') {<dt>Salaire fixe</dt><dd>{{ s.fixedSalary | money }}</dd>}
-              <dt>Salaire de {{ month(s.salaryDetail.month) }}</dt>
-              <dd>
-                <span class="strong">{{ s.salary | money }}</span>
-                @if (s.payMode === 'COMMISSION') {
-                  <button class="link-btn" (click)="detail(s)" [attr.aria-label]="'Détail du calcul du salaire de ' + s.name"><lucide-icon name="info" [size]="14" /> Détail</button>
-                }
-              </dd>
+              <dd><span class="badge" [class.info]="s.payMode === 'FIXED'" [class.warn]="s.payMode === 'COMMISSION'" [class.neutral]="s.internal">{{ payModeLabel(s) }}</span></dd>
+              @if (s.internal) {
+                <dt>Salaire</dt><dd class="muted">Aucun : fait partie des propriétaires du club</dd>
+              } @else {
+                @if (s.payMode === 'FIXED') {<dt>Salaire fixe</dt><dd>{{ s.fixedSalary | money }}</dd>}
+                <dt>Salaire de {{ month(s.salaryDetail.month) }}</dt>
+                <dd>
+                  <span class="strong">{{ s.salary | money }}</span>
+                  @if (s.payMode === 'COMMISSION') {
+                    <button class="link-btn" (click)="detail(s)" [attr.aria-label]="'Détail du calcul du salaire de ' + s.name"><lucide-icon name="info" [size]="14" /> Détail</button>
+                  }
+                </dd>
+              }
             </dl>
           </div>
         </div>
@@ -63,7 +68,7 @@ import { staffInitials } from './staff-preview';
         <table class="table compact">
           <thead><tr><th>Mois</th><th>Facture</th><th>Date de paiement</th><th>Mode</th><th class="num">Montant</th><th><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
-            @for (p of history(); track p.id) {
+            @for (p of historyRows.page(); track p.id) {
               <tr [class.cancelled]="p.cancelled">
                 <td>{{ month(p.period) }}</td><td class="code">{{ p.slipNumber }}</td><td>{{ p.paidOn | frDate }}</td><td>{{ p.methodLabel }}</td>
                 <td class="num strong">{{ p.amount | money }} @if (p.cancelled) {<span class="badge ko">annulé</span>}</td>
@@ -72,6 +77,7 @@ import { staffInitials } from './staff-preview';
             } @empty {<tr><td colspan="6" class="empty">Aucune facture.</td></tr>}
           </tbody>
         </table>
+        <app-pager [table]="historyRows" [auto]="true" />
       </section>
     } @else if (notFound()) {
       <div class="card empty-state"><lucide-icon name="circle-alert" [size]="36" /><h2>Membre du personnel introuvable</h2><p class="muted">{{ notFound() }}</p></div>
@@ -87,6 +93,8 @@ export class StaffCardPage {
 
   staff = signal<StaffView | null>(null);
   history = signal<SalaryPaymentView[]>([]);
+  historyRows = new Paged(() => this.history());
+  payModeLabel = payModeLabel;
   notFound = signal('');
   readonly initials = staffInitials;
   month = (period: string) => monthName(period);

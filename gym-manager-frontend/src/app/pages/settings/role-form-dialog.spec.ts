@@ -32,7 +32,7 @@ describe('popup rôle : pages et droits', () => {
 
   it('propose toutes les pages du menu sauf Accueil, dans l’ordre du menu', () => {
     expect(PAGE_RIGHTS.map((p) => p.label)).toEqual(['Adhérents', 'Fiche adhérent', 'Packs', 'Remises & durées', 'Sports', 'Activités',
-      'Personnel', 'Paie du personnel', 'Charges', 'Paiements', 'Alertes', 'Statistiques', 'Paramètres']);
+      'Personnel', 'Paie du personnel', 'Charges', 'Business', 'Paiements', 'Alertes', 'Statistiques', 'Paramètres']);
   });
 
   it('envoie le nom et les cases cochées, dans l’ordre du menu', async () => {

@@ -145,11 +145,12 @@ export class SalaryPayDialog {
     }
   }
 }
+import { Pager, Paged } from '../../shared/table';
 
 @Component({
   selector: 'app-payroll',
   imports: [FormsModule, RouterLink, MatButtonModule, MatFormFieldModule, MatInputModule, MatTooltipModule, LucideAngularModule, CdkConnectedOverlay,
-    DateField, MoneyPipe, FrDatePipe, PaidBadge, ActiveBadge, StaffPreview],
+    DateField, Pager, MoneyPipe, FrDatePipe, PaidBadge, ActiveBadge, StaffPreview],
   template: `
     <div class="toolbar">
       <button class="icon-btn" (click)="shift(-1)" aria-label="Mois précédent"><lucide-icon name="chevron-left" /></button>
@@ -178,7 +179,7 @@ export class SalaryPayDialog {
             <th>Statut</th><th>Date de paiement</th><th>Facture</th><th><span class="sr-only">Actions</span></th>
           </tr></thead>
           <tbody>
-            @for (r of d.rows; track r.staff.id) {
+            @for (r of rows.page(); track r.staff.id) {
               <tr [class.inactive]="!r.staff.active">
                 <td><a class="code-link" [routerLink]="['/personnel/fiche', r.staff.code]" [attr.aria-describedby]="preview()?.row?.staff?.id === r.staff.id ? previewId : null"
                        (mouseenter)="openPreview(r, $event)" (focus)="openPreview(r, $event)" (mouseleave)="closePreview()" (blur)="closePreview()" (keydown.escape)="closePreview()">{{ r.staff.code }}</a></td>
@@ -218,6 +219,7 @@ export class SalaryPayDialog {
           </tbody>
         </table>
       </div>
+      <app-pager [table]="rows" />
       @if (preview(); as p) {
         <ng-template cdkConnectedOverlay [cdkConnectedOverlayOpen]="true" [cdkConnectedOverlayOrigin]="p.origin"
                      [cdkConnectedOverlayPositions]="previewPositions" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="8"
@@ -239,6 +241,7 @@ export class PayrollPage {
   currentMonth = (this.config.config()?.today ?? new Date().toISOString()).slice(0, 7);
   month = signal(this.currentMonth);
   data = signal<PayrollMonth | null>(null);
+  rows = new Paged(() => this.data()?.rows ?? [], () => this.config.pageSize());
   title = computed(() => `Paie de ${monthName(this.month())}`);
   readonly paid = isPaid;
   readonly slips = activeSlips;

@@ -1,9 +1,10 @@
-import { importProvidersFrom, signal } from '@angular/core';
+import { Type, importProvidersFrom, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { LucideAngularModule } from 'lucide-angular';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
+import { provideFrDates } from '../../core/date-adapter';
 import { APP_ICONS } from '../../core/icons';
 import { ClubStats } from './stats-page';
 import { StaffPayStats } from './staff-pay-stats';
@@ -66,6 +67,26 @@ describe('Statistiques : période par défaut', () => {
     expect(api['chargeStats']).toHaveBeenLastCalledWith('2026-01', '2026-11');
   });
 
+  it('3 et 6 derniers mois : mois en cours compris, sur chaque onglet', () => {
+    const club = TestBed.createComponent(ClubStats).componentInstance;
+    club.setPeriod('LAST3');
+    expect(api['stats']).toHaveBeenLastCalledWith('2026-09-01', '2026-11-26');
+    club.setPeriod('LAST6');
+    expect(api['stats']).toHaveBeenLastCalledWith('2026-06-01', '2026-11-26');
+
+    const pay = TestBed.createComponent(StaffPayStats).componentInstance;
+    pay.setPeriod('LAST3');
+    expect(api['payrollStats']).toHaveBeenLastCalledWith('2026-09', '2026-11', null);
+
+    const reg = TestBed.createComponent(RegistrationStats).componentInstance;
+    reg.setPeriod('LAST6');
+    expect(api['registrationStats']).toHaveBeenLastCalledWith('2026-06-01', '2026-11-26');
+
+    const charges = TestBed.createComponent(ChargeStats).componentInstance;
+    charges.setPeriod('LAST3');
+    expect(api['chargeStats']).toHaveBeenLastCalledWith('2026-09', '2026-11');
+  });
+
   it('Charges : camembert dans l’ordre fixe des catégories, quel que soit le tri des montants', () => {
     const page = TestBed.createComponent(ChargeStats).componentInstance;
     page.s.set({ byCategory: [
@@ -74,5 +95,43 @@ describe('Statistiques : période par défaut', () => {
     ] } as never);
     expect(page.categories().map((c) => [c.label, c.share])).toEqual([['Électricité', '40 %'], ['Entretien du matériel', '60 %']]);
     expect(page.categoryChart().type).toBe('pie');
+  });
+});
+
+describe('Statistiques : tableaux retirés', () => {
+  beforeEach(() => {
+    const done = <T>(v: T) => vi.fn().mockResolvedValue(v);
+    TestBed.configureTestingModule({
+      providers: [
+        importProvidersFrom(LucideAngularModule.pick(APP_ICONS)),
+        { provide: ApiService, useValue: {
+          chargeStats: done({ from: '2026-11', to: '2026-11', totalCharges: 0, toPayCount: 0, toPayKnown: 0, revenue: 0, salaries: 0, profit: 0,
+            monthly: [], byCategory: [], toPay: [], paid: [] }),
+          registrationStats: done({ from: '2026-11-01', to: '2026-11-26', newMembers: 0, renewals: 0, ended: 0, renewed: 0, departures: 0,
+            renewalRate: null, net: 0, monthly: [], bySport: [], byDuration: [], byAge: [], newMemberRows: [] }),
+        } },
+        { provide: ConfigService, useValue: { config: signal({ today: '2026-11-26' }), currency: signal('DH'), pageSize: signal(20) } },
+        provideFrDates(),
+      ],
+    });
+  });
+
+  async function text(component: Type<unknown>): Promise<string> {
+    const f = TestBed.createComponent(component);
+    await f.whenStable();
+    f.detectChanges();
+    return (f.nativeElement as HTMLElement).textContent!;
+  }
+
+  it('Suivi des charges : plus de tableau « Règlements de la période »', async () => {
+    const t = await text(ChargeStats);
+    expect(t).toContain('Charges à régler');
+    expect(t).not.toContain('Règlements de la période');
+  });
+
+  it('Suivi des inscriptions : plus de tableau « Nouvelles inscriptions de la période »', async () => {
+    const t = await text(RegistrationStats);
+    expect(t).toContain('Par durée d’abonnement');
+    expect(t).not.toContain('Nouvelles inscriptions de la période');
   });
 });

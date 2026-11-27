@@ -21,7 +21,7 @@ import { ConfirmService } from '../../shared/confirm.service';
 import { Pager, SortHeader, TableState } from '../../shared/table';
 import { PREVIEW_DELAY_MS, PREVIEW_POSITIONS } from '../members/members-page';
 import { StaffFormDialog } from './staff-dialogs';
-import { StaffPreview } from './staff-preview';
+import { StaffPreview, payModeLabel } from './staff-preview';
 
 @Component({
   selector: 'app-staff',
@@ -62,7 +62,7 @@ import { StaffPreview } from './staff-preview';
               <td class="strong">{{ s.lastName }}</td><td>{{ s.firstName || '—' }}</td><td>{{ s.phone || '—' }}</td>
               <td>{{ s.function?.label ?? '—' }}</td>
               <td>@for (x of s.sports; track x.id) {<app-sport-chip [name]="x.name" [color]="x.color" [inactive]="!x.active" />} @empty {<span class="muted">—</span>}</td>
-              <td><span class="badge" [class.info]="s.payMode === 'FIXED'" [class.warn]="s.payMode === 'COMMISSION'">{{ s.payMode === 'FIXED' ? 'Fixe' : 'Commission' }}</span></td>
+              <td><span class="badge" [class.info]="s.payMode === 'FIXED'" [class.warn]="s.payMode === 'COMMISSION'" [class.neutral]="s.internal">{{ payModeLabel(s) }}</span></td>
               <td class="num">@if (s.activeMembers !== null) {<span class="strong">{{ s.activeMembers }}</span>} @else {<span class="muted">—</span>}</td>
               <td><app-active-badge [active]="s.active" /></td>
               <td class="actions">
@@ -98,10 +98,11 @@ export class StaffPage {
   functions = signal<FunctionView[]>([]);
   sports = signal<SportView[]>([]);
   fFunction = signal<number | null>(null);
+  payModeLabel = payModeLabel;
 
   t = new TableState<StaffView>({
     searchText: (s) => `${s.code} ${s.name} ${s.phone} ${s.function?.label ?? ''} ${s.sports.map((x) => x.name).join(' ')}`,
-    sort: { code: (s) => s.code, last: (s) => s.lastName, first: (s) => s.firstName, fn: (s) => s.function?.label, mode: (s) => s.payMode, members: (s) => s.activeMembers ?? -1 },
+    sort: { code: (s) => s.code, last: (s) => s.lastName, first: (s) => s.firstName, fn: (s) => s.function?.label, mode: (s) => payModeLabel(s), members: (s) => s.activeMembers ?? -1 },
     defaultSort: { key: 'code', dir: 'asc' },
     isActive: (s) => s.active,
     filter: () => {
@@ -189,7 +190,7 @@ export class StaffPage {
       { header: 'ID', value: (s) => s.code }, { header: 'Nom', value: (s) => s.lastName }, { header: 'Prénom', value: (s) => s.firstName },
       { header: 'Téléphone', value: (s) => s.phone }, { header: 'Fonction', value: (s) => s.function?.label ?? '' },
       { header: 'Sports encadrés', value: (s) => s.sports.map((x) => x.name).join(', ') },
-      { header: 'Mode', value: (s) => (s.payMode === 'FIXED' ? 'Fixe' : 'Commission') }, { header: 'Inscrits actifs', value: (s) => s.activeMembers ?? '' },
+      { header: 'Mode', value: (s) => payModeLabel(s) }, { header: 'Inscrits actifs', value: (s) => s.activeMembers ?? '' },
       { header: 'Actif', value: (s) => (s.active ? 'Oui' : 'Non') },
     ], this.t.filtered());
   }

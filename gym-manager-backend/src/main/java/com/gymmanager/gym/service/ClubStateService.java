@@ -36,12 +36,14 @@ public class ClubStateService {
     private final ActivityRegistrationRepository registrationRepo;
     private final SubscriptionRepository subscriptionRepo;
     private final PaymentRepository paymentRepo;
+    private final BusinessRepository businessRepo;
+    private final BusinessPaymentRepository businessPaymentRepo;
 
     public ClubStateService(SettingsService settings, StaffFunctionRepository functionRepo, DurationRepository durationRepo,
                             DiscountRepository discountRepo, StaffRepository staffRepo, SportRepository sportRepo,
                             PackRepository packRepo, MemberRepository memberRepo, ActivityRepository activityRepo,
                             ActivityRegistrationRepository registrationRepo, SubscriptionRepository subscriptionRepo,
-                            PaymentRepository paymentRepo) {
+                            PaymentRepository paymentRepo, BusinessRepository businessRepo, BusinessPaymentRepository businessPaymentRepo) {
         this.settings = settings;
         this.functionRepo = functionRepo;
         this.durationRepo = durationRepo;
@@ -54,6 +56,8 @@ public class ClubStateService {
         this.registrationRepo = registrationRepo;
         this.subscriptionRepo = subscriptionRepo;
         this.paymentRepo = paymentRepo;
+        this.businessRepo = businessRepo;
+        this.businessPaymentRepo = businessPaymentRepo;
     }
 
     private static <T> Map<Long, T> byId(List<T> list, Function<T, Long> id) {
@@ -139,15 +143,22 @@ public class ClubStateService {
         Map<Long, BigDecimal> paidBySub = new HashMap<>();
         payRows.stream().filter(x -> !x.isCancelled()).forEach(x -> paidBySub.merge(x.getSubscriptionId(), x.getAmount(), BigDecimal::add));
 
+        List<Business> businessRows = businessRepo.findAll();
+        List<BusinessPayment> businessPayments = businessPaymentRepo.findAll();
+        Map<Long, MemberServices> servicesByMember = memberServices(businessRows, businessPayments, YearMonth.from(today));
+        MemberServices noServices = new MemberServices(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+
         List<MemberView> members = memberRepo.findAll().stream().sorted(Comparator.comparing(Member::getCode)).map(m -> {
             List<Subscription> periods = subsByMember.getOrDefault(m.getId(), List.of());
             List<Long> sportIds = m.getSportIds().stream().sorted().toList();
-            if (periods.isEmpty()) return withoutSubscription(m, sportIds, sportRef, activitiesByMember);
+            MemberServices services = servicesByMember.getOrDefault(m.getId(), noServices);
+            if (periods.isEmpty()) return withoutSubscription(m, sportIds, sportRef, activitiesByMember, services);
             Subscription cur = periods.getLast();
             PackView pack = packById.get(cur.getPackId());
             DiscountView disc = shownDiscount(cur, pack, discById);
-            BigDecimal totalDue = periods.stream().map(Subscription::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
-            BigDecimal totalPaid = periods.stream().map(x -> paidBySub.getOrDefault(x.getId(), BigDecimal.ZERO)).reduce(BigDecimal.ZERO, BigDecimal::add);
+            // linked business items count in the amounts due and paid, never in the subscription days
+            BigDecimal totalDue = periods.stream().map(Subscription::getAmount).reduce(services.due(), BigDecimal::add);
+            BigDecimal totalPaid = periods.stream().map(x -> paidBySub.getOrDefault(x.getId(), BigDecimal.ZERO)).reduce(services.paid(), BigDecimal::add);
             Rules.Coverage coverage = Rules.coverage(periods.stream().map(x -> span(x, paidBySub)).toList(), today);
             Rules.MemberComputed c = Rules.computeMember(coverage, cur.getAmount(), totalDue, totalPaid, m.isActive(), cfg.pricing());
             return new MemberView(m.getId(), m.getCode(), m.getLastName(), m.getFirstName(), m.getPhone(),
@@ -157,7 +168,7 @@ public class ClubStateService {
                     pack.id(), new PackRef(pack.id(), pack.code(), pack.name(), pack.active(), cur.getMonths(), pack.total()),
                     disc.id(), disc, cur.getCustomAmount(), m.getInsurance(), m.getPhoto() != null, m.getNotes(), m.isActive(),
                     activitiesByMember.getOrDefault(m.getId(), List.of()),
-                    c.price(), c.endDate(), c.remainingDays(), c.paid(), c.balance(), c.paymentStatus(), c.active(), c.situation(), c.state());
+                    c.price(), services.monthly().setScale(2, RoundingMode.HALF_UP), c.endDate(), c.remainingDays(), c.paid(), c.balance(), c.paymentStatus(), c.active(), c.situation(), c.state());
         }).toList();
         Map<Long, MemberView> memberById = byId(members, MemberView::id);
         Map<Long, Subscription> subById = byId(subRows, Subscription::getId);
@@ -200,8 +211,8 @@ public class ClubStateService {
         Map<Long, String> packNames = new HashMap<>();
         packs.forEach(x -> packNames.put(x.id(), x.name()));
         List<StaffView> staff = staffRows.stream().map(s -> {
-            SalaryComputation sc = salary(s.getId(), s.getPayMode(), s.getFixedSalary(), members, subsByMember, coachesBySport,
-                    sportNames, packNames, cfg, today);
+            SalaryComputation sc = salary(s.getId(), s.getPayMode(), s.isInternal() ? null : s.getFixedSalary(), members, subsByMember,
+                    coachesBySport, sportNames, packNames, cfg, today);
             List<Long> coached = sportsByStaff.getOrDefault(s.getId(), List.of());
             // distinct members: one enrolled in two coached sports counts once; null when the staff member coaches nothing
             Integer enrolled = coached.isEmpty() ? null : (int) members.stream()
@@ -209,7 +220,7 @@ public class ClubStateService {
                     .filter(m -> m.sportIds().stream().anyMatch(coached::contains)).count();
             return new StaffView(s.getId(), s.getCode(), s.getLastName(), s.getFirstName(), staffName(s), s.getPhone(),
                     s.getFunctionId(), fnById.get(s.getFunctionId()), coached, coached.stream().map(sportRef).toList(),
-                    s.getPayMode(), s.getFixedSalary(), s.isActive(), sc.amount(), sc.detail(), enrolled);
+                    s.isInternal(), s.getPayMode(), s.getFixedSalary(), s.isActive(), sc.amount(), sc.detail(), enrolled);
         }).toList();
 
         List<ActivityView> activities = activityRepo.findAll().stream()
@@ -217,7 +228,7 @@ public class ClubStateService {
                     Rules.ActivityStats st = Rules.activityStats(a.getMaxPlaces(), regCount.getOrDefault(a.getId(), 0));
                     return new ActivityView(a.getId(), a.getCode(), a.getName(), a.getDescription(), a.getPrice(), a.getStartsAt(),
                             a.getLocation(), a.getMaxPlaces(), a.getManagerId(), staffRef.apply(a.getManagerId()), a.isActive(),
-                            a.getStartsAt().isBefore(now), st.count(), st.remaining(), st.full(),
+                            a.getPrice().signum() > 0, a.getStartsAt().isBefore(now), st.count(), st.remaining(), st.full(),
                             a.getPrice().multiply(BigDecimal.valueOf(st.count())).setScale(2, RoundingMode.HALF_UP));
                 }).toList();
         Map<Long, ActivityView> actById = byId(activities, ActivityView::id);
@@ -230,7 +241,38 @@ public class ClubStateService {
         }).toList();
 
         return new ClubState(cfg, today, now, functions, durations, discounts, packs, members, sports, staff, activities, registrations,
-                subscriptions, payments, coachesBySport, subsByMember);
+                subscriptions, payments, coachesBySport, subsByMember, businessRows, businessPayments);
+    }
+
+    /**
+     * Business items linked to a member: {@code monthly} = amounts due this month (added to the shown price), {@code due} =
+     * Σ collected + Σ known amounts of the months due up to now and not collected, {@code paid} = Σ collected.
+     */
+    record MemberServices(BigDecimal monthly, BigDecimal due, BigDecimal paid) {
+    }
+
+    static Map<Long, MemberServices> memberServices(List<Business> items, List<BusinessPayment> payments, YearMonth current) {
+        Map<Long, List<BusinessPayment>> byItem = payments.stream().collect(Collectors.groupingBy(BusinessPayment::getBusinessId));
+        Map<Long, MemberServices> out = new HashMap<>();
+        for (Business b : items) {
+            if (b.getMemberId() == null) continue;
+            List<BusinessPayment> pays = byItem.getOrDefault(b.getId(), List.of());
+            Set<String> collected = pays.stream().map(BusinessPayment::getPeriod).collect(Collectors.toSet());
+            BigDecimal paid = pays.stream().map(BusinessPayment::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal monthly = BigDecimal.ZERO;
+            BigDecimal unpaid = BigDecimal.ZERO;
+            if (b.getAmount() != null) {
+                // months of an automatic item not settled yet are collected when read by the business page: not owed
+                YearMonth autoUntil = b.isAutoPay() && b.getAutoPaidUntil() != null ? YearMonth.parse(b.getAutoPaidUntil()) : null;
+                for (YearMonth ym : BusinessDues.monthsDue(b, current)) {
+                    if (!collected.contains(ym.toString()) && (autoUntil == null || !ym.isAfter(autoUntil))) unpaid = unpaid.add(b.getAmount());
+                }
+                if (BusinessDues.isDue(b, current, current)) monthly = b.getAmount();
+            }
+            MemberServices add = new MemberServices(monthly, paid.add(unpaid), paid);
+            out.merge(b.getMemberId(), add, (x, y) -> new MemberServices(x.monthly().add(y.monthly()), x.due().add(y.due()), x.paid().add(y.paid())));
+        }
+        return out;
     }
 
     private static Rules.PeriodSpan span(Subscription x, Map<Long, BigDecimal> paidBySub) {
@@ -238,14 +280,15 @@ public class ClubStateService {
     }
 
     private static MemberView withoutSubscription(Member m, List<Long> sportIds, Function<Long, SportRef> sportRef,
-                                                  Map<Long, List<Long>> activitiesByMember) {
-        BigDecimal zero = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+                                                  Map<Long, List<Long>> activitiesByMember, MemberServices services) {
+        BigDecimal paid = services.paid().setScale(2, RoundingMode.HALF_UP);
         return new MemberView(m.getId(), m.getCode(), m.getLastName(), m.getFirstName(), m.getPhone(),
                 m.getBirthDate(), m.getRegistrationDate(), sportIds,
                 sportIds.stream().map(sportRef).filter(Objects::nonNull).toList(),
                 null, null, 0, null, null, null, null, null, m.getInsurance(), m.getPhoto() != null, m.getNotes(), m.isActive(),
                 activitiesByMember.getOrDefault(m.getId(), List.of()),
-                null, null, null, zero, zero, null, false, Rules.Situation.NONE, Rules.MemberState.NONE);
+                null, services.monthly().setScale(2, RoundingMode.HALF_UP), null, null, paid, Rules.balance(services.due(), paid),
+                null, false, Rules.Situation.NONE, Rules.MemberState.NONE);
     }
 
     /** The period's discount; a typed price shows as a "manual" discount whose percentage is measured against the pack price. */
@@ -286,7 +329,9 @@ public class ClubStateService {
         List<Rules.MemberFacts> facts = salaryFacts(members, subsByMember);
         Map<Long, MemberView> memberById = new HashMap<>();
         members.forEach(m -> memberById.put(m.id(), m));
-        Rules.SalaryResult r = Rules.computeSalary(staffId, Rules.PayMode.valueOf(mode.name()), fixed, facts, coachesBySport, cfg.salaryParams(), day);
+        // internal staff (no pay mode) earn nothing: a fixed salary of 0
+        Rules.PayMode payMode = mode == null ? Rules.PayMode.FIXED : Rules.PayMode.valueOf(mode.name());
+        Rules.SalaryResult r = Rules.computeSalary(staffId, payMode, mode == null ? BigDecimal.ZERO : fixed, facts, coachesBySport, cfg.salaryParams(), day);
         List<SalaryLineView> lines = r.lines().stream().map(l -> {
             MemberView m = memberById.get(l.memberId());
             Rules.MemberFacts f = l.period();

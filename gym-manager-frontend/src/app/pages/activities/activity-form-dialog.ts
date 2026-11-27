@@ -2,25 +2,38 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { ApiService } from '../../core/api.service';
+import { ConfigService } from '../../core/config.service';
 import { ActivityView, StaffRef } from '../../core/models';
 import { NotifyService, errorMessage } from '../../core/notify.service';
 
 @Component({
   selector: 'app-activity-form',
-  imports: [FormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+  imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, MatSelectModule],
   template: `
     <h2 mat-dialog-title>{{ d.activity ? 'Modifier ' + d.activity.code : 'Nouvelle activité' }}</h2>
     <mat-dialog-content>
       <form id="activity-form" class="form-grid" (ngSubmit)="save()">
         <mat-form-field class="span-2"><mat-label>Nom de l'activité</mat-label><input matInput name="name" [(ngModel)]="v.name" required /></mat-form-field>
         <mat-form-field><mat-label>Date et heure</mat-label><input matInput type="datetime-local" name="startsAt" [(ngModel)]="v.startsAt" required /></mat-form-field>
-        <mat-form-field><mat-label>Prix</mat-label><input matInput type="number" min="0" step="0.01" name="price" [(ngModel)]="v.price" /></mat-form-field>
         <mat-form-field><mat-label>Lieu</mat-label><input matInput name="location" [(ngModel)]="v.location" /></mat-form-field>
         <mat-form-field><mat-label>Places max</mat-label><input matInput type="number" min="1" name="maxPlaces" [(ngModel)]="v.maxPlaces" /><mat-hint>Vide = illimité</mat-hint></mat-form-field>
+        <div class="field-block">
+          <span class="field-label">Type d’activité</span>
+          <mat-button-toggle-group name="paid" [(ngModel)]="v.paid" aria-label="Type d’activité">
+            <mat-button-toggle [value]="false">Gratuite</mat-button-toggle><mat-button-toggle [value]="true">Payante</mat-button-toggle>
+          </mat-button-toggle-group>
+        </div>
+        @if (v.paid) {
+          <mat-form-field><mat-label>Prix par inscrit</mat-label>
+            <input matInput type="number" min="0.01" step="0.01" name="price" [(ngModel)]="v.price" required />
+            <span matTextSuffix>&nbsp;{{ currency() }}</span>
+            <mat-hint>Prix × inscrits compte dans le CA du mois de l’activité</mat-hint></mat-form-field>
+        } @else {<span></span>}
         <mat-form-field class="span-2"><mat-label>Responsable</mat-label>
           <mat-select name="manager" [(ngModel)]="v.managerId" required>
             @for (s of staff; track s.id) {<mat-option [value]="s.id">{{ s.name }} <small class="muted">· {{ s.code }}</small></mat-option>}
@@ -41,11 +54,13 @@ export class ActivityFormDialog {
   private api = inject(ApiService);
   private ref = inject(MatDialogRef<ActivityFormDialog>);
   private notify = inject(NotifyService);
+  currency = inject(ConfigService).currency;
   staff = this.d.staff.filter((s) => s.active || s.id === this.d.activity?.managerId);
   v = {
     name: this.d.activity?.name ?? '',
     startsAt: this.d.activity?.startsAt?.slice(0, 16) ?? '',
-    price: this.d.activity?.price ?? 0,
+    paid: (this.d.activity?.price ?? 0) > 0,
+    price: (this.d.activity?.price || null) as number | null,
     location: this.d.activity?.location ?? '',
     maxPlaces: this.d.activity?.maxPlaces ?? (null as number | null),
     managerId: this.d.activity?.managerId ?? (null as number | null),
@@ -58,7 +73,8 @@ export class ActivityFormDialog {
     this.busy.set(true);
     this.error.set('');
     try {
-      const body = { ...this.v, maxPlaces: this.v.maxPlaces || null, startsAt: this.v.startsAt ? `${this.v.startsAt}:00`.slice(0, 19) : null };
+      const body = { ...this.v, price: this.v.paid ? this.v.price : 0, maxPlaces: this.v.maxPlaces || null,
+        startsAt: this.v.startsAt ? `${this.v.startsAt}:00`.slice(0, 19) : null };
       await this.api.save('activities', this.d.activity?.id, body);
       this.notify.success(this.d.activity ? 'Activité modifiée.' : 'Activité créée.');
       this.ref.close(true);

@@ -10,7 +10,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { LucideAngularModule } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
 import { FrDatePipe, FrDateTimePipe, MoneyPipe, formatDate, norm } from '../../core/format';
-import { ActivityView, MemberCard, MemberView } from '../../core/models';
+import { ActivityView, BusinessView, MemberCard, MemberView } from '../../core/models';
+import { Pager, Paged } from '../../shared/table';
 import { NotifyService } from '../../core/notify.service';
 import { ConfigService } from '../../core/config.service';
 import { ConfirmService } from '../../shared/confirm.service';
@@ -24,7 +25,7 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
 @Component({
   selector: 'app-member-card',
   imports: [RouterLink, FormsModule, MatAutocompleteModule, MatButtonModule, MatFormFieldModule, MatSelectModule, MatTooltipModule,
-    LucideAngularModule, SportChip, PaidBadge, StateBadge, DaysLeft, MoneyPipe, FrDatePipe, FrDateTimePipe],
+    LucideAngularModule, SportChip, PaidBadge, StateBadge, DaysLeft, Pager, MoneyPipe, FrDatePipe, FrDateTimePipe],
   template: `
     <div class="toolbar">
       <label class="search grow max-480">
@@ -83,6 +84,9 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
               <dt>Abonnement</dt><dd>{{ c.member.pack?.name ?? '—' }}</dd>
               <dt>Remise</dt><dd>{{ c.member.discount?.name ?? '—' }}</dd>
               <dt>Prix</dt><dd class="strong">{{ c.member.price | money }}</dd>
+              @if (c.member.servicesPrice > 0) {
+                <dt>Services liés</dt><dd>+ {{ c.member.servicesPrice | money }} <span class="muted small">ce mois-ci (Business)</span></dd>
+              }
             </dl>
           </div>
           <div class="info-block state">
@@ -196,10 +200,10 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
         </div>
         <table class="table compact">
           <tbody>
-            @for (a of c.activities; track a.id) {
+            @for (a of activityRows.page(); track a.id) {
               <tr>
                 <td class="strong">{{ a.name }}</td><td>{{ a.startsAt | frDateTime }}</td><td>{{ a.location || '—' }}</td>
-                <td class="num">{{ a.price | money }}</td>
+                <td class="num">@if (a.paid) {{{ a.price | money }}} @else {<span class="muted">Gratuite</span>}</td>
                 <td class="actions"><button class="icon-btn danger" (click)="unregister(a)" [attr.aria-label]="'Désinscrire de ' + a.name" matTooltip="Désinscrire"><lucide-icon name="x" [size]="16" /></button></td>
               </tr>
             } @empty {
@@ -207,7 +211,30 @@ import { cancelWithReason, notifyReceipt, openPaymentDialog, openRenewDialog, re
             }
           </tbody>
         </table>
+        <app-pager [table]="activityRows" [auto]="true" />
       </section>
+
+      @if (services().length) {
+        <section class="card">
+          <div class="card-head"><h3>Services et achats (Business)</h3><span class="grow"></span>
+            @if (canBusiness()) {<a mat-stroked-button routerLink="/business">Gérer dans Business</a>}</div>
+          <p class="muted small">Leur montant s’ajoute au prix de l’adhérent ; ce qui reste à encaisser est compris dans « Reste à payer ».</p>
+          <table class="table compact">
+            <thead><tr><th>Business</th><th>Catégorie</th><th>Type</th><th class="num">Montant</th><th class="num">Encaissé</th></tr></thead>
+            <tbody>
+              @for (b of serviceRows.page(); track b.id) {
+                <tr [class.inactive]="!b.active">
+                  <td class="strong">{{ b.label }}</td><td>{{ b.categoryLabel }}</td>
+                  <td>{{ b.permanent ? (b.active ? 'Chaque mois' : 'Arrêté') : 'Ponctuel' }}</td>
+                  <td class="num">@if (b.amount !== null) {{{ b.amount | money }}@if (b.permanent) { / mois}} @else {<span class="muted">À saisir</span>}</td>
+                  <td class="num">{{ b.totalPaid | money }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+          <app-pager [table]="serviceRows" [auto]="true" />
+        </section>
+      }
     } @else if (notFound()) {
       <div class="card empty-state"><lucide-icon name="circle-alert" [size]="36" /><h2>Adhérent introuvable</h2><p class="muted">{{ notFound() }}</p></div>
     } @else if (!code()) {
@@ -233,6 +260,10 @@ export class MemberCardPage {
   members = signal<MemberView[]>([]);
   allActivities = signal<ActivityView[]>([]);
   card = signal<MemberCard | null>(null);
+  services = signal<BusinessView[]>([]);
+  canBusiness = computed(() => this.auth.can('BUSINESS'));
+  activityRows = new Paged(() => this.card()?.activities ?? []);
+  serviceRows = new Paged(() => this.services());
   notFound = signal('');
   query = signal('');
   photoVersion = signal(Date.now());
@@ -275,9 +306,12 @@ export class MemberCardPage {
   private async loadCard(code: string): Promise<void> {
     this.notFound.set('');
     try {
-      this.card.set(await this.api.memberCard(code));
+      const card = await this.api.memberCard(code);
+      this.card.set(card);
+      this.api.memberBusiness(card.member.id).then((b) => this.services.set(b)).catch(() => this.services.set([]));
     } catch (e: any) {
       this.card.set(null);
+      this.services.set([]);
       this.notFound.set(e?.error?.message ?? 'Adhérent introuvable.');
     }
   }

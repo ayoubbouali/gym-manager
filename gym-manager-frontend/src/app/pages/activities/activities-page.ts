@@ -20,7 +20,7 @@ import { ActiveBadge } from '../../shared/badges';
 import { ConfirmService } from '../../shared/confirm.service';
 import { SelectOption } from '../../shared/multi-select';
 import { SearchSelect } from '../../shared/search-select';
-import { Pager, SortHeader, TableState } from '../../shared/table';
+import { Pager, Paged, SortHeader, TableState } from '../../shared/table';
 import { ActivityFormDialog } from './activity-form-dialog';
 
 @Component({
@@ -62,7 +62,7 @@ import { ActivityFormDialog } from './activity-form-dialog';
                     tabindex="0" (keydown.enter)="select(x.id)" [attr.aria-selected]="selected() === x.id">
                   <td class="code">{{ x.code }}</td>
                   <td class="strong">{{ x.name }} @if (x.past) {<span class="badge neutral">passée</span>}</td>
-                  <td class="num">{{ x.price | money }}</td>
+                  <td class="num">@if (x.paid) {{{ x.price | money }}} @else {<span class="badge neutral">Gratuite</span>}</td>
                   <td>{{ x.startsAt | frDateTime }}</td>
                   <td>{{ x.location || '—' }}</td>
                   <td class="num"><span [class.red]="x.full">{{ x.registrationCount }} / {{ x.maxPlaces ?? '–' }}</span></td>
@@ -96,7 +96,7 @@ import { ActivityFormDialog } from './activity-form-dialog';
         <div class="scroll-x"><table class="table compact">
           <thead><tr><th>Nom & prénom</th><th>Activité</th><th><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
-            @for (r of shownRegistrations(); track r.id) {
+            @for (r of registrationRows.page(); track r.id) {
               <tr>
                 <td><span class="code">{{ r.memberCode }}</span> {{ r.memberName }}</td>
                 <td>{{ r.activityName }}</td>
@@ -105,6 +105,7 @@ import { ActivityFormDialog } from './activity-form-dialog';
             } @empty {<tr><td colspan="3" class="empty">Aucun inscrit.</td></tr>}
           </tbody>
         </table></div>
+        <app-pager [table]="registrationRows" [auto]="true" />
         <div class="add-row">
           <app-search-select label="Adhérent" [options]="memberOptions()" [(ngModel)]="newMember" />
           <mat-form-field subscriptSizing="dynamic"><mat-label>Activité</mat-label>
@@ -151,6 +152,7 @@ export class ActivitiesPage {
     const id = this.selected();
     return this.registrations().filter((r) => !id || r.activityId === id).sort((x, y) => x.memberName.localeCompare(y.memberName, 'fr'));
   });
+  registrationRows = new Paged(() => this.shownRegistrations());
   memberOptions = computed<SelectOption[]>(() =>
     this.members().map((m) => ({ id: m.id, label: `${m.firstName} ${m.lastName}`, hint: m.code })));
   openActivities = computed(() => this.activities().filter((x) => x.active));

@@ -1,5 +1,7 @@
 package com.gymmanager.gym.service;
 
+import com.gymmanager.gym.domain.Business;
+import com.gymmanager.gym.domain.BusinessPayment;
 import com.gymmanager.gym.service.Views.*;
 import com.gymmanager.gym.settings.ClubConfig;
 
@@ -17,7 +19,8 @@ public record ClubState(ClubConfig cfg, LocalDate today, LocalDateTime now,
                         List<PackView> packs, List<MemberView> members, List<SportView> sports, List<StaffView> staff,
                         List<ActivityView> activities, List<RegistrationView> registrations,
                         List<SubscriptionView> subscriptions, List<PaymentView> payments,
-                        Map<Long, List<Long>> coachesBySport, Map<Long, List<com.gymmanager.gym.domain.Subscription>> subsByMember) {
+                        Map<Long, List<Long>> coachesBySport, Map<Long, List<com.gymmanager.gym.domain.Subscription>> subsByMember,
+                        List<Business> businesses, List<BusinessPayment> businessPayments) {
 
     public Optional<MemberView> member(Long id) {
         return members.stream().filter(m -> m.id().equals(id)).findFirst();

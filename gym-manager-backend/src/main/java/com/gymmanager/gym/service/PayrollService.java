@@ -95,7 +95,7 @@ public class PayrollService {
         return new Ledger(salaryPayments.findAll(), salaryBonuses.findAll(), staffById(), InsightService.sales(st));
     }
 
-    /** Payroll rows of a month: active staff plus inactive staff with a payment for that month. */
+    /** Payroll rows of a month: active non-internal staff plus any staff member with a payment for that month. */
     private List<PayrollRow> rows(ClubState st, YearMonth ym, Ledger l, Long staffId) {
         String period = ym.toString();
         Map<Long, List<SalaryPaymentView>> byStaff = new HashMap<>();
@@ -104,7 +104,7 @@ public class PayrollService {
                 .forEach(p -> byStaff.computeIfAbsent(p.getStaffId(), k -> new ArrayList<>()).add(view(p, l.staffById())));
         Map<Long, SalaryBonus> bonuses = new HashMap<>();
         l.bonuses().stream().filter(b -> b.getPeriod().equals(period)).forEach(b -> bonuses.put(b.getStaffId(), b));
-        return st.staff().stream().filter(s -> (s.active() || byStaff.containsKey(s.id())) && (staffId == null || s.id().equals(staffId))).map(s -> {
+        return st.staff().stream().filter(s -> ((s.active() && !s.internal()) || byStaff.containsKey(s.id())) && (staffId == null || s.id().equals(staffId))).map(s -> {
             var c = due(st, s, ym);
             SalaryBonus b = bonuses.get(s.id());
             BigDecimal bonus = b == null ? BigDecimal.ZERO.setScale(2) : b.getAmount().setScale(2, RoundingMode.HALF_UP);
@@ -184,7 +184,7 @@ public class PayrollService {
         List<StaffAmount> byStaff = rowsByStaff.values().stream().map(rows -> {
             StaffView s = rows.getFirst().staff();
             List<PayrollRow> counted = s.active() ? rows : List.of();
-            return new StaffAmount(s.id(), s.code(), s.name(), s.function() == null ? null : s.function().label(), s.payMode().name(), s.active(),
+            return new StaffAmount(s.id(), s.code(), s.name(), s.function() == null ? null : s.function().label(), s.payMode() == null ? "INTERNAL" : s.payMode().name(), s.active(),
                     sum(counted.stream().map(PayrollRow::due).toList()), sum(rows.stream().map(PayrollRow::paid).toList()),
                     sum(counted.stream().map(PayrollRow::balance).toList()),
                     (int) rows.stream().flatMap(r -> r.payments().stream()).filter(p -> !p.cancelled()).count());

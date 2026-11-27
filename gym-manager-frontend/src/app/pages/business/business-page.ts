@@ -149,15 +149,17 @@ export class BusinessPage {
     this.reload();
   }
 
-  private async open(component: typeof BusinessFormDialog | typeof BusinessPayDialog, data: object, done: string): Promise<void> {
+  private async open(component: typeof BusinessFormDialog | typeof BusinessPayDialog, data: object,
+                     done: string | ((r: unknown) => string)): Promise<void> {
     const r = await firstValueFrom(this.dialog.open<unknown>(component, { data, width: '560px', maxWidth: '96vw' }).afterClosed());
     if (!r) return;
-    this.notify.success(done);
+    this.notify.success(typeof done === 'string' ? done : done(r));
     this.reload();
   }
 
   create(): Promise<void> {
-    return this.open(BusinessFormDialog, { period: this.month(), members: this.memberOptions() }, 'Business créé.');
+    return this.open(BusinessFormDialog, { period: this.month(), members: this.memberOptions() },
+      (r) => Array.isArray(r) && r.length > 1 ? `${r.length} business créés, un par adhérent.` : 'Business créé.');
   }
 
   edit(b: BusinessView): Promise<void> {

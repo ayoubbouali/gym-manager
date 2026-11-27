@@ -804,6 +804,19 @@ class AcceptanceTest {
         assertThat(num(get(admin, nov), "$.kpis.revenue")).isEqualTo(revenueBefore + 650);
         get(admin, "/api/business/month?period=2027-01").andExpect(jsonPath("$.rows[0].scheduled").value(true));
 
+        // several members at once: one item each; nothing created if one of them is unknown
+        long a002 = id("/api/members", "$[?(@.code=='A002')].id");
+        send(admin, "POST", "/api/business/batch", Map.of("label", "Gourde", "category", "EQUIPEMENT", "permanent", false, "period", "2026-12"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("memberIds"));
+        send(admin, "POST", "/api/business/batch", Map.of("label", "Gourde", "category", "EQUIPEMENT", "permanent", false, "period", "2026-12", "amount", 50,
+                        "memberIds", List.of(a001, 999999)))
+                .andExpect(status().isBadRequest());
+        get(admin, "/api/business/month?period=2026-12").andExpect(jsonPath("$.rows[?(@.item.label=='Gourde')]").isEmpty());
+        send(admin, "POST", "/api/business/batch", Map.of("label", "Gourde", "category", "EQUIPEMENT", "permanent", false, "period", "2026-12", "amount", 50,
+                        "memberIds", List.of(a001, a002, a002)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].member.code").value("A001")).andExpect(jsonPath("$[1].member.code").value("A002"));
+
         // BUSINESS without MANAGE_BUSINESS collects but neither corrects nor deletes; no access without BUSINESS
         long role = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Boutique", "permissions", List.of("BUSINESS"))), "$.id")).longValue();
         send(admin, "POST", "/api/users", Map.of("username", "vendeur", "password", "Vente2026x", "roleId", role)).andExpect(status().isOk());

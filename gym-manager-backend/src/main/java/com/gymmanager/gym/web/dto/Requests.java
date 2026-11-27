@@ -117,7 +117,8 @@ public final class Requests {
      * monthly amount. {@code memberId}: member the item is sold to, null when none.
      */
     public record BusinessRequest(String label, BusinessCategory category, Boolean permanent, String period, BigDecimal amount,
-                                  String note, Boolean payNow, Boolean autoPay, PaymentMethod method, LocalDate paidOn, Long memberId) {
+                                  String note, Boolean payNow, Boolean autoPay, PaymentMethod method, LocalDate paidOn, Long memberId,
+                                  List<Long> memberIds) {
     }
 
     /** Collects a business item for a month (the month of a one-off item is its own). */

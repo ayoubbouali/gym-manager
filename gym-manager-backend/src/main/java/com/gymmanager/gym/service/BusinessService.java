@@ -93,6 +93,14 @@ public class BusinessService {
         return one(b.getId());
     }
 
+    /** Creates the same item for each member of {@code memberIds}: each one owes and is collected separately. */
+    public List<BusinessView> createForMembers(BusinessRequest r, String username) {
+        List<Long> ids = r.memberIds() == null ? List.of() : r.memberIds().stream().filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) throw ApiException.invalid("memberIds", "Choisissez au moins un adhérent.");
+        return ids.stream().map(id -> create(new BusinessRequest(r.label(), r.category(), r.permanent(), r.period(), r.amount(), r.note(),
+                r.payNow(), r.autoPay(), r.method(), r.paidOn(), id, null), username)).toList();
+    }
+
     public BusinessView update(Long id, BusinessRequest r, String username) {
         ClubConfig cfg = settings.config();
         Business b = find(id);

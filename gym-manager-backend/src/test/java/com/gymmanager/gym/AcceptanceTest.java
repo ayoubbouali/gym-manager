@@ -403,9 +403,15 @@ class AcceptanceTest {
         long second = ((Number) read(send(admin, "POST", "/api/payments", Map.of("memberId", id, "amount", 250, "method", "CARTE")), "$.id")).longValue();
         assertThat((List<Object>) read(get(admin, "/api/members"), a001 + ".paymentStatus")).containsExactly("PAYE");
 
+        setting("club.phone", "0522001122");
         var pdf = get(admin, "/api/payments/" + second + "/receipt.pdf").andExpect(status().isOk()).andReturn().getResponse();
         assertThat(pdf.getContentType()).isEqualTo("application/pdf");
         assertThat(new String(pdf.getContentAsByteArray(), 0, 5)).isEqualTo("%PDF-");
+        // the club is shown as the administration, with its phone; the member's phone is not printed
+        String memberPhone = (String) ((List<Object>) read(get(admin, "/api/members"), a001 + ".phone")).getFirst();
+        String receiptText = pdfText(pdf.getContentAsByteArray());
+        assertThat(receiptText).contains("Adhérent", "Administration", "Tél. 0522001122", "Cachet de l'Administration", "Merci de votre confiance");
+        assertThat(receiptText).doesNotContain(memberPhone, "Téléphone");
 
         send(admin, "PUT", "/api/payments/" + second, Map.of("amount", 200, "method", "VIREMENT", "paidOn", "2026-11-16"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.updatedBy").value("admin"));
@@ -1199,12 +1205,13 @@ class AcceptanceTest {
         send(admin, "PUT", "/api/payroll/bonus", Map.of("staffId", bouzid, "period", "2026-11", "amount", 300)).andExpect(status().isBadRequest());
         send(admin, "PUT", "/api/payroll/bonus", noBonus).andExpect(status().isBadRequest());
 
+        setting("club.phone", "0522001122");
         var pdf = get(admin, "/api/payroll/payments/" + slip + "/receipt.pdf").andExpect(status().isOk()).andReturn().getResponse();
         assertThat(new String(pdf.getContentAsByteArray(), 0, 5)).isEqualTo("%PDF-");
         String slipText = pdfText(pdf.getContentAsByteArray());
-        assertThat(slipText).contains("Personnel", "Employeur", "Salaire brut", "4 500,00", "Prime", "Net à verser", "4 700,00",
+        assertThat(slipText).contains("Personnel", "Administration", "Salaire brut", "4 500,00", "Prime", "Net à verser", "4 700,00",
                 "Merci pour votre engagement, votre travail et la qualité de votre collaboration");
-        assertThat(slipText).doesNotContain("Bénéficiaire", "Signature", "Document interne", "Merci de votre confiance", "Commission");
+        assertThat(slipText).doesNotContain("Employeur", "Tél.", "Cachet", "Bénéficiaire", "Signature", "Document interne", "Merci de votre confiance", "Commission");
         assertThat((List<Object>) read(get(admin, "/api/payroll/staff/" + bouzid + "/history"), "$[*].period")).containsExactly("2026-11", "2026-10");
 
         // cancel = the slip is deleted, the bonus is kept, the month is unpaid again; the slip number is not reused

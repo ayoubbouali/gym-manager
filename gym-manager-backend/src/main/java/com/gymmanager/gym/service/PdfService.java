@@ -32,7 +32,6 @@ public class PdfService {
     private static final Color SOFT = new Color(0xF7, 0xF7, 0xF9);
 
     private static final Font TITLE = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, BRAND);
-    private static final Font CLUB = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, Color.BLACK);
     private static final Font BOLD = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, Color.BLACK);
     private static final Font NORMAL = FontFactory.getFont(FontFactory.HELVETICA, 9, Color.BLACK);
     private static final Font SMALL = FontFactory.getFont(FontFactory.HELVETICA, 7.5f, MUTED);
@@ -74,9 +73,9 @@ public class PdfService {
     public byte[] receipt(ReceiptData d, ClubConfig cfg) {
         PaymentView p = d.payment();
         BigDecimal remaining = d.period().amount().subtract(d.paidUpToThis()).max(BigDecimal.ZERO);
-        return render(cfg, "REÇU DE PAIEMENT", p.receiptNumber(), p.paidOn(), p.cancelled(), p.cancelReason(), doc -> {
-            doc.add(parties("Adhérent", d.member().code() + " — " + d.member().firstName() + " " + d.member().lastName().toUpperCase(),
-                    "Téléphone : " + d.member().phone()));
+        return render(cfg, "REÇU DE PAIEMENT", p.receiptNumber(), p.paidOn(), p.cancelled(), p.cancelReason(), cfg.documentFooter(), doc -> {
+            doc.add(partyAndAdministration("Adhérent", d.member().code() + " — " + d.member().firstName() + " " + d.member().lastName().toUpperCase(),
+                    "", cfg, true));
 
             PdfPTable t = table(new float[]{3.2f, 1.4f, 1.4f});
             header(t, "Désignation", "Mode", "Montant");
@@ -99,6 +98,7 @@ public class PdfService {
                     + (p.updatedAt() != null ? " · modifié par " + p.updatedBy() + " le " + p.updatedAt().format(FR_TIME) : ""), SMALL);
             by.setSpacingBefore(6);
             doc.add(by);
+            doc.add(stampBox());
         });
     }
 
@@ -114,9 +114,9 @@ public class PdfService {
     public byte[] salaryReceipt(SalaryReceiptData d, ClubConfig cfg) {
         SalaryPaymentView p = d.payment();
         String cur = cfg.currency();
-        return render(cfg, "REÇU DE SALAIRE", p.slipNumber(), p.paidOn(), p.cancelled(), p.cancelReason(), SALARY_FOOTER, false, doc -> {
+        return render(cfg, "REÇU DE SALAIRE", p.slipNumber(), p.paidOn(), p.cancelled(), p.cancelReason(), SALARY_FOOTER, doc -> {
             StaffView s = d.staff();
-            doc.add(staffAndEmployer(s, cfg));
+            doc.add(partyAndAdministration("Personnel", s.code() + " — " + s.name(), s.function() != null ? s.function().label() : "", cfg, false));
 
             PdfPTable t = table(new float[]{3.2f, 1.6f});
             header(t, "Détail du salaire de " + month(p.period()), "Montant");
@@ -175,13 +175,9 @@ public class PdfService {
         void write(Document doc) throws DocumentException;
     }
 
-    private byte[] render(ClubConfig cfg, String title, String number, LocalDate date, boolean cancelled, String cancelReason, Body body) {
-        return render(cfg, title, number, date, cancelled, cancelReason, cfg.documentFooter(), true, body);
-    }
-
-    /** {@code clubInHeader}: club name and contact next to the logo; otherwise the body shows them (employer block). */
+    /** Header = logo and document number only: the club is shown in the body, as the administration. */
     private byte[] render(ClubConfig cfg, String title, String number, LocalDate date, boolean cancelled, String cancelReason,
-                          String footer, boolean clubInHeader, Body body) {
+                          String footer, Body body) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         Document doc = new Document(PageSize.A5, 32, 32, 30, 40);
         try {
@@ -213,14 +209,9 @@ public class PdfService {
                 logo.addElement(box);
             }
             head.addCell(logo);
-            PdfPCell club = new PdfPCell();
-            club.setBorder(Rectangle.NO_BORDER);
-            if (clubInHeader) {
-                club.addElement(new Paragraph(cfg.clubName(), CLUB));
-                if (!cfg.clubAddress().isBlank()) club.addElement(new Paragraph(cfg.clubAddress(), SMALL));
-                if (!cfg.clubPhone().isBlank()) club.addElement(new Paragraph("Tél. " + cfg.clubPhone(), SMALL));
-            }
-            head.addCell(club);
+            PdfPCell spacer = new PdfPCell();
+            spacer.setBorder(Rectangle.NO_BORDER);
+            head.addCell(spacer);
             PdfPCell right = new PdfPCell();
             right.setBorder(Rectangle.NO_BORDER);
             Paragraph t = new Paragraph(title, TITLE);
@@ -289,31 +280,30 @@ public class PdfService {
         doc.add(l);
     }
 
-    private static PdfPTable parties(String label, String name, String sub) {
-        PdfPTable t = new PdfPTable(1);
-        t.setWidthPercentage(100);
-        t.setSpacingAfter(10);
-        PdfPCell c = new PdfPCell();
-        c.setBackgroundColor(SOFT);
-        c.setBorderColor(LINE);
-        c.setPadding(8);
-        c.addElement(new Paragraph(label, LABEL));
-        c.addElement(new Paragraph(name, BOLD));
-        if (sub != null && !sub.isBlank()) c.addElement(new Paragraph(sub, NORMAL));
-        t.addCell(c);
-        return t;
-    }
-
-    /** Staff member on the left (no phone), the club as employer on the right. */
-    private static PdfPTable staffAndEmployer(StaffView s, ClubConfig cfg) {
+    /** The member or staff member on the left (never their phone), the club's administration on the right. */
+    private static PdfPTable partyAndAdministration(String label, String name, String sub, ClubConfig cfg, boolean clubPhone) {
         PdfPTable t = new PdfPTable(2);
         t.setWidthPercentage(100);
         t.setSpacingAfter(10);
-        PdfPCell left = partyCell("Personnel", s.code() + " — " + s.name(), s.function() != null ? s.function().label() : "");
-        PdfPCell right = partyCell("Employeur", cfg.clubName(), cfg.clubAddress());
-        if (!cfg.clubPhone().isBlank()) right.addElement(new Paragraph("Tél. " + cfg.clubPhone(), NORMAL));
+        PdfPCell left = partyCell(label, name, sub);
+        PdfPCell right = partyCell("Administration", cfg.clubName(), cfg.clubAddress());
+        if (clubPhone && !cfg.clubPhone().isBlank()) right.addElement(new Paragraph("Tél. " + cfg.clubPhone(), NORMAL));
         t.addCell(left);
         t.addCell(right);
+        return t;
+    }
+
+    /** Empty framed space, on the right, for the administration's stamp. */
+    private static PdfPTable stampBox() {
+        PdfPTable t = new PdfPTable(1);
+        t.setWidthPercentage(45);
+        t.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        t.setSpacingBefore(12);
+        PdfPCell c = new PdfPCell(new Phrase("Cachet de l'Administration", LABEL));
+        c.setBorderColor(LINE);
+        c.setPadding(6);
+        c.setFixedHeight(70);
+        t.addCell(c);
         return t;
     }
 

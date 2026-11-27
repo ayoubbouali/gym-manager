@@ -64,9 +64,11 @@ public final class Requests {
      * {@code phoneCountry}: ISO country chosen in the phone field, null = the club's country.
      * {@code customAmount}: price typed by hand for the period, null = pack price with {@code discountId}.
      */
+    /** {@code paymentAmount}, {@code paymentMethod}, {@code paidOn}: optional first payment, at creation only (may be partial). */
     public record MemberRequest(String lastName, String firstName, String phone, LocalDate birthDate, LocalDate registrationDate,
                                 List<Long> sportIds, Long packId, Long discountId, Insurance insurance, String notes,
-                                String phoneCountry, BigDecimal customAmount) {
+                                String phoneCountry, BigDecimal customAmount,
+                                BigDecimal paymentAmount, PaymentMethod paymentMethod, LocalDate paidOn) {
     }
 
     public record MemberPreviewRequest(Long packId, Long discountId, LocalDate registrationDate, BigDecimal customAmount) {

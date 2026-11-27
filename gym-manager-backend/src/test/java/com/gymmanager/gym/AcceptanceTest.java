@@ -436,6 +436,34 @@ class AcceptanceTest {
     }
 
     @Test
+    @DisplayName("Création d'un adhérent avec un premier paiement, partiel ou non ; rien n'est créé si le paiement est refusé")
+    void memberCreatedWithPayment() throws Exception {
+        long karate = id("/api/sports", "$[?(@.name=='Karaté')].id");
+        long pack = id("/api/packs", "$[?(@.name=='Karaté - Mensuel')].id");
+
+        Map<String, Object> partial = member("Avance", "Partielle", "0612000020", karate, pack, null, "2026-11-18");
+        partial.putAll(Map.of("paymentAmount", 100, "paymentMethod", "CARTE", "paidOn", "2026-11-18"));
+        String created = body(send(admin, "POST", "/api/members", partial).andExpect(status().isOk())
+                .andExpect(jsonPath("$.paymentStatus").value("PARTIEL")));
+        double price = ((Number) JsonPath.read(created, "$.price")).doubleValue();
+        assertThat(((Number) JsonPath.read(created, "$.balance")).doubleValue()).isEqualTo(price - 100);
+
+        Map<String, Object> full = member("Avance", "Totale", "0612000021", karate, pack, null, "2026-11-18");
+        full.putAll(Map.of("paymentAmount", price, "paymentMethod", "ESPECES"));
+        send(admin, "POST", "/api/members", full).andExpect(status().isOk()).andExpect(jsonPath("$.paymentStatus").value("PAYE"));
+
+        // without payment: unchanged behaviour
+        send(admin, "POST", "/api/members", member("Sans", "Paiement", "0612000022", karate, pack, null, "2026-11-18"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.paymentStatus").value("IMPAYE"));
+
+        // more than the price: refused, and the member is not created either
+        Map<String, Object> tooMuch = member("Trop", "Paye", "0612000023", karate, pack, null, "2026-11-18");
+        tooMuch.putAll(Map.of("paymentAmount", price + 1, "paymentMethod", "ESPECES"));
+        send(admin, "POST", "/api/members", tooMuch).andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("amount"));
+        assertThat((List<Object>) read(get(admin, "/api/members"), "$[?(@.phone=='0612000023')].id")).isEmpty();
+    }
+
+    @Test
     @DisplayName("Renouvellement : nouvelle période, historique conservé, arriérés")
     void renewal() throws Exception {
         long a001 = id("/api/members", "$[?(@.code=='A001')].id");

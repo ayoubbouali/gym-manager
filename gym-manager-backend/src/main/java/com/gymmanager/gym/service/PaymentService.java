@@ -8,6 +8,7 @@ import com.gymmanager.gym.repository.*;
 import com.gymmanager.gym.rules.Rules;
 import com.gymmanager.gym.settings.ClubConfig;
 import com.gymmanager.gym.settings.SettingsService;
+import com.gymmanager.gym.web.dto.Requests.MemberRequest;
 import com.gymmanager.gym.web.dto.Requests.PaymentRequest;
 import com.gymmanager.gym.web.dto.Requests.PaymentUpdateRequest;
 import com.gymmanager.gym.web.dto.Requests.RenewRequest;
@@ -59,6 +60,15 @@ public class PaymentService {
         if (amount.compareTo(max) > 0) {
             throw ApiException.invalid("amount", "Le montant dépasse le reste à payer de cette période (" + fmt(max) + " " + settings.config().currency() + ").");
         }
+    }
+
+    /** Creates a member with, optionally, a first payment of their period: both or neither. */
+    public Member enroll(MemberRequest r, String username) {
+        Member m = memberService.save(null, r, username);
+        if (r.paymentAmount() != null) {
+            pay(new PaymentRequest(m.getId(), null, r.paymentAmount(), r.paymentMethod(), r.paidOn(), ""), username);
+        }
+        return m;
     }
 
     /** Records a payment and allocates its receipt number. */

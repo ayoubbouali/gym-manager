@@ -178,7 +178,7 @@ public class DemoDataSeeder implements ApplicationRunner {
         Map<String, Long> mb = new HashMap<>();
         for (String[] m : memberRows) {
             Long id = members.save(null, new MemberRequest(m[0], m[1], m[2], d(m[3]), d(m[5]), List.of(sp.get(m[4])),
-                    pk.get(m[6]), disc.get(m[7]), Insurance.valueOf(m[8]), "", null, null), "admin").getId();
+                    pk.get(m[6]), disc.get(m[7]), Insurance.valueOf(m[8]), "", null, null, null, null, null), "admin").getId();
             mb.put(m[1] + " " + m[0], id);
         }
 

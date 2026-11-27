@@ -23,5 +23,7 @@ public class Activity {
     private String location = "";
     private Integer maxPlaces;
     private Long managerId;
+    /** Share of the revenue paid to the manager, in %; null for a free activity or an internal manager. */
+    private BigDecimal managerPercent;
     private boolean active = true;
 }

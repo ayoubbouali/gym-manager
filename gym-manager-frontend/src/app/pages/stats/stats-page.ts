@@ -123,10 +123,11 @@ import { StaffPayStats } from './staff-pay-stats';
         </section>
         <section class="card">
           <h3>Activités</h3>
-          <table class="table compact"><thead><tr><th>Activité</th><th class="num">Inscrits</th><th class="num">Recettes</th></tr></thead>
+          <table class="table compact"><thead><tr><th>Activité</th><th class="num">Inscrits</th><th class="num">Recettes</th><th class="num">Part responsable</th></tr></thead>
             <tbody>
-              @for (a of activityRows.page(); track a.id) {<tr><td>{{ a.name }}@if (a.price === 0) { <span class="muted small">(gratuite)</span>}</td><td class="num">{{ a.count }}</td><td class="num">{{ a.revenue | money }}</td></tr>}
-              @empty {<tr><td colspan="3" class="empty">Aucune activité sur la période.</td></tr>}
+              @for (a of activityRows.page(); track a.id) {<tr><td>{{ a.name }}@if (a.price === 0) { <span class="muted small">(gratuite)</span>}</td><td class="num">{{ a.count }}</td><td class="num">{{ a.revenue | money }}</td>
+                <td class="num">@if (a.managerShare !== null) {{{ a.managerShare | money }}} @else {<span class="muted">—</span>}</td></tr>}
+              @empty {<tr><td colspan="4" class="empty">Aucune activité sur la période.</td></tr>}
             </tbody></table>
           <app-pager [table]="activityRows" [auto]="true" />
         </section>

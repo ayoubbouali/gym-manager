@@ -10,9 +10,9 @@ import { NotifyService } from '../../core/notify.service';
 import { SportFormDialog } from './sport-form-dialog';
 
 const staff: StaffOption[] = [
-  { id: 1, code: 'E001', name: 'Hamza', active: true, coach: true },
-  { id: 2, code: 'E006', name: 'Bouzid Yassir', active: true, coach: false },
-  { id: 3, code: 'E008', name: 'Errami Mustapha', active: true, coach: false },
+  { id: 1, code: 'E001', name: 'Hamza', active: true, coach: true, internal: false },
+  { id: 2, code: 'E006', name: 'Bouzid Yassir', active: true, coach: false, internal: false },
+  { id: 3, code: 'E008', name: 'Errami Mustapha', active: true, coach: false, internal: false },
 ];
 
 function open(sport?: Partial<SportView>) {

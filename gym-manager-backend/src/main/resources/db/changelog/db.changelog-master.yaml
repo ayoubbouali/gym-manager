@@ -38,3 +38,6 @@ databaseChangeLog:
   - include:
       file: sql/V13__member_note_reminders.sql
       relativeToChangelogFile: true
+  - include:
+      file: sql/V14__activity_manager_share.sql
+      relativeToChangelogFile: true

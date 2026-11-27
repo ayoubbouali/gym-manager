@@ -104,9 +104,9 @@ public class PdfService {
 
     // ---------------------------------------------------------------- salary receipts
 
-    /** {@code due} = {@code salary} + {@code bonus}: the month is paid in one go. */
+    /** {@code due} = {@code salary} + {@code bonus} + {@code activityShare} (null when none): the month is paid in one go. */
     public record SalaryReceiptData(SalaryPaymentView payment, StaffView staff, BigDecimal salary, BigDecimal bonus, String bonusNote,
-                                    BigDecimal due, SalaryDetail detail) {
+                                    BigDecimal activityShare, BigDecimal due, SalaryDetail detail) {
     }
 
     static final String SALARY_FOOTER = "Merci pour votre engagement, votre travail et la qualité de votre collaboration.";
@@ -143,6 +143,10 @@ public class PdfService {
                 String note = d.bonusNote() == null || d.bonusNote().isBlank() ? "" : " — " + d.bonusNote();
                 cell(t, "Prime" + note, NORMAL, Element.ALIGN_LEFT);
                 cell(t, "+ " + money(d.bonus(), cur), NORMAL, Element.ALIGN_RIGHT);
+            }
+            if (d.activityShare() != null && d.activityShare().signum() > 0) {
+                cell(t, "Part des activités", NORMAL, Element.ALIGN_LEFT);
+                cell(t, "+ " + money(d.activityShare(), cur), NORMAL, Element.ALIGN_RIGHT);
             }
             netRow(t, "Net à verser", money(p.amount(), cur));
             doc.add(t);

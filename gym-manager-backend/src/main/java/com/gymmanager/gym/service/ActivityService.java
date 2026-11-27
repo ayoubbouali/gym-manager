@@ -31,6 +31,8 @@ public class ActivityService {
     private final SettingsService settings;
     private final CodeService codes;
 
+    static final BigDecimal DEFAULT_MANAGER_PERCENT = BigDecimal.valueOf(50);
+
     public Activity save(Long id, ActivityRequest r) {
         Activity a = id == null ? new Activity() : activities.findById(id).orElseThrow(() -> ApiException.notFound("Activité introuvable."));
         String name = Check.text(r.name(), "name", "Nom", 120, true);
@@ -49,6 +51,14 @@ public class ActivityService {
         Staff manager = staff.findById(Check.required(r.managerId(), "managerId", "Responsable"))
                 .orElseThrow(() -> ApiException.invalid("managerId", "Responsable introuvable."));
         Check.activeOrUnchanged(manager.isActive(), manager.getId(), a.getManagerId(), "managerId", "Ce membre du personnel est inactif.");
+        BigDecimal percent = null;
+        if (paid && !manager.isInternal()) {
+            percent = r.managerPercent() == null ? DEFAULT_MANAGER_PERCENT : r.managerPercent();
+            if (percent.signum() < 0 || percent.compareTo(BigDecimal.valueOf(100)) > 0) {
+                throw ApiException.invalid("managerPercent", "Le pourcentage doit être compris entre 0 et 100.");
+            }
+            if (percent.scale() > 2) throw ApiException.invalid("managerPercent", "Deux décimales au plus.");
+        }
 
         if (id == null) a.setCode(codes.next("activity"));
         a.setName(name);
@@ -58,6 +68,7 @@ public class ActivityService {
         a.setLocation(Check.text(r.location(), "location", "Lieu", 120, false));
         a.setMaxPlaces(r.maxPlaces());
         a.setManagerId(manager.getId());
+        a.setManagerPercent(percent);
         return activities.save(a);
     }
 

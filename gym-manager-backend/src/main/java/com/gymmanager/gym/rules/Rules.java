@@ -456,6 +456,12 @@ public final class Rules {
         return new SalaryResult(p.rounding().apply(p.share().of(base)), window, lines, base.setScale(2, RoundingMode.HALF_UP));
     }
 
+    /** Manager's part of a paying activity: revenue (price × registered members) × percent, to the cent; 0 without a percent. */
+    public static BigDecimal activityManagerShare(BigDecimal revenue, BigDecimal percent) {
+        if (percent == null || revenue == null) return BigDecimal.ZERO.setScale(2);
+        return revenue.multiply(percent).divide(HUNDRED, 2, RoundingMode.HALF_UP);
+    }
+
     /** RG-MASSE: sum of salaries of active staff. */
     public static BigDecimal payroll(Collection<BigDecimal> activeSalaries) {
         return activeSalaries.stream().reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);

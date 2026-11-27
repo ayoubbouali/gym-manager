@@ -193,7 +193,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                 {"Portes ouvertes du club", "0", "03/10/2026 10:00", "Tout le club", null, "Hamza"}};
         for (Object[] a : acts) {
             ac.put((String) a[0], activities.save(null, new ActivityRequest((String) a[0], "", new BigDecimal((String) a[1]),
-                    LocalDateTime.parse((String) a[2], FR_TIME), (String) a[3], (Integer) a[4], st.get((String) a[5]), null)).getId());
+                    LocalDateTime.parse((String) a[2], FR_TIME), (String) a[3], (Integer) a[4], st.get((String) a[5]), null, null)).getId());
         }
 
         // 11.9 Registrations

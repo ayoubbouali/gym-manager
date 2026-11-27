@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.security.Principal;
 import java.util.List;
 
@@ -62,8 +63,10 @@ public class PayrollController {
         PayrollMonth m = payroll.month(p.period());
         PayrollRow row = m.rows().stream().filter(r -> r.staff().id().equals(p.staffId())).findFirst()
                 .orElseThrow(() -> ApiException.notFound("Membre du personnel introuvable."));
-        // built from the stored amount: the bonus is frozen once paid, the commission salary may have changed since
-        var data = new PdfService.SalaryReceiptData(p, row.staff(), p.amount().subtract(row.bonus()), row.bonus(), row.bonusNote(), p.amount(), row.detail());
+        // built from the stored amount: the bonus and the activity share are frozen once paid, the commission salary may have changed since
+        BigDecimal activityShare = p.activityShare() == null ? BigDecimal.ZERO : p.activityShare();
+        var data = new PdfService.SalaryReceiptData(p, row.staff(), p.amount().subtract(row.bonus()).subtract(activityShare), row.bonus(),
+                row.bonusNote(), p.activityShare(), p.amount(), row.detail());
         byte[] bytes = pdf.salaryReceipt(data, state.load().cfg());
         return PaymentController.pdfResponse(bytes, "salaire-" + p.slipNumber() + ".pdf", download);
     }

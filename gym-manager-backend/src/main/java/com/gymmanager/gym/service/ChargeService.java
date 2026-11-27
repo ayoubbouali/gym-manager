@@ -43,6 +43,7 @@ public class ChargeService {
     private final SalaryPaymentRepository salaryPayments;
     private final ClubStateService stateService;
     private final SettingsService settings;
+    private final BusinessService business;
 
     static final String AUTO_NOTE = "Règlement automatique";
     static final String AUTO_USER = "automatique";
@@ -282,6 +283,7 @@ public class ChargeService {
 
     public ChargeStats stats(String fromPeriod, String toPeriod) {
         settle();
+        business.settle();
         ClubState st = stateService.load();
         YearMonth current = YearMonth.from(st.today());
         boolean defaults = fromPeriod == null || fromPeriod.isBlank() || toPeriod == null || toPeriod.isBlank();
@@ -298,7 +300,7 @@ public class ChargeService {
         List<ChargeDue> toPay = rows.stream().filter(d -> d.payment() == null).toList();
 
         Map<YearMonth, BigDecimal> revenue = new HashMap<>();
-        Rules.revenueByMonth(InsightService.sales(st), from.atDay(1), to.atEndOfMonth()).forEach(m -> revenue.put(m.month(), m.amount()));
+        Rules.revenueByMonth(InsightService.allSales(st), from.atDay(1), to.atEndOfMonth()).forEach(m -> revenue.put(m.month(), m.amount()));
         Map<String, BigDecimal> salaries = new HashMap<>();
         salaryPayments.findAll().stream().filter(p -> !p.isCancelled())
                 .forEach(p -> salaries.merge(p.getPeriod(), p.getAmount(), BigDecimal::add));

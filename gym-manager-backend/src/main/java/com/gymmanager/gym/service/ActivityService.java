@@ -35,6 +35,10 @@ public class ActivityService {
         Activity a = id == null ? new Activity() : activities.findById(id).orElseThrow(() -> ApiException.notFound("Activité introuvable."));
         String name = Check.text(r.name(), "name", "Nom", 120, true);
         BigDecimal price = Check.amount(r.price() == null ? BigDecimal.ZERO : r.price(), "price", "Prix");
+        // without the flag (older clients), the price alone says whether the activity is paying
+        boolean paid = r.paid() == null ? price.signum() > 0 : r.paid();
+        if (!paid) price = BigDecimal.ZERO;
+        else if (price.signum() == 0) throw ApiException.invalid("price", "Saisissez le prix d'une activité payante.");
         var startsAt = Check.required(r.startsAt(), "startsAt", "Date et heure");
         if (r.maxPlaces() != null) {
             Check.range(r.maxPlaces(), "maxPlaces", "Places max", 1, 100000);

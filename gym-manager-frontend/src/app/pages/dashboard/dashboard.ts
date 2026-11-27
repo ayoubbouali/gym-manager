@@ -8,10 +8,11 @@ import { Dashboard } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { visibleNav } from '../../layout/nav';
 import { SportChip } from '../../shared/badges';
+import { Pager, Paged } from '../../shared/table';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, LucideAngularModule, SportChip, FrDateTimePipe, MoneyPipe],
+  imports: [RouterLink, LucideAngularModule, SportChip, Pager, FrDateTimePipe, MoneyPipe],
   template: `
     @if (data(); as d) {
       <div class="kpis four">
@@ -39,7 +40,7 @@ import { SportChip } from '../../shared/badges';
           <h3>Adhérents actifs par sport</h3>
           <table class="table compact">
             <tbody>
-              @for (s of d.bySport; track s.id) {
+              @for (s of sportRows.page(); track s.id) {
                 <tr>
                   <td><app-sport-chip [name]="s.name" [color]="s.color" /></td>
                   <td class="w-60">
@@ -54,6 +55,7 @@ import { SportChip } from '../../shared/badges';
               }
             </tbody>
           </table>
+          <app-pager [table]="sportRows" [auto]="true" />
         </section>
         <section class="card">
           <div class="card-head"><h3>Prochaines activités</h3><span class="grow"></span><span class="badge info">{{ d.upcomingActivityCount }} à venir</span></div>
@@ -94,6 +96,7 @@ export class DashboardPage {
   private auth = inject(AuthService);
   private notify = inject(NotifyService);
   data = signal<Dashboard | null>(null);
+  sportRows = new Paged(() => this.data()?.bySport ?? []);
   max = computed(() => Math.max(0, ...(this.data()?.bySport ?? []).map((s) => s.count)));
   shortcuts = computed(() => {
     return visibleNav((p) => this.auth.can(p))

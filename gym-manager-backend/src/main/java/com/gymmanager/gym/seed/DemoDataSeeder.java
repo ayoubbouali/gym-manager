@@ -126,7 +126,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                 {"Fadili", "Anas", "0661112212", "Entretien", "FIXED", "3000"}};
         for (String[] p : people) {
             st.put(p[0], staff.save(null, new StaffRequest(p[0], p[1], p[2], fn.get(p[3]), List.of(), PayMode.valueOf(p[4]),
-                    p[5] == null ? null : new BigDecimal(p[5]), null)).getId());
+                    p[5] == null ? null : new BigDecimal(p[5]), null, false)).getId());
         }
 
         // 11.5 Sports
@@ -193,7 +193,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                 {"Portes ouvertes du club", "0", "03/10/2026 10:00", "Tout le club", null, "Hamza"}};
         for (Object[] a : acts) {
             ac.put((String) a[0], activities.save(null, new ActivityRequest((String) a[0], "", new BigDecimal((String) a[1]),
-                    LocalDateTime.parse((String) a[2], FR_TIME), (String) a[3], (Integer) a[4], st.get((String) a[5]))).getId());
+                    LocalDateTime.parse((String) a[2], FR_TIME), (String) a[3], (Integer) a[4], st.get((String) a[5]), null)).getId());
         }
 
         // 11.9 Registrations

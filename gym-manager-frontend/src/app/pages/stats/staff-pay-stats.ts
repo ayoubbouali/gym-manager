@@ -1,7 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -15,14 +14,14 @@ import { NotifyService } from '../../core/notify.service';
 import { DateField } from '../../shared/date-field';
 import { ChartComponent, barChart, cssColor, seriesChart } from '../../shared/chart';
 import { salaryReceiptUrl } from '../../shared/payment-dialogs';
-
-type Period = 'LAST12' | 'YEAR' | 'CUSTOM';
+import { StatsPeriod, StatsPeriodToggle, monthsBack, rollingMonths } from '../../shared/stats-period';
+import { Pager, Paged } from '../../shared/table';
 
 /** Salary payment statistics of the staff, by salary month, optionally for one staff member. */
 @Component({
   selector: 'app-staff-pay-stats',
-  imports: [FormsModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatSelectModule, MatTooltipModule, LucideAngularModule,
-    DateField, ChartComponent, MoneyPipe, FrDatePipe],
+  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatSelectModule, MatTooltipModule, LucideAngularModule,
+    DateField, ChartComponent, StatsPeriodToggle, Pager, MoneyPipe, FrDatePipe],
   template: `
     <div class="toolbar">
       <mat-form-field subscriptSizing="dynamic" class="staff-filter">
@@ -32,11 +31,7 @@ type Period = 'LAST12' | 'YEAR' | 'CUSTOM';
           @for (o of staff(); track o.id) {<mat-option [value]="o.id">{{ o.code }} · {{ o.name }}@if (!o.active) { (inactif)}</mat-option>}
         </mat-select>
       </mat-form-field>
-      <mat-button-toggle-group [ngModel]="period()" (ngModelChange)="setPeriod($event)" aria-label="Période">
-        <mat-button-toggle value="LAST12">12 derniers mois</mat-button-toggle>
-        <mat-button-toggle value="YEAR">Année en cours</mat-button-toggle>
-        <mat-button-toggle value="CUSTOM">Période personnalisée</mat-button-toggle>
-      </mat-button-toggle-group>
+      <app-stats-period [value]="period()" (changed)="setPeriod($event)" />
       @if (period() === 'CUSTOM') {
         <app-date-field mode="month" label="Du mois" subscriptSizing="dynamic" [(ngModel)]="from" [max]="currentMonth" #fromField="ngModel" />
         <app-date-field mode="month" label="Au mois" subscriptSizing="dynamic" [(ngModel)]="to" [max]="currentMonth" #toField="ngModel" />
@@ -60,11 +55,12 @@ type Period = 'LAST12' | 'YEAR' | 'CUSTOM';
           <app-chart [config]="staffChart()" label="Salaire restant à verser par coach / personnel" />
           <table class="table compact">
             <tbody>
-              @for (x of toPay(); track x.staffId) {
+              @for (x of staffRows.page(); track x.staffId) {
                 <tr [class.inactive]="!x.active"><td class="strong">{{ x.name }} <span class="muted small">{{ x.code }}</span></td><td class="num" [class.red]="x.balance > 0">{{ x.balance | money }}</td></tr>
               } @empty {<tr><td colspan="2" class="empty">Aucun membre du personnel sur la période.</td></tr>}
             </tbody>
           </table>
+          <app-pager [table]="staffRows" [auto]="true" />
         </section>
         <section class="card">
           <div class="card-head"><h3>Salaires dus et versés par mois</h3><span class="grow"></span>
@@ -73,7 +69,8 @@ type Period = 'LAST12' | 'YEAR' | 'CUSTOM';
           <details class="data-table-toggle">
             <summary>Voir le tableau</summary>
             <table class="table compact"><thead><tr><th>Mois</th><th class="num">Dû</th><th class="num">Versé</th><th class="num">Reste</th></tr></thead>
-              <tbody>@for (m of d.monthly; track m.month) {<tr><td>{{ month(m.month) }}</td><td class="num">{{ m.due | money }}</td><td class="num">{{ m.paid | money }}</td><td class="num" [class.red]="m.balance > 0">{{ m.balance | money }}</td></tr>}</tbody></table>
+              <tbody>@for (m of monthlyRows.page(); track m.month) {<tr><td>{{ month(m.month) }}</td><td class="num">{{ m.due | money }}</td><td class="num">{{ m.paid | money }}</td><td class="num" [class.red]="m.balance > 0">{{ m.balance | money }}</td></tr>}</tbody></table>
+            <app-pager [table]="monthlyRows" [auto]="true" />
           </details>
         </section>
       </div>
@@ -85,7 +82,7 @@ type Period = 'LAST12' | 'YEAR' | 'CUSTOM';
           <table class="table compact">
             <thead><tr><th>Reçu</th><th>Date</th><th>Nom</th><th>Mois payé</th><th>Mode</th><th>Note</th><th class="num">Montant</th><th></th></tr></thead>
             <tbody>
-              @for (p of d.payments; track p.id) {
+              @for (p of paymentRows.page(); track p.id) {
                 <tr [class.cancelled]="p.cancelled">
                   <td class="code">{{ p.slipNumber }}</td><td>{{ p.paidOn | frDate }}</td><td>{{ p.staffName }}</td><td>{{ month(p.period) }}</td>
                   <td>{{ p.methodLabel }}</td><td class="muted">{{ p.note }}</td>
@@ -96,6 +93,7 @@ type Period = 'LAST12' | 'YEAR' | 'CUSTOM';
             </tbody>
           </table>
         </div>
+        <app-pager [table]="paymentRows" [auto]="true" />
       </section>
     } @else {
       <div class="loading">Chargement…</div>
@@ -112,10 +110,12 @@ export class StaffPayStats {
   staff = signal<StaffRef[]>([]);
   staffId = signal<number | null>(null);
   /** Default: custom period on the current month. */
-  period = signal<Period>('CUSTOM');
+  period = signal<StatsPeriod>('CUSTOM');
   from: string | null = this.currentMonth;
   to: string | null = this.currentMonth;
   month = (ym: string) => formatMonth(ym, true);
+  monthlyRows = new Paged(() => this.s()?.monthly ?? []);
+  paymentRows = new Paged(() => this.s()?.payments ?? [], () => this.config.pageSize());
 
   private money = (v: number) => `${formatAmount(v, 0)} ${this.config.currency()}`;
   monthlyChart = computed(() => {
@@ -128,6 +128,7 @@ export class StaffPayStats {
 
   /** Staff sorted by amount still to pay, largest first. */
   toPay = computed(() => [...(this.s()?.byStaff ?? [])].sort((a, b) => b.balance - a.balance || a.code.localeCompare(b.code)));
+  staffRows = new Paged(() => this.toPay());
   staffChart = computed(() => {
     const rows = this.toPay();
     return barChart(rows.map((x) => x.name), rows.map((x) => x.balance), '#f97316', this.money, true);
@@ -138,13 +139,15 @@ export class StaffPayStats {
     this.load();
   }
 
-  setPeriod(p: Period): void {
+  setPeriod(p: StatsPeriod): void {
     this.period.set(p);
-    if (p === 'YEAR') {
-      this.from = `${this.currentMonth.slice(0, 4)}-01`;
+    const n = rollingMonths(p);
+    if (p === 'YEAR') this.from = `${this.currentMonth.slice(0, 4)}-01`;
+    if (n) this.from = monthsBack(this.currentMonth, n);
+    if (p !== 'CUSTOM') {
       this.to = this.currentMonth;
+      this.load();
     }
-    if (p !== 'CUSTOM') this.load();
   }
 
   async load(): Promise<void> {

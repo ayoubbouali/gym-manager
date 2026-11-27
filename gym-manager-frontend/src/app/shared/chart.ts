@@ -67,10 +67,14 @@ export function barChart(labels: string[], data: number[], colors: string | stri
   };
 }
 
-/** Grouped bar chart (several series side by side, with a legend). */
+/** Grouped bar chart (several series side by side, with a legend); {@code stacked}: one bar per label, series piled up. */
 export function seriesChart(labels: string[], series: { label: string; data: number[]; color: string }[],
-                            format: (v: number) => string): ChartConfiguration<'bar'> {
+                            format: (v: number) => string, stacked = false): ChartConfiguration<'bar'> {
   const cfg = barChart(labels, [], '', format);
+  if (stacked) {
+    cfg.options!.scales!['x']!.stacked = true;
+    cfg.options!.scales!['y']!.stacked = true;
+  }
   const text = cssColor('--muted', '#6b7280');
   cfg.data.datasets = series.map((x) => ({ label: x.label, data: x.data, backgroundColor: x.color, borderRadius: 6, maxBarThickness: 28 }));
   cfg.options!.plugins = {

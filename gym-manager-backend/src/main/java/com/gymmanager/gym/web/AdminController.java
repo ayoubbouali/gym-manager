@@ -5,6 +5,7 @@ import com.gymmanager.gym.domain.AppSetting;
 import com.gymmanager.gym.repository.SettingRepository;
 import com.gymmanager.gym.security.UserService;
 import com.gymmanager.gym.security.UserService.UserView;
+import com.gymmanager.gym.service.BusinessService;
 import com.gymmanager.gym.service.ChargeService;
 import com.gymmanager.gym.service.InsightService;
 import com.gymmanager.gym.service.MemberPurgeService;
@@ -42,9 +43,11 @@ public class AdminController {
     private final FileStorage files;
     private final MemberPurgeService purge;
     private final ChargeService chargeService;
+    private final BusinessService businessService;
 
     @GetMapping("/dashboard")
     public InsightService.Dashboard dashboard() {
+        businessService.settle();
         return insights.dashboard();
     }
 
@@ -56,6 +59,7 @@ public class AdminController {
     @GetMapping("/stats")
     public InsightService.Stats stats(@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                                       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        businessService.settle();
         return insights.stats(from, to);
     }
 

@@ -63,7 +63,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/charges/payments/**").hasAuthority(a(Permission.MANAGE_CHARGES))
                         .requestMatchers(HttpMethod.DELETE, "/api/charges/payments/**").hasAuthority(a(Permission.MANAGE_CHARGES))
                         .requestMatchers("/api/charges/**").hasAuthority(a(Permission.CHARGES))
+                        .requestMatchers(HttpMethod.GET, "/api/business/member/**").hasAnyAuthority(a(Permission.BUSINESS), a(Permission.MEMBER_CARD))
+                        .requestMatchers(HttpMethod.PUT, "/api/business/payments/**").hasAuthority(a(Permission.MANAGE_BUSINESS))
+                        .requestMatchers(HttpMethod.DELETE, "/api/business/payments/**").hasAuthority(a(Permission.MANAGE_BUSINESS))
+                        .requestMatchers("/api/business/**").hasAuthority(a(Permission.BUSINESS))
                         .requestMatchers("/api/stats/**").hasAuthority(a(Permission.STATS))
+                        // a function can be created from the staff form
+                        .requestMatchers(HttpMethod.POST, "/api/functions").hasAnyAuthority(a(Permission.STAFF), a(Permission.SETTINGS))
                         .requestMatchers("/api/settings/**", "/api/users/**", "/api/roles/**", "/api/functions/**", "/api/data/**", "/api/admin/**")
                         .hasAuthority(a(Permission.SETTINGS))
                         // payments: recording one is open; correcting / cancelling / deleting is not

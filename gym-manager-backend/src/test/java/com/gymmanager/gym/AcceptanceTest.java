@@ -763,6 +763,104 @@ class AcceptanceTest {
                 .andExpect(jsonPath("$.rows[1].payment").doesNotExist()).andExpect(jsonPath("$.rows[1].scheduled").value(false));
     }
 
+    private double num(ResultActions r, String path) throws Exception {
+        Object v = read(r, path);
+        if (v instanceof List<?> l) v = l.getFirst();
+        return ((Number) v).doubleValue();
+    }
+
+    @Test
+    @DisplayName("Business : vente ponctuelle liée à un adhérent, coaching encaissé chaque mois, prix et solde de l'adhérent, revenus et droits")
+    void business() throws Exception {
+        String nov = "/api/stats?from=2026-11-01&to=2026-11-30";
+        double revenueBefore = num(get(admin, nov), "$.kpis.revenue");
+        long a001 = id("/api/members", "$[?(@.code=='A001')].id");
+        double balanceBefore = num(get(admin, "/api/members"), "$[?(@.code=='A001')].balance");
+
+        // a kimono sold to A001, to collect: added to the member's price this month and to their balance
+        long kimono = ((Number) read(send(admin, "POST", "/api/business", Map.of("label", "Kimono", "category", "EQUIPEMENT", "permanent", false,
+                        "period", "2026-11", "amount", 450, "memberId", a001))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.member.code").value("A001")).andExpect(jsonPath("$.paymentCount").value(0)), "$.id")).longValue();
+        assertThat(num(get(admin, "/api/members"), "$[?(@.code=='A001')].servicesPrice")).isEqualTo(450.0);
+        assertThat(num(get(admin, "/api/members"), "$[?(@.code=='A001')].balance")).isEqualTo(balanceBefore + 450);
+        get(admin, "/api/business/month?period=2026-11").andExpect(jsonPath("$.toCollectCount").value(1)).andExpect(jsonPath("$.toCollectKnown").value(450.0));
+        get(admin, "/api/business/member/" + a001).andExpect(jsonPath("$[0].label").value("Kimono"));
+
+        // collected: the balance goes back, the revenue of the month counts it as business
+        long kimonoPay = ((Number) read(send(admin, "POST", "/api/business/payments", Map.of("businessId", kimono, "amount", 450, "method", "CARTE"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.period").value("2026-11")), "$.id")).longValue();
+        assertThat(num(get(admin, "/api/members"), "$[?(@.code=='A001')].balance")).isEqualTo(balanceBefore);
+        send(admin, "DELETE", "/api/business/" + kimono, null).andExpect(status().isConflict());
+
+        // monthly coaching collected automatically: the current month at once, the next ones on the 1st
+        send(admin, "POST", "/api/business", Map.of("label", "Coaching", "category", "COACHING", "permanent", true, "autoPay", true, "method", "ESPECES"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("amount"));
+        send(admin, "POST", "/api/business", Map.of("label", "Coaching privé", "category", "COACHING", "permanent", true, "amount", 200,
+                        "autoPay", true, "method", "ESPECES", "memberId", a001))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.autoPay").value(true)).andExpect(jsonPath("$.totalPaid").value(200.0));
+        assertThat(num(get(admin, "/api/members"), "$[?(@.code=='A001')].servicesPrice")).isEqualTo(650.0);
+        get(admin, nov).andExpect(jsonPath("$.bySource[?(@.key=='BUSINESS')].amount").value(650.0))
+                .andExpect(jsonPath("$.businessByCategory[0].label").value("Équipement / kimonos"));
+        assertThat(num(get(admin, nov), "$.kpis.revenue")).isEqualTo(revenueBefore + 650);
+        get(admin, "/api/business/month?period=2027-01").andExpect(jsonPath("$.rows[0].scheduled").value(true));
+
+        // BUSINESS without MANAGE_BUSINESS collects but neither corrects nor deletes; no access without BUSINESS
+        long role = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "Boutique", "permissions", List.of("BUSINESS"))), "$.id")).longValue();
+        send(admin, "POST", "/api/users", Map.of("username", "vendeur", "password", "Vente2026x", "roleId", role)).andExpect(status().isOk());
+        MockHttpSession vendeur = login("vendeur", "Vente2026x", "Vente2027x");
+        get(vendeur, "/api/business/month").andExpect(status().isOk());
+        send(vendeur, "PUT", "/api/business/payments/" + kimonoPay, Map.of("amount", 400, "method", "CARTE")).andExpect(status().isForbidden());
+        send(vendeur, "DELETE", "/api/business/payments/" + kimonoPay, null).andExpect(status().isForbidden());
+        MockHttpSession accueil = login("accueil", "accueil123", "Accueil2026");
+        get(accueil, "/api/business/month").andExpect(status().isForbidden());
+        send(admin, "DELETE", "/api/business/payments/" + kimonoPay, null).andExpect(status().isNoContent());
+        send(admin, "DELETE", "/api/business/" + kimono, null).andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("Activités gratuites ou payantes : prix × inscrits dans le CA du mois de l'activité")
+    void paidActivities() throws Exception {
+        long manager = ((Number) read(get(admin, "/api/staff-options"), "$[0].id")).longValue();
+        String nov = "/api/stats?from=2026-11-01&to=2026-11-30";
+        double before = num(get(admin, nov), "$.bySource[?(@.key=='ACTIVITIES')].amount");
+
+        send(admin, "POST", "/api/activities", Map.of("name", "Stage payant", "startsAt", "2026-11-28T10:00:00", "managerId", manager, "paid", true))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("price"));
+        long free = ((Number) read(send(admin, "POST", "/api/activities", Map.of("name", "Portes ouvertes", "startsAt", "2026-11-28T10:00:00",
+                "managerId", manager, "paid", false, "price", 50)).andExpect(status().isOk()), "$.id")).longValue();
+        long stage = ((Number) read(send(admin, "POST", "/api/activities", Map.of("name", "Stage payant", "startsAt", "2026-11-28T10:00:00",
+                "managerId", manager, "paid", true, "price", 100)).andExpect(status().isOk()), "$.id")).longValue();
+        for (String code : List.of("A001", "A002")) {
+            long m = id("/api/members", "$[?(@.code=='" + code + "')].id");
+            send(admin, "POST", "/api/registrations", Map.of("memberId", m, "activityId", stage)).andExpect(status().isOk());
+            send(admin, "POST", "/api/registrations", Map.of("memberId", m, "activityId", free)).andExpect(status().isOk());
+        }
+        get(admin, "/api/activities").andExpect(jsonPath("$[?(@.id==" + free + ")].paid").value(false))
+                .andExpect(jsonPath("$[?(@.id==" + free + ")].price").value(0.0))
+                .andExpect(jsonPath("$[?(@.id==" + stage + ")].paid").value(true));
+        assertThat(num(get(admin, nov), "$.bySource[?(@.key=='ACTIVITIES')].amount")).isEqualTo(before + 200);
+    }
+
+    @Test
+    @DisplayName("Personnel interne : sans mode de rémunération ni paie ; une fonction se crée depuis la fiche du personnel")
+    void internalStaffAndFunctions() throws Exception {
+        long role = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "RH", "permissions", List.of("STAFF"))), "$.id")).longValue();
+        send(admin, "POST", "/api/users", Map.of("username", "gestionrh", "password", "Rh2026xyz", "roleId", role)).andExpect(status().isOk());
+        MockHttpSession rh = login("gestionrh", "Rh2026xyz", "Rh2027xyz");
+        long fn = ((Number) read(send(rh, "POST", "/api/functions", Map.of("label", "Directeur")).andExpect(status().isOk()), "$.id")).longValue();
+        send(rh, "PUT", "/api/functions/" + fn, Map.of("label", "Gérant")).andExpect(status().isForbidden());
+
+        send(rh, "POST", "/api/staff", Map.of("lastName", "Sans", "functionId", fn)).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("payMode"));
+        long owner = ((Number) read(send(rh, "POST", "/api/staff", Map.of("lastName", "Ali", "firstName", "Patron", "functionId", fn,
+                "internal", true, "payMode", "FIXED", "fixedSalary", 9000)).andExpect(status().isOk()), "$.id")).longValue();
+        get(admin, "/api/staff").andExpect(jsonPath("$.rows[?(@.id==" + owner + ")].internal").value(true))
+                .andExpect(jsonPath("$.rows[?(@.id==" + owner + ")].salary").value(0.0));
+        assertThat((List<Object>) read(get(admin, "/api/staff"), "$.rows[?(@.id==" + owner + ")].payMode")).containsExactly((Object) null);
+        assertThat((List<Object>) read(get(admin, "/api/payroll?month=2026-11"), "$.rows[?(@.staff.id==" + owner + ")]")).isEmpty();
+        send(admin, "POST", "/api/payroll/payments", Map.of("staffId", owner, "period", "2026-11", "method", "ESPECES")).andExpect(status().isBadRequest());
+    }
+
     @Test
     @DisplayName("Suivi des inscriptions : nouvelles inscriptions, renouvellements, départs et répartitions")
     void registrationStats() throws Exception {
@@ -812,7 +910,10 @@ class AcceptanceTest {
     @Test
     @DisplayName("Statistiques et tableau de bord sur les encaissements")
     void cashedRevenue() throws Exception {
-        get(admin, "/api/stats").andExpect(jsonPath("$.kpis.revenue").value(18220.0))
+        // revenue = members' payments (18 220) + paying activities of September (2 250)
+        get(admin, "/api/stats").andExpect(jsonPath("$.kpis.revenue").value(20470.0))
+                .andExpect(jsonPath("$.bySource[?(@.key=='SUBSCRIPTIONS')].amount").value(18220.0))
+                .andExpect(jsonPath("$.bySource[?(@.key=='ACTIVITIES')].amount").value(2250.0))
                 .andExpect(jsonPath("$.kpis.unpaidAmount").value(3607.0))
                 .andExpect(jsonPath("$.byMethod[?(@.method=='ESPECES')].amount").value(6085.5))
                 .andExpect(jsonPath("$.byMethod[?(@.method=='CARTE')].amount").value(6856.0))
@@ -1569,7 +1670,8 @@ class AcceptanceTest {
     }
 
     static final List<String> ALL_PERMISSIONS = List.of("MEMBERS", "MEMBER_CARD", "PACKS", "DISCOUNTS", "SPORTS", "ACTIVITIES",
-            "STAFF", "PAYROLL", "CHARGES", "PAYMENTS", "ALERTS", "STATS", "SETTINGS", "EDIT_REFERENTIALS", "MANAGE_PAYMENTS", "MANAGE_CHARGES");
+            "STAFF", "PAYROLL", "CHARGES", "BUSINESS", "PAYMENTS", "ALERTS", "STATS", "SETTINGS", "EDIT_REFERENTIALS", "MANAGE_PAYMENTS",
+            "MANAGE_CHARGES", "MANAGE_BUSINESS");
 
     @Test
     @DisplayName("Rôles : nom libre et liste de pages et droits ; ADMIN et ACCUEIL gardent leurs droits d'avant")

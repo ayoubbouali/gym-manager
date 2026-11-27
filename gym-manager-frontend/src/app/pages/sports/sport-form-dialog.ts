@@ -7,7 +7,7 @@ import { MatInputModule } from '@angular/material/input';
 import { LucideAngularModule } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
 import { WEEKDAYS } from '../../core/format';
-import { SportView, StaffRef } from '../../core/models';
+import { SportView, StaffOption } from '../../core/models';
 import { NotifyService, errorMessage } from '../../core/notify.service';
 import { MultiSelect, SelectOption } from '../../shared/multi-select';
 
@@ -28,7 +28,7 @@ interface Slot { dayOfWeek: number; start: string; end: string; }
         </div>
         <mat-form-field><mat-label>Capacité</mat-label><input matInput type="number" min="0" name="capacity" [(ngModel)]="v.capacity" required /></mat-form-field>
         <mat-form-field><mat-label>Prix mensuel</mat-label><input matInput type="number" min="0" step="0.01" name="price" [(ngModel)]="v.monthlyPrice" required /></mat-form-field>
-        <app-multi-select class="span-2" label="Coach(s)" name="coaches" [(ngModel)]="v.coachIds" [options]="coachOptions" hint="Membres du personnel qui encadrent ce sport" />
+        <app-multi-select class="span-2" label="Coach(s)" name="coaches" [(ngModel)]="v.coachIds" [options]="coachOptions" hint="Membres du personnel dont la fonction est Coach" />
       </form>
       <h4 class="section-title">Créneaux</h4>
       <table class="table compact">
@@ -56,12 +56,15 @@ interface Slot { dayOfWeek: number; start: string; end: string; }
   `,
 })
 export class SportFormDialog {
-  d = inject<{ sport?: SportView; staff: StaffRef[] }>(MAT_DIALOG_DATA);
+  d = inject<{ sport?: SportView; staff: StaffOption[] }>(MAT_DIALOG_DATA);
   private api = inject(ApiService);
   private ref = inject(MatDialogRef<SportFormDialog>);
   private notify = inject(NotifyService);
   weekdays = WEEKDAYS;
-  coachOptions: SelectOption[] = this.d.staff.map((s) => ({ id: s.id, label: s.name, hint: s.code, disabled: !s.active }));
+  /** Coaches only; a non-coach already assigned stays listed (greyed out) so that it is removed knowingly. */
+  coachOptions: SelectOption[] = this.d.staff
+    .filter((s) => s.coach || this.d.sport?.coachIds.includes(s.id))
+    .map((s) => ({ id: s.id, label: s.coach ? s.name : `${s.name} (pas coach)`, hint: s.code, disabled: !s.active || !s.coach }));
   v = {
     name: this.d.sport?.name ?? '',
     color: this.d.sport?.color ?? '#C62828',

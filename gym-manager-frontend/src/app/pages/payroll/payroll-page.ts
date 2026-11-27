@@ -13,7 +13,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { ConfigService } from '../../core/config.service';
 import { csvNumber, exportCsv } from '../../core/csv';
-import { FrDatePipe, MoneyPipe, PAYMENT_METHODS, PAYMENT_STATUS_LABELS, formatDate, monthName, openPdf } from '../../core/format';
+import { FrDatePipe, MoneyPipe, PAYMENT_METHODS, PAYMENT_STATUS_LABELS, formatAmount, formatDate, monthName, openPdf } from '../../core/format';
 import { PaymentMethod, PayrollMonth, PayrollRow, SalaryPaymentView } from '../../core/models';
 import { NotifyService, errorMessage } from '../../core/notify.service';
 import { ActiveBadge, PaidBadge } from '../../shared/badges';
@@ -85,7 +85,7 @@ export class SalaryBonusDialog {
   }
 }
 
-/** Pays the month in one go: salary + bonus, one pay slip. */
+/** Pays the month in one go: salary + bonus + activity share, one pay slip. */
 @Component({
   selector: 'app-salary-pay-dialog',
   imports: [FormsModule, MatDialogModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatInputModule, DateField, MoneyPipe],
@@ -94,7 +94,8 @@ export class SalaryBonusDialog {
     <mat-dialog-content>
       <dl class="pay-recap">
         <dt>Salaire du personnel</dt><dd>{{ d.row.salary | money }}</dd>
-        <dt>Prime</dt><dd>{{ d.row.bonus | money }}</dd>
+        @if (d.row.bonus > 0) {<dt>Prime</dt><dd>{{ d.row.bonus | money }}</dd>}
+        @if (d.row.activityShare) {<dt>Part des activités</dt><dd>{{ d.row.activityShare | money }}</dd>}
         <dt>Total versé</dt><dd class="strong">{{ d.row.due | money }}</dd>
       </dl>
       <form id="salary-form" class="form-grid" (ngSubmit)="save()">
@@ -175,7 +176,7 @@ import { Pager, Paged } from '../../shared/table';
       <div class="table-wrap">
         <table class="table compact">
           <thead><tr>
-            <th>ID</th><th>Personnel</th><th class="num">Salaire du personnel</th><th class="num">Prime</th>
+            <th>ID</th><th>Personnel</th><th class="num">Salaire du personnel</th><th class="num">Prime</th><th class="num">Part activités</th>
             <th>Statut</th><th>Date de paiement</th><th>Facture</th><th><span class="sr-only">Actions</span></th>
           </tr></thead>
           <tbody>
@@ -199,6 +200,11 @@ import { Pager, Paged } from '../../shared/table';
                     <button class="icon-btn" (click)="bonus(r)" matTooltip="Ajouter une prime" [attr.aria-label]="'Ajouter une prime à ' + r.staff.name"><lucide-icon name="plus" [size]="16" /></button>
                   }
                 </td>
+                <td class="num">
+                  @if (r.activityShare !== null) {
+                    <span [matTooltip]="activityTip(r)">{{ r.activityShare | money }}</span>
+                  } @else {<span class="muted">—</span>}
+                </td>
                 <td>@if (r.due === 0 && !paid(r)) {<span class="badge neutral">Rien à verser</span>} @else {<app-paid-badge [value]="r.status" />}</td>
                 <td>{{ r.paidOn ? (r.paidOn | frDate) : '—' }}</td>
                 <td class="wrap slips">
@@ -215,7 +221,7 @@ import { Pager, Paged } from '../../shared/table';
                   }
                 </td>
               </tr>
-            } @empty {<tr><td colspan="8" class="empty">Aucun membre du personnel actif.</td></tr>}
+            } @empty {<tr><td colspan="9" class="empty">Aucun membre du personnel actif.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -224,7 +230,7 @@ import { Pager, Paged } from '../../shared/table';
         <ng-template cdkConnectedOverlay [cdkConnectedOverlayOpen]="true" [cdkConnectedOverlayOrigin]="p.origin"
                      [cdkConnectedOverlayPositions]="previewPositions" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="8"
                      cdkConnectedOverlayPanelClass="member-preview-pane" (detach)="closePreview()">
-          <app-staff-preview [id]="previewId" [staff]="p.row.staff" [salary]="p.row.salary" [month]="d.period" />
+          <app-staff-preview [id]="previewId" [staff]="p.row.staff" [salary]="p.row.salary" [month]="d.period" [activityShare]="p.row.activityShare" />
         </ng-template>
       }
     } @else {
@@ -334,6 +340,11 @@ export class PayrollPage {
     }
   }
 
+  /** "Stage : 2 inscrits × 100,00 DH × 40 %" per activity of the month. */
+  activityTip(r: PayrollRow): string {
+    return r.activities.map((a) => `${a.name} : ${a.registrationCount} inscrit${a.registrationCount > 1 ? 's' : ''} × ${formatAmount(a.price)} ${this.config.currency()} × ${formatAmount(a.percent)} %`).join('\n');
+  }
+
   open(p: SalaryPaymentView): void {
     openPdf(salaryReceiptUrl(p));
   }
@@ -343,6 +354,7 @@ export class PayrollPage {
       { header: 'ID', value: (r) => r.staff.code }, { header: 'Personnel', value: (r) => r.staff.name },
       { header: 'Fonction', value: (r) => r.staff.function?.label ?? '' },
       { header: 'Salaire du personnel', value: (r) => csvNumber(r.salary) }, { header: 'Prime', value: (r) => csvNumber(r.bonus) },
+      { header: 'Part activités', value: (r) => (r.activityShare === null ? '' : csvNumber(r.activityShare)) },
       { header: 'Total', value: (r) => csvNumber(r.due) }, { header: 'Statut', value: (r) => (r.due === 0 && !isPaid(r) ? 'Rien à verser' : PAYMENT_STATUS_LABELS[r.status]) },
       { header: 'Date de paiement', value: (r) => (r.paidOn ? formatDate(r.paidOn) : '') },
       { header: 'Facture', value: (r) => activeSlips(r).map((p) => p.slipNumber).join(', ') },

@@ -10,6 +10,7 @@ import com.gymmanager.gym.repository.SalaryBonusRepository;
 import com.gymmanager.gym.repository.SalaryPaymentRepository;
 import com.gymmanager.gym.repository.StaffRepository;
 import com.gymmanager.gym.rules.Rules;
+import com.gymmanager.gym.service.Views.ActivityShareView;
 import com.gymmanager.gym.service.Views.SalaryDetail;
 import com.gymmanager.gym.service.Views.SalaryPaymentView;
 import com.gymmanager.gym.service.Views.StaffView;
@@ -44,11 +45,12 @@ public class PayrollService {
     private final CodeService codes;
 
     /**
-     * {@code due} = {@code salary} + {@code bonus}. {@code revenue}: cashed this month on the sports the staff member
-     * coaches, null when they coach none. {@code paidOn}: date of the month's payment, null while unpaid.
+     * {@code due} = {@code salary} + {@code bonus} + {@code activityShare}. {@code revenue}: cashed this month on the sports the
+     * staff member coaches, null when they coach none. {@code activityShare}: part of the paying activities of the month they
+     * manage ({@code activities}), null when none. {@code paidOn}: date of the month's payment, null while unpaid.
      */
-    public record PayrollRow(StaffView staff, BigDecimal salary, BigDecimal bonus, String bonusNote, BigDecimal revenue,
-                             BigDecimal due, BigDecimal paid, BigDecimal balance, Rules.PaymentStatus status, LocalDate paidOn,
+    public record PayrollRow(StaffView staff, BigDecimal salary, BigDecimal bonus, String bonusNote, BigDecimal activityShare,
+                             List<ActivityShareView> activities, BigDecimal revenue, BigDecimal due, BigDecimal paid, BigDecimal balance, Rules.PaymentStatus status, LocalDate paidOn,
                              SalaryDetail detail, List<SalaryPaymentView> payments) {
     }
 
@@ -67,7 +69,7 @@ public class PayrollService {
     SalaryPaymentView view(SalaryPayment p, Map<Long, Staff> staffById) {
         Staff s = staffById.get(p.getStaffId());
         return new SalaryPaymentView(p.getId(), p.getSlipNumber(), s.getId(), s.getCode(), ClubStateService.staffName(s), p.getPeriod(),
-                p.getAmount(), p.getMethod(), p.getMethod().label(), p.getPaidOn(), p.getNote(), p.getCreatedAt(), p.getCreatedBy(),
+                p.getAmount(), p.getActivityShare(), p.getMethod(), p.getMethod().label(), p.getPaidOn(), p.getNote(), p.getCreatedAt(), p.getCreatedBy(),
                 p.isCancelled(), p.getCancelledAt(), p.getCancelledBy(), p.getCancelReason());
     }
 
@@ -108,7 +110,9 @@ public class PayrollService {
             var c = due(st, s, ym);
             SalaryBonus b = bonuses.get(s.id());
             BigDecimal bonus = b == null ? BigDecimal.ZERO.setScale(2) : b.getAmount().setScale(2, RoundingMode.HALF_UP);
-            BigDecimal due = c.amount().add(bonus).setScale(2, RoundingMode.HALF_UP);
+            List<ActivityShareView> acts = ClubStateService.activityShares(st.activities(), s.id(), ym);
+            BigDecimal activityShare = ClubStateService.activityShareTotal(acts);
+            BigDecimal due = c.amount().add(bonus).add(activityShare == null ? BigDecimal.ZERO : activityShare).setScale(2, RoundingMode.HALF_UP);
             BigDecimal revenue = s.sportIds().isEmpty() ? null
                     : Rules.revenueForSports(l.sales(), new HashSet<>(s.sportIds()), ym.atDay(1), ym.atEndOfMonth());
             List<SalaryPaymentView> pays = byStaff.getOrDefault(s.id(), List.of());
@@ -118,7 +122,7 @@ public class PayrollService {
             // a paid month stays settled even if the commission salary changes afterwards
             BigDecimal balance = valid.isEmpty() ? Rules.balance(due, paid) : BigDecimal.ZERO.setScale(2);
             Rules.PaymentStatus status = valid.isEmpty() ? Rules.paymentStatus(due, paid) : Rules.PaymentStatus.PAYE;
-            return new PayrollRow(s, c.amount(), bonus, b == null ? null : b.getNote(), revenue, due, paid, balance, status, paidOn, c.detail(), pays);
+            return new PayrollRow(s, c.amount(), bonus, b == null ? null : b.getNote(), activityShare, acts, revenue, due, paid, balance, status, paidOn, c.detail(), pays);
         }).toList();
     }
 
@@ -226,6 +230,7 @@ public class PayrollService {
         p.setStaffId(staffId);
         p.setPeriod(ym.toString());
         p.setAmount(row.due());
+        p.setActivityShare(row.activityShare());
         p.setMethod(Check.required(r.method(), "method", "Mode de paiement"));
         p.setPaidOn(paidOn);
         p.setNote(Check.text(r.note(), "note", "Note", 500, false));

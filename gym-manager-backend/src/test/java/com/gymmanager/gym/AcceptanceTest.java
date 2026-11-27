@@ -403,9 +403,15 @@ class AcceptanceTest {
         long second = ((Number) read(send(admin, "POST", "/api/payments", Map.of("memberId", id, "amount", 250, "method", "CARTE")), "$.id")).longValue();
         assertThat((List<Object>) read(get(admin, "/api/members"), a001 + ".paymentStatus")).containsExactly("PAYE");
 
+        setting("club.phone", "0522001122");
         var pdf = get(admin, "/api/payments/" + second + "/receipt.pdf").andExpect(status().isOk()).andReturn().getResponse();
         assertThat(pdf.getContentType()).isEqualTo("application/pdf");
         assertThat(new String(pdf.getContentAsByteArray(), 0, 5)).isEqualTo("%PDF-");
+        // the club is shown as the administration, with its phone; the member's phone is not printed
+        String memberPhone = (String) ((List<Object>) read(get(admin, "/api/members"), a001 + ".phone")).getFirst();
+        String receiptText = pdfText(pdf.getContentAsByteArray());
+        assertThat(receiptText).contains("Adhérent", "Administration", "Tél. 0522001122", "Cachet de l'Administration", "Merci de votre confiance");
+        assertThat(receiptText).doesNotContain(memberPhone, "Téléphone");
 
         send(admin, "PUT", "/api/payments/" + second, Map.of("amount", 200, "method", "VIREMENT", "paidOn", "2026-11-16"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.updatedBy").value("admin"));
@@ -883,6 +889,55 @@ class AcceptanceTest {
     }
 
     @Test
+    @DisplayName("Activité payante : le responsable touche son pourcentage des inscrits dans la paie du mois, les statistiques et le reçu")
+    void activityManagerShare() throws Exception {
+        long bouzid = id("/api/staff", "$.rows[?(@.code=='E006')].id");
+        String e006 = "$.rows[?(@.staff.code=='E006')]";
+        send(admin, "POST", "/api/activities", Map.of("name", "Stage", "startsAt", "2026-11-28T10:00:00", "managerId", bouzid,
+                "paid", true, "price", 100, "managerPercent", 120)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("managerPercent"));
+        long stage = ((Number) read(send(admin, "POST", "/api/activities", Map.of("name", "Stage", "startsAt", "2026-11-28T10:00:00",
+                "managerId", bouzid, "paid", true, "price", 100, "managerPercent", 40)).andExpect(status().isOk()), "$.id")).longValue();
+        long byDefault = ((Number) read(send(admin, "POST", "/api/activities", Map.of("name", "Gala", "startsAt", "2026-12-05T10:00:00",
+                "managerId", bouzid, "paid", true, "price", 30)).andExpect(status().isOk()), "$.id")).longValue();
+        long free = ((Number) read(send(admin, "POST", "/api/activities", Map.of("name", "Footing", "startsAt", "2026-11-29T10:00:00",
+                "managerId", bouzid, "paid", false, "managerPercent", 40)).andExpect(status().isOk()), "$.id")).longValue();
+        long fn = id("/api/staff", "$.rows[?(@.code=='E006')].functionId");
+        long owner = ((Number) read(send(admin, "POST", "/api/staff", Map.of("lastName", "Ali", "functionId", fn, "internal", true)), "$.id")).longValue();
+        long owned = ((Number) read(send(admin, "POST", "/api/activities", Map.of("name", "Soirée", "startsAt", "2026-11-27T20:00:00",
+                "managerId", owner, "paid", true, "price", 80, "managerPercent", 40)).andExpect(status().isOk()), "$.id")).longValue();
+        for (String code : List.of("A001", "A002")) {
+            long m = id("/api/members", "$[?(@.code=='" + code + "')].id");
+            send(admin, "POST", "/api/registrations", Map.of("memberId", m, "activityId", stage)).andExpect(status().isOk());
+            send(admin, "POST", "/api/registrations", Map.of("memberId", m, "activityId", owned)).andExpect(status().isOk());
+        }
+
+        // 2 registered × 100 = 200, 40 % for the manager; default 50 %; none for a free activity or an internal manager
+        get(admin, "/api/activities").andExpect(jsonPath("$[?(@.id==" + stage + ")].managerPercent").value(40.0))
+                .andExpect(jsonPath("$[?(@.id==" + stage + ")].managerShare").value(80.0))
+                .andExpect(jsonPath("$[?(@.id==" + byDefault + ")].managerPercent").value(50.0));
+        assertThat((List<Object>) read(get(admin, "/api/activities"), "$[?(@.id==" + free + ")].managerPercent")).containsExactly((Object) null);
+        assertThat((List<Object>) read(get(admin, "/api/activities"), "$[?(@.id==" + owned + ")].managerShare")).containsExactly((Object) null);
+        assertThat((List<Object>) read(get(admin, "/api/staff-options"), "$[?(@.id==" + owner + ")].internal")).containsExactly(true);
+
+        get(admin, "/api/payroll?month=2026-11").andExpect(jsonPath(e006 + ".activityShare").value(80.0))
+                .andExpect(jsonPath(e006 + ".salary").value(4500.0)).andExpect(jsonPath(e006 + ".due").value(4580.0))
+                .andExpect(jsonPath(e006 + ".activities[0].name").value("Stage"));
+        assertThat((List<Object>) read(get(admin, "/api/payroll?month=2026-11"), "$.rows[?(@.staff.code=='E002')].activityShare"))
+                .containsExactly((Object) null);
+        get(admin, "/api/staff").andExpect(jsonPath("$.rows[?(@.code=='E006')].activityShare").value(80.0));
+        get(admin, "/api/payroll/stats?from=2026-11&to=2026-11&staffId=" + bouzid).andExpect(jsonPath("$.totalDue").value(4580.0));
+        get(admin, "/api/stats?from=2026-11-01&to=2026-11-30").andExpect(jsonPath("$.activities[?(@.id==" + stage + ")].managerShare").value(80.0));
+
+        // paid: the share is frozen on the slip even if registrations change afterwards
+        long slip = ((Number) read(send(admin, "POST", "/api/payroll/payments", Map.of("staffId", bouzid, "period", "2026-11", "method", "ESPECES"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.amount").value(4580.0)), "$.id")).longValue();
+        long a003 = id("/api/members", "$[?(@.code=='A003')].id");
+        send(admin, "POST", "/api/registrations", Map.of("memberId", a003, "activityId", stage)).andExpect(status().isOk());
+        String text = pdfText(get(admin, "/api/payroll/payments/" + slip + "/receipt.pdf").andReturn().getResponse().getContentAsByteArray());
+        assertThat(text).contains("Salaire brut", "4 500,00", "Part des activités", "80,00", "4 580,00").doesNotContain("Prime");
+    }
+
+    @Test
     @DisplayName("Personnel interne : sans mode de rémunération ni paie ; une fonction se crée depuis la fiche du personnel")
     void internalStaffAndFunctions() throws Exception {
         long role = ((Number) read(send(admin, "POST", "/api/roles", Map.of("name", "RH", "permissions", List.of("STAFF"))), "$.id")).longValue();
@@ -1150,8 +1205,13 @@ class AcceptanceTest {
         send(admin, "PUT", "/api/payroll/bonus", Map.of("staffId", bouzid, "period", "2026-11", "amount", 300)).andExpect(status().isBadRequest());
         send(admin, "PUT", "/api/payroll/bonus", noBonus).andExpect(status().isBadRequest());
 
+        setting("club.phone", "0522001122");
         var pdf = get(admin, "/api/payroll/payments/" + slip + "/receipt.pdf").andExpect(status().isOk()).andReturn().getResponse();
         assertThat(new String(pdf.getContentAsByteArray(), 0, 5)).isEqualTo("%PDF-");
+        String slipText = pdfText(pdf.getContentAsByteArray());
+        assertThat(slipText).contains("Personnel", "Administration", "Salaire brut", "4 500,00", "Prime", "Net à verser", "4 700,00",
+                "Merci pour votre engagement, votre travail et la qualité de votre collaboration");
+        assertThat(slipText).doesNotContain("Employeur", "Tél.", "Cachet", "Bénéficiaire", "Signature", "Document interne", "Merci de votre confiance", "Commission");
         assertThat((List<Object>) read(get(admin, "/api/payroll/staff/" + bouzid + "/history"), "$[*].period")).containsExactly("2026-11", "2026-10");
 
         // cancel = the slip is deleted, the bonus is kept, the month is unpaid again; the slip number is not reused
@@ -1171,6 +1231,27 @@ class AcceptanceTest {
         send(admin, "DELETE", "/api/payroll/staff/" + bouzid + "/months/2026-10", null).andExpect(status().isNotFound());
         get(admin, "/api/payroll?month=2026-10").andExpect(jsonPath(e006 + ".bonus").value(50.0));
         send(admin, "DELETE", "/api/staff/" + bouzid, null).andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("Reçu de salaire d'un coach à la commission : brut, charges, part du club, part du coach, net, sans prime vide")
+    void commissionSalaryReceipt() throws Exception {
+        long oumaima = id("/api/staff", "$.rows[?(@.code=='E002')].id");
+        long slip = ((Number) read(send(admin, "POST", "/api/payroll/payments",
+                Map.of("staffId", oumaima, "period", "2026-11", "method", "ESPECES", "paidOn", "2026-11-17")).andExpect(status().isOk()), "$.id")).longValue();
+        String text = pdfText(get(admin, "/api/payroll/payments/" + slip + "/receipt.pdf").andReturn().getResponse().getContentAsByteArray());
+        // gross 250 × 1/3 = 83,33 for the coach; the club keeps 166,67: 83,34 of charges and 83,33 for itself
+        assertThat(text).contains("Salaire brut", "250,00", "Charges (1/3)", "83,34", "Part du club (1/3)", "Part du coach (1/3)", "83,33", "Net à verser");
+        assertThat(text).doesNotContain("Prime", "× 1/3 =", "Aucun adhérent");
+    }
+
+    static String pdfText(byte[] pdf) throws Exception {
+        var reader = new com.lowagie.text.pdf.PdfReader(pdf);
+        var extractor = new com.lowagie.text.pdf.parser.PdfTextExtractor(reader);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 1; i <= reader.getNumberOfPages(); i++) sb.append(extractor.getTextFromPage(i)).append('\n');
+        // the PDF groups digits with a non-breaking space in some fonts: normalise it
+        return sb.toString().replace('\u00a0', ' ');
     }
 
     @Test

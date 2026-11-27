@@ -198,7 +198,8 @@ public class CatalogController {
     public StaffList staff() {
         List<StaffView> rows = state.load().staff();
         List<StaffView> active = rows.stream().filter(StaffView::active).toList();
-        return new StaffList(rows, com.gymmanager.gym.rules.Rules.payroll(active.stream().map(StaffView::salary).toList()), active.size());
+        return new StaffList(rows, com.gymmanager.gym.rules.Rules.payroll(active.stream()
+                .map(s -> s.activityShare() == null ? s.salary() : s.salary().add(s.activityShare())).toList()), active.size());
     }
 
     @PostMapping("/staff")
@@ -227,7 +228,7 @@ public class CatalogController {
     @GetMapping("/staff-options")
     public List<StaffOption> staffOptions() {
         return state.load().staff().stream().map(s -> new StaffOption(s.id(), s.code(), s.name(), s.active(),
-                s.function() != null && Rules.normalize(s.function().label()).equals("coach"))).toList();
+                s.function() != null && Rules.normalize(s.function().label()).equals("coach"), s.internal())).toList();
     }
 
     // ---------------------------------------------------------------- activities

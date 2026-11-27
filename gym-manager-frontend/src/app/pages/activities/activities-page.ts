@@ -66,7 +66,11 @@ import { ActivityFormDialog } from './activity-form-dialog';
                   <td>{{ x.startsAt | frDateTime }}</td>
                   <td>{{ x.location || '—' }}</td>
                   <td class="num"><span [class.red]="x.full">{{ x.registrationCount }} / {{ x.maxPlaces ?? '–' }}</span></td>
-                  <td>{{ x.manager?.name ?? '—' }}</td>
+                  <td>{{ x.manager?.name ?? '—' }}
+                    @if (x.paid) {
+                      <div class="muted small">@if (x.managerPercent !== null) {{{ x.managerPercent }} %@if (x.managerShare !== null) { · {{ x.managerShare | money }}}} @else {Interne, sans part}</div>
+                    }
+                  </td>
                   <td><app-active-badge [active]="x.active" /></td>
                   @if (canEdit()) {
                     <td class="actions" (click)="$event.stopPropagation()">

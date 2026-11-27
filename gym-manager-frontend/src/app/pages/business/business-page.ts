@@ -1,4 +1,5 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { CdkConnectedOverlay } from '@angular/cdk/overlay';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -18,12 +19,14 @@ import { DateField } from '../../shared/date-field';
 import { SelectOption } from '../../shared/multi-select';
 import { Pager, Paged } from '../../shared/table';
 import { today } from '../charges/charge-dialogs';
+import { MemberPreview, PREVIEW_DELAY_MS, PREVIEW_ID, PREVIEW_POSITIONS } from '../members/member-preview';
 import { BusinessFormDialog, BusinessPayDialog } from './business-dialogs';
 
 /** Club business of a month (sales and services), past or coming: what is collected and what is left to collect. */
 @Component({
   selector: 'app-business',
-  imports: [FormsModule, MatButtonModule, MatMenuModule, MatTooltipModule, RouterLink, LucideAngularModule, DateField, Pager, MoneyPipe, FrDatePipe],
+  imports: [FormsModule, MatButtonModule, MatMenuModule, MatTooltipModule, RouterLink, LucideAngularModule, DateField, Pager, MoneyPipe, FrDatePipe,
+    CdkConnectedOverlay, MemberPreview],
   template: `
     <div class="toolbar">
       <button class="icon-btn" (click)="shift(-1)" aria-label="Mois précédent"><lucide-icon name="chevron-left" /></button>
@@ -51,7 +54,10 @@ import { BusinessFormDialog, BusinessPayDialog } from './business-dialogs';
             @for (r of rows.page(); track r.item.id) {
               <tr>
                 <td class="strong">{{ r.item.label }}@if (r.item.note) {<div class="muted small">{{ r.item.note }}</div>}</td>
-                <td>@if (r.item.member; as m) {<a class="code-link" [routerLink]="['/fiche', m.code]">{{ m.code }}</a> {{ m.name }}} @else {<span class="muted">—</span>}</td>
+                <td>@if (r.item.member; as m) {<a class="code-link" [routerLink]="['/fiche', m.code]"
+                       [attr.aria-describedby]="preview()?.member?.id === m.id ? previewId : null"
+                       (mouseenter)="openPreview(m.id, $event)" (focus)="openPreview(m.id, $event)" (mouseleave)="closePreview()"
+                       (blur)="closePreview()" (keydown.escape)="closePreview()">{{ m.code }}</a> {{ m.name }}} @else {<span class="muted">—</span>}</td>
                 <td>{{ r.item.categoryLabel }}</td>
                 <td>{{ type(r.item) }}</td>
                 <td class="num">
@@ -92,6 +98,13 @@ import { BusinessFormDialog, BusinessPayDialog } from './business-dialogs';
         </table>
       </div>
       <app-pager [table]="rows" />
+      @if (preview(); as p) {
+        <ng-template cdkConnectedOverlay [cdkConnectedOverlayOpen]="true" [cdkConnectedOverlayOrigin]="p.origin"
+                     [cdkConnectedOverlayPositions]="previewPositions" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="8"
+                     cdkConnectedOverlayPanelClass="member-preview-pane" (detach)="closePreview()">
+          <app-member-preview [id]="previewId" [member]="p.member" />
+        </ng-template>
+      }
     } @else {
       <div class="loading">Chargement…</div>
     }
@@ -110,8 +123,19 @@ export class BusinessPage {
   rows = new Paged(() => this.data()?.rows ?? [], () => this.config.pageSize());
   members = signal<MemberView[]>([]);
   title = computed(() => `Business de ${monthName(this.month())}`);
+  private memberById = computed(() => new Map(this.members().map((m) => [m.id, m])));
+  readonly previewId = PREVIEW_ID;
+  readonly previewPositions = PREVIEW_POSITIONS;
+  preview = signal<{ member: MemberView; origin: HTMLElement } | null>(null);
+  private previewTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
+    // A row that disappears under the pointer (month change, paging, reload) never fires mouseleave.
+    effect(() => {
+      this.rows.page();
+      untracked(() => this.closePreview());
+    });
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.previewTimer));
     this.reload();
     this.api.members().then((m) => this.members.set(m)).catch(() => this.members.set([]));
   }
@@ -122,6 +146,21 @@ export class BusinessPage {
     } catch (e) {
       this.notify.error(e);
     }
+  }
+
+  /** Same card as on the members page: on focus at once, on hover after a short delay. */
+  openPreview(memberId: number, event: Event): void {
+    const member = this.memberById().get(memberId);
+    if (!member) return;
+    const origin = event.currentTarget as HTMLElement;
+    clearTimeout(this.previewTimer);
+    if (event.type === 'focus') this.preview.set({ member, origin });
+    else this.previewTimer = setTimeout(() => this.preview.set({ member, origin }), PREVIEW_DELAY_MS);
+  }
+
+  closePreview(): void {
+    clearTimeout(this.previewTimer);
+    this.preview.set(null);
   }
 
   type(b: BusinessView): string {

@@ -1,7 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { DestroyRef } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   SiteClub,
+  SiteData,
+  SiteDataService,
   SiteSport,
+  coachPhotoUrl,
+  logoUrl,
   hhmm,
   isLive,
   minutes,
@@ -23,6 +30,7 @@ const club = (phone: string, dialCode = '212'): SiteClub => ({
   country: 'MA',
   currency: 'DH',
   hasLogo: false,
+  logoVersion: null,
   today: '2026-11-28',
 });
 
@@ -109,5 +117,87 @@ describe('site vitrine — liens', () => {
   it('ajoute une transparence à une couleur, rouge par défaut', () => {
     expect(tint('#E53935', 0.5)).toBe('#E5393580');
     expect(tint(null, 1)).toBe('#ff3b2fff');
+  });
+});
+
+/** Stands in for the browser's EventSource: the test plays the server's announcements. */
+class FakeEventSource {
+  static last: FakeEventSource;
+  closed = false;
+  private listener?: (e: MessageEvent<string>) => void;
+  constructor(readonly url: string) {
+    FakeEventSource.last = this;
+  }
+  addEventListener(_type: string, l: (e: MessageEvent<string>) => void): void {
+    this.listener = l;
+  }
+  close(): void {
+    this.closed = true;
+  }
+  announce(version: string): void {
+    this.listener?.({ data: version } as MessageEvent<string>);
+  }
+}
+
+describe('Mise à jour en direct du site', () => {
+  const site = (version: string) => ({ version }) as SiteData;
+  const flush = () => new Promise((r) => setTimeout(r));
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  function setup() {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    TestBed.configureTestingModule({ providers: [provideHttpClient()] });
+    const service = TestBed.inject(SiteDataService);
+    const load = vi.spyOn(service, 'load');
+    let destroy = () => {};
+    const ref = { onDestroy: (fn: () => void) => (destroy = fn) } as unknown as DestroyRef;
+    const shown: string[] = [];
+    const failed = vi.fn();
+    return { service, load, ref, shown, failed, destroy: () => destroy() };
+  }
+
+  it("recharge les données quand le serveur annonce une nouvelle version, avec la version dans l'URL", async () => {
+    const t = setup();
+    t.load.mockResolvedValueOnce(site('a')).mockResolvedValueOnce(site('b'));
+    t.service.follow(t.ref, (d) => t.shown.push(d.version), t.failed);
+    await flush();
+    expect(FakeEventSource.last.url).toBe('/api/public/site/events');
+
+    FakeEventSource.last.announce('a');
+    await flush();
+    expect(t.load).toHaveBeenCalledTimes(1);
+
+    FakeEventSource.last.announce('b');
+    await flush();
+    expect(t.load).toHaveBeenLastCalledWith('b');
+    expect(t.shown).toEqual(['a', 'b']);
+  });
+
+  it("un rafraîchissement raté garde la page affichée ; seul l'échec du premier chargement affiche l'erreur", async () => {
+    const t = setup();
+    t.load.mockResolvedValueOnce(site('a')).mockRejectedValueOnce(new Error('réseau'));
+    t.service.follow(t.ref, (d) => t.shown.push(d.version), t.failed);
+    await flush();
+    FakeEventSource.last.announce('b');
+    await flush();
+    expect(t.shown).toEqual(['a']);
+    expect(t.failed).not.toHaveBeenCalled();
+  });
+
+  it('ferme le flux quand la page est quittée', async () => {
+    const t = setup();
+    t.load.mockResolvedValue(site('a'));
+    t.service.follow(t.ref, () => {}, t.failed);
+    t.destroy();
+    expect(FakeEventSource.last.closed).toBe(true);
+  });
+
+  it("l'adresse du logo et des photos change quand le fichier est remplacé", () => {
+    expect(logoUrl({ ...club(''), hasLogo: true, logoVersion: 'x1' })).toBe('/api/public/logo?v=x1');
+    expect(logoUrl(club(''))).toBe('/brand/logo.png');
+    const coach = { id: 3, name: 'A', initials: 'A', role: 'Coach', sports: [], hasPhoto: true, photoVersion: 'p2' };
+    expect(coachPhotoUrl(coach)).toBe('/api/public/coaches/3/photo?v=p2');
+    expect(coachPhotoUrl({ ...coach, hasPhoto: false })).toBeNull();
   });
 });

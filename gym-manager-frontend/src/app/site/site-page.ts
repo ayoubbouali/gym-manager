@@ -29,6 +29,7 @@ import {
   SiteData,
   SiteDataService,
   hhmm,
+  logoUrl,
   nextSession,
   now,
   openState,
@@ -133,12 +134,10 @@ export class SitePage implements OnInit {
     ),
   );
   /** The logo uploaded in the settings, otherwise the one shipped with the app. */
-  protected readonly logo = computed(() =>
-    this.club()?.hasLogo ? '/api/public/logo' : '/brand/logo.png',
-  );
+  protected readonly logo = computed(() => logoUrl(this.club()));
   protected readonly year = new Date().getFullYear();
 
-  async ngOnInit(): Promise<void> {
+  ngOnInit(): void {
     const timer = setInterval(() => this.clock.set(now()), 60_000);
     const onScroll = () => this.scrolled.set(window.scrollY > 24);
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -146,23 +145,28 @@ export class SitePage implements OnInit {
       clearInterval(timer);
       window.removeEventListener('scroll', onScroll);
     });
-    await this.reload();
+    // Shows the site, then every change made in the administration while the page stays open.
+    this.api.follow(this.destroyRef, (d) => this.show(d), () => this.failed.set(true));
   }
 
   protected async reload(): Promise<void> {
     this.failed.set(false);
     try {
-      const d = await this.api.load();
-      this.data.set(d);
-      const where = d.club.city ? ` à ${d.club.city}` : '';
-      this.title.setTitle(`${d.club.name} — Salle de sport${where}`);
-      this.meta.updateTag({
-        name: 'description',
-        content: `${d.club.name}${where} : ${d.sports.map((s) => s.name).join(', ')}. Planning des cours, tarifs, coachs et événements.`,
-      });
+      this.show(await this.api.load());
     } catch {
       this.failed.set(true);
     }
+  }
+
+  private show(d: SiteData): void {
+    this.failed.set(false);
+    this.data.set(d);
+    const where = d.club.city ? ` à ${d.club.city}` : '';
+    this.title.setTitle(`${d.club.name} — Salle de sport${where}`);
+    this.meta.updateTag({
+      name: 'description',
+      content: `${d.club.name}${where} : ${d.sports.map((s) => s.name).join(', ')}. Planning des cours, tarifs, coachs et événements.`,
+    });
   }
 
   protected go(id: string): void {

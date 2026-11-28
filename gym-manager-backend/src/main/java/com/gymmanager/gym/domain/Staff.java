@@ -27,4 +27,6 @@ public class Staff {
     /** One of the club's owners: no pay mode, never in the payroll. */
     private boolean internal;
     private boolean active = true;
+    /** File name of the photo in the uploads directory (never the image itself). */
+    private String photo;
 }

@@ -3,6 +3,7 @@ package com.gymmanager.gym.service;
 import com.gymmanager.gym.common.ApiException;
 import com.gymmanager.gym.common.Check;
 import com.gymmanager.gym.common.CodeService;
+import com.gymmanager.gym.common.FileStorage;
 import com.gymmanager.gym.domain.PayMode;
 import com.gymmanager.gym.domain.Sport;
 import com.gymmanager.gym.domain.Staff;
@@ -16,6 +17,9 @@ import com.gymmanager.gym.web.dto.Requests.StaffRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashSet;
 import java.util.List;
@@ -33,6 +37,7 @@ public class StaffService {
     private final com.gymmanager.gym.repository.SalaryPaymentRepository salaryPayments;
     private final SettingsService settings;
     private final CodeService codes;
+    private final FileStorage files;
 
     public Staff save(Long id, StaffRequest r) {
         Staff s = id == null ? new Staff() : staff.findById(id).orElseThrow(() -> ApiException.notFound("Membre du personnel introuvable."));
@@ -83,6 +88,33 @@ public class StaffService {
         if (sports.existsByCoach(id) || activities.existsByManagerId(id) || salaryPayments.existsByStaffId(id)) {
             throw ApiException.inUse("« " + ClubStateService.staffName(s) + " »");
         }
+        String photo = s.getPhoto();
         staff.delete(s);
+        // after commit only: a rolled-back deletion keeps its photo
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                files.delete(photo);
+            }
+        });
+    }
+
+    public void setPhoto(Long id, MultipartFile file) {
+        Staff s = staff.findById(id).orElseThrow(() -> ApiException.notFound("Membre du personnel introuvable."));
+        String stored = files.saveImage(file, "staff-" + s.getId());
+        String old = s.getPhoto();
+        s.setPhoto(stored);
+        files.delete(old);
+    }
+
+    public void deletePhoto(Long id) {
+        Staff s = staff.findById(id).orElseThrow(() -> ApiException.notFound("Membre du personnel introuvable."));
+        files.delete(s.getPhoto());
+        s.setPhoto(null);
+    }
+
+    @Transactional(readOnly = true)
+    public String photoName(Long id) {
+        return staff.findById(id).map(Staff::getPhoto).orElse(null);
     }
 }

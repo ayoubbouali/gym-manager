@@ -1,12 +1,15 @@
 package com.gymmanager.gym.web;
 
+import com.gymmanager.gym.common.FileStorage;
 import com.gymmanager.gym.service.*;
 import com.gymmanager.gym.rules.Rules;
 import com.gymmanager.gym.service.Views.*;
 import com.gymmanager.gym.web.dto.Requests.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -23,6 +26,7 @@ public class CatalogController {
     private final SportService sports;
     private final StaffService staff;
     private final ActivityService activities;
+    private final FileStorage files;
 
     private static ResponseEntity<Void> noContent() {
         return ResponseEntity.noContent().build();
@@ -221,6 +225,23 @@ public class CatalogController {
     @DeleteMapping("/staff/{id}")
     public ResponseEntity<Void> deleteStaff(@PathVariable Long id) {
         staff.delete(id);
+        return noContent();
+    }
+
+    @GetMapping("/staff/{id}/photo")
+    public ResponseEntity<Resource> staffPhoto(@PathVariable Long id) {
+        return AdminController.image(files, staff.photoName(id));
+    }
+
+    @PostMapping("/staff/{id}/photo")
+    public ResponseEntity<Void> uploadStaffPhoto(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
+        staff.setPhoto(id, file);
+        return noContent();
+    }
+
+    @DeleteMapping("/staff/{id}/photo")
+    public ResponseEntity<Void> deleteStaffPhoto(@PathVariable Long id) {
+        staff.deletePhoto(id);
         return noContent();
     }
 

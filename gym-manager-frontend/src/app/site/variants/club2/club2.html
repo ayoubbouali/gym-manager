@@ -1,0 +1,226 @@
+<a class="skip" href="#contenu" (click)="$event.preventDefault(); go('contenu')">Aller au contenu</a>
+
+<header class="bar" [class.solid]="scrolled() || menuOpen()">
+  <div class="wrap bar-in">
+    <button type="button" class="brand" (click)="top()" [attr.aria-label]="(club()?.name ?? 'Accueil') + ', haut de page'">
+      <img [src]="logo()" alt="" />{{ club()?.name ?? '' }}
+    </button>
+    <nav class="links" aria-label="Sections">
+      @for (l of links(); track l.id) {
+        <button type="button" (click)="go(l.id)">{{ l.label }}</button>
+      }
+    </nav>
+    @if (cta(); as href) {
+      <a class="btn sm" [href]="href" target="_blank" rel="noopener">Nous rejoindre</a>
+    }
+    <button type="button" class="burger" (click)="menuOpen.set(!menuOpen())" [attr.aria-expanded]="menuOpen()" aria-controls="menu-c2" aria-label="Menu">
+      <lucide-icon [img]="menuOpen() ? icons.X : icons.Menu" [size]="22" />
+    </button>
+  </div>
+  @if (menuOpen()) {
+    <nav id="menu-c2" class="menu" aria-label="Sections">
+      @for (l of links(); track l.id; let i = $index) {
+        <button type="button" (click)="go(l.id)"><span>{{ num()[l.id] }}</span>{{ l.label }}</button>
+      }
+    </nav>
+  }
+</header>
+
+<main id="contenu">
+  <!-- Cover -->
+  <section class="wrap cover" [style.--accent]="palette().a">
+    <p class="issue">
+      <span>{{ issue }}</span>
+      @if (club()?.city) {<span>{{ club()?.city }}</span>}
+      @if (open(); as o) {<span class="state" [class.on]="o.open"><i></i>{{ o.label }}</span>}
+    </p>
+    <h1 class="masthead">{{ club()?.name ?? '' }}</h1>
+    <div class="cover-grid">
+      <div>
+        <h2 class="headline" reveal>Le sport se&nbsp;pratique, <em>ici</em>, avec&nbsp;méthode.</h2>
+        <blockquote class="pull" [reveal]="120">
+          « Ta salle, tes coachs, ton rythme. »
+          @if (data(); as d) {
+            <cite>{{ d.sports.length }} discipline{{ d.sports.length > 1 ? 's' : '' }}, un planning pensé pour s'adapter à ta vie.</cite>
+          }
+        </blockquote>
+        <div class="ctas">
+          @if (cta(); as href) {
+            <a class="btn" [href]="href" target="_blank" rel="noopener"><lucide-icon [img]="icons.MessageCircle" [size]="18" />Réserve ta séance d'essai</a>
+          }
+          <button type="button" class="more" (click)="go('planning')">Lire le planning →</button>
+        </div>
+      </div>
+      <aside class="side" aria-label="Prochaine séance">
+        <p class="kicker">Prochaine séance</p>
+        @if (next(); as n) {
+          <p class="side-name" [style.--c]="n.color">{{ n.name }}</p>
+          <p class="side-when">{{ n.when }} — {{ n.until }}</p>
+          @if (n.coach) {<p class="muted">avec {{ n.coach }}</p>}
+        } @else if (failed()) {
+          <p class="muted">Impossible de charger le programme.</p>
+          <button type="button" class="more" (click)="reload()">Réessayer</button>
+        } @else {
+          <span class="sk w70"></span><span class="sk w40"></span>
+        }
+        @if (stats().length) {
+          <dl class="figures">
+            @for (s of stats(); track s.label) {
+              <div><dt>{{ s.label }}</dt><dd>{{ s.value }}</dd></div>
+            }
+          </dl>
+        }
+      </aside>
+    </div>
+  </section>
+
+  @if (data(); as d) {
+    @if (d.sports.length) {
+      <section id="disciplines" class="wrap sec">
+        <h2 class="sec-h"><span>{{ num()['disciplines'] }} —</span> Disciplines</h2>
+        <div class="cols">
+          @for (s of sports(); track s.id; let i = $index) {
+            <article class="sport" [style.--c]="s.color" [reveal]="i * 60">
+              <h3><i class="dot"></i>{{ s.name }}@if (s.live) {<small class="live">En cours</small>}</h3>
+              <p class="muted">{{ s.weekly }}</p>
+              <p class="days">
+                @for (dl of week(); track dl.day) {<span [class.on]="s.days.has(dl.day)">{{ dl.short }}</span>}
+              </p>
+              @if (s.coaches.length) {<p>Avec {{ s.coaches.join(', ') }}</p>}
+              <p class="foot"><span>{{ s.price }} / mois</span>@if (s.next) {<span class="muted">{{ s.next }}</span>}</p>
+            </article>
+          }
+        </div>
+      </section>
+    }
+
+    @if (all().length) {
+      <section id="planning" class="wrap sec">
+        <h2 class="sec-h"><span>{{ num()['planning'] }} —</span> Planning de la semaine</h2>
+        <div class="table" role="list">
+          @for (day of weekGrid(); track day.day) {
+            <div class="day" role="listitem" [class.today]="day.today">
+              <p class="day-h">{{ day.label }}@if (day.today) {<small>aujourd'hui</small>}</p>
+              @for (s of day.sessions; track s.key) {
+                <p class="slot" [style.--c]="s.color" [class.live]="s.live">
+                  <time>{{ s.start }}–{{ s.end }}</time>{{ s.sport }}
+                </p>
+              } @empty {
+                <p class="muted slot-none">Repos</p>
+              }
+            </div>
+          }
+        </div>
+      </section>
+    }
+
+    @if (d.packs.length || d.sports.length) {
+      <section id="tarifs" class="wrap sec">
+        <h2 class="sec-h"><span>{{ num()['tarifs'] }} —</span> Tarifs</h2>
+        @if (durations().length > 1) {
+          <div class="tabs" role="tablist" aria-label="Durée">
+            @for (du of durations(); track du.months) {
+              <button type="button" role="tab" [attr.aria-selected]="du.months === months()" (click)="chosenMonths.set(du.months)">
+                {{ du.label }}@if (du.discount) {<small>-{{ du.discount }} %</small>}
+              </button>
+            }
+          </div>
+        }
+        <ul class="prices">
+          @for (o of offers(); track o.key) {
+            <li [style.--c]="o.color" [class.best]="o.best">
+              <div>
+                <p class="p-title"><i class="dot"></i>{{ o.sport }} <span class="muted">· {{ o.title }}</span>@if (o.best) {<small class="tag">Meilleure offre</small>}</p>
+                @if (o.total) {<p class="muted">{{ o.total }}</p>}
+                @if (o.saving) {<p class="saving">{{ o.saving }}</p>}
+              </div>
+              <span class="leader" aria-hidden="true"></span>
+              <p class="p-amount">{{ o.perMonth }}<small> / mois</small></p>
+              @if (o.link) {<a class="more" [href]="o.link" target="_blank" rel="noopener">Choisir →</a>}
+            </li>
+          }
+        </ul>
+      </section>
+    }
+
+    @if (d.coaches.length) {
+      <section id="coachs" class="wrap sec">
+        <h2 class="sec-h"><span>{{ num()['coachs'] }} —</span> Les coachs</h2>
+        <div class="portraits">
+          @for (c of coaches(); track c.id; let i = $index) {
+            <figure class="portrait" [reveal]="i * 60">
+              <div class="ph">
+                @if (c.photo) {<img [src]="c.photo" [alt]="c.name" loading="lazy" />} @else {<span>{{ c.initials }}</span>}
+              </div>
+              <figcaption>
+                <strong>{{ c.name }}</strong>
+                @if (c.role) {<span class="muted">{{ c.role }}</span>}
+                <span class="tags">@for (t of c.sports; track t.name) {<span [style.--c]="t.color">{{ t.name }}</span>}</span>
+              </figcaption>
+            </figure>
+          }
+        </div>
+      </section>
+    }
+
+    @if (d.events.length) {
+      <section id="evenements" class="wrap sec">
+        <h2 class="sec-h"><span>{{ num()['evenements'] }} —</span> Agenda</h2>
+        <ol class="agenda">
+          @for (e of events(); track e.id) {
+            <li>
+              <p class="date"><strong>{{ e.day }}</strong>{{ e.month }}</p>
+              <div>
+                <h3>{{ e.name }}</h3>
+                <p class="muted">{{ e.weekday }} · {{ e.time }}@if (e.location) { · {{ e.location }}}</p>
+                @if (e.description) {<p>{{ e.description }}</p>}
+                @if (e.maxPlaces) {
+                  <p class="muted">{{ e.full ? 'Complet' : e.remainingPlaces + (e.remainingPlaces === 1 ? ' place restante' : ' places restantes') }}</p>
+                  <span class="gauge" aria-hidden="true"><i [style.width.%]="e.taken"></i></span>
+                }
+              </div>
+              <div class="ev-end">
+                <p class="p-amount">{{ e.priceLabel }}</p>
+                @if (e.link && !e.full) {<a class="more" [href]="e.link" target="_blank" rel="noopener">Réserver →</a>}
+              </div>
+            </li>
+          }
+        </ol>
+      </section>
+    }
+  }
+
+  <section id="contact" class="wrap sec">
+    <h2 class="sec-h"><span>{{ num()['contact'] }} —</span> Nous trouver</h2>
+    <div class="contact">
+      <div>
+        @if (hasHours()) {
+          <table class="hours">
+            <caption class="kicker">Horaires</caption>
+            @for (h of hours(); track h.label) {
+              <tr [class.today]="h.today"><th scope="row">{{ h.label }}</th><td>{{ h.hours ?? 'Fermé' }}</td></tr>
+            }
+          </table>
+        }
+        @if (club()?.address) {<p class="addr">{{ club()?.address }}@if (club()?.city) {, {{ club()?.city }}}</p>}
+        <p class="contact-links">
+          @if (map(); as m) {<a class="more" [href]="m" target="_blank" rel="noopener">Itinéraire →</a>}
+          @if (phone(); as p) {<a class="more" [href]="p">{{ phoneLabel() }}</a>}
+        </p>
+      </div>
+      <div class="wa">
+        <p class="headline small">Une question&nbsp;? Écris-nous.</p>
+        @if (cta(); as href) {
+          <a class="btn big" [href]="href" target="_blank" rel="noopener"><lucide-icon [img]="icons.MessageCircle" [size]="24" />WhatsApp</a>
+        } @else {
+          <p class="muted">Passe nous voir à l'accueil.</p>
+        }
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap foot-bar">
+  <span>{{ club()?.name ?? '' }} · © {{ year }}</span>
+  <a routerLink="/connexion">Espace gérant <lucide-icon [img]="icons.ArrowUpRight" [size]="14" /></a>
+</footer>

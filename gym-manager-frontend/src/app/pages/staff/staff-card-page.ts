@@ -1,10 +1,12 @@
-import { Component, effect, inject, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { LucideAngularModule } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
+import { NotifyService } from '../../core/notify.service';
+import { ConfirmService } from '../../shared/confirm.service';
 import { FrDatePipe, MoneyPipe, monthName, openPdf } from '../../core/format';
 import { SalaryPaymentView, StaffView } from '../../core/models';
 import { SportChip } from '../../shared/badges';
@@ -29,7 +31,18 @@ import { Pager, Paged } from '../../shared/table';
           <h2>{{ s.code }} — {{ s.name }} @if (!s.active) {<span class="badge neutral">Inactif</span>}</h2>
         </div>
         <div class="profile">
-          <div class="photo-col"><div class="photo initials" aria-hidden="true">{{ initials(s) }}</div></div>
+          <div class="photo-col">
+            @if (s.hasPhoto) {
+              <img class="photo" [src]="photoUrl()" [alt]="'Photo de ' + s.name" />
+            } @else {
+              <div class="photo initials" aria-hidden="true">{{ initials(s) }}</div>
+            }
+            <label class="photo-btn" mat-stroked-button>
+              <lucide-icon name="camera" [size]="16" /> {{ s.hasPhoto ? 'Changer la photo' : 'Ajouter une photo' }}
+              <input type="file" accept="image/jpeg,image/png" (change)="upload($event)" class="sr-only" />
+            </label>
+            @if (s.hasPhoto) {<button class="link-btn danger" (click)="removePhoto()">Retirer la photo</button>}
+          </div>
           <div class="info-block">
             <h4>Identité</h4>
             <dl>
@@ -91,6 +104,8 @@ export class StaffCardPage {
   code = input.required<string>();
   private api = inject(ApiService);
   private dialog = inject(MatDialog);
+  private notify = inject(NotifyService);
+  private confirm = inject(ConfirmService);
 
   staff = signal<StaffView | null>(null);
   history = signal<SalaryPaymentView[]>([]);
@@ -99,13 +114,15 @@ export class StaffCardPage {
   notFound = signal('');
   readonly initials = staffInitials;
   month = (period: string) => monthName(period);
+  photoVersion = signal(Date.now());
+  photoUrl = computed(() => `/api/staff/${this.staff()?.id}/photo?v=${this.photoVersion()}`);
 
   constructor() {
     effect(() => this.load(this.code()));
   }
 
-  private async load(code: string): Promise<void> {
-    this.staff.set(null);
+  private async load(code: string, quiet = false): Promise<void> {
+    if (!quiet) this.staff.set(null);
     this.notFound.set('');
     try {
       const s = (await this.api.staff()).rows.find((x) => x.code === code);
@@ -117,6 +134,33 @@ export class StaffCardPage {
       this.staff.set(s);
     } catch (e: any) {
       this.notFound.set(e?.error?.message ?? 'Membre du personnel introuvable.');
+    }
+  }
+
+  async upload(ev: Event): Promise<void> {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png'].includes(file.type)) return this.notify.error({ error: { message: 'Format non accepté : JPG ou PNG uniquement.' } });
+    if (file.size > 2 * 1024 * 1024) return this.notify.error({ error: { message: 'Fichier trop volumineux (2 Mo maximum).' } });
+    try {
+      await this.api.upload(`/staff/${this.staff()!.id}/photo`, file);
+      this.photoVersion.set(Date.now());
+      this.notify.success('Photo enregistrée.');
+      await this.load(this.code(), true);
+    } catch (e) {
+      this.notify.error(e);
+    }
+  }
+
+  async removePhoto(): Promise<void> {
+    if (!(await this.confirm.confirm({ title: 'Retirer la photo ?', confirmLabel: 'Retirer', danger: true }))) return;
+    try {
+      await this.api.delete(`/staff/${this.staff()!.id}/photo`);
+      await this.load(this.code(), true);
+    } catch (e) {
+      this.notify.error(e);
     }
   }
 

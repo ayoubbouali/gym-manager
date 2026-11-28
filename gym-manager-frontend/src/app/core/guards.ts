@@ -4,13 +4,16 @@ import { AuthService } from './auth.service';
 import { ConfigService } from './config.service';
 import { Permission } from './models';
 
-/** Authenticated user with an up-to-date password; loads the UI configuration. */
-export const authGuard: CanActivateFn = async () => {
+/**
+ * Authenticated user with an up-to-date password; loads the UI configuration.
+ * A visitor without a session who opens the home page gets the public site; any other page asks to sign in.
+ */
+export const authGuard: CanActivateFn = async (_route, state) => {
   const auth = inject(AuthService);
   const router = inject(Router);
   const config = inject(ConfigService);
   const user = await auth.ensureLoaded();
-  if (!user) return router.parseUrl('/connexion');
+  if (!user) return router.parseUrl(state.url === '/' ? '/club' : '/connexion');
   if (user.mustChangePassword) return router.parseUrl('/mot-de-passe');
   if (!config.config()) {
     try {

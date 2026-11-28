@@ -3,6 +3,11 @@ import { authGuard, passwordGuard, permissionGuard as can } from './core/guards'
 import { Shell } from './layout/shell';
 
 export const routes: Routes = [
+  { path: 'club', loadComponent: () => import('./site/site-page').then((m) => m.SitePage), title: 'Notre club' },
+  { path: 'club2', loadComponent: () => import('./site/variants/club2/club2').then((m) => m.Club2Page), title: 'Notre club' },
+  { path: 'club3', loadComponent: () => import('./site/variants/club3/club3').then((m) => m.Club3Page), title: 'Notre club' },
+  { path: 'club4', loadComponent: () => import('./site/variants/club4/club4').then((m) => m.Club4Page), title: 'Notre club' },
+  { path: 'club5', loadComponent: () => import('./site/variants/club5/club5').then((m) => m.Club5Page), title: 'Notre club' },
   { path: 'connexion', loadComponent: () => import('./pages/auth/login').then((m) => m.LoginPage), title: 'Connexion' },
   { path: 'mot-de-passe-oublie', loadComponent: () => import('./pages/auth/forgot-password').then((m) => m.ForgotPasswordPage), title: 'Mot de passe oublié' },
   { path: 'mot-de-passe', canActivate: [passwordGuard], loadComponent: () => import('./pages/auth/change-password').then((m) => m.ChangePasswordPage), title: 'Changer le mot de passe' },

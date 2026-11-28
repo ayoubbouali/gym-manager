@@ -1,9 +1,9 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, input, signal } from '@angular/core';
 import { MoneyPipe, monthName } from '../../core/format';
 import { StaffView } from '../../core/models';
 import { SportChip } from '../../shared/badges';
 
-/** Initials of a staff member: no photo is stored for the staff. */
+/** Initials of a staff member, shown when they have no photo. */
 export function staffInitials(s: Pick<StaffView, 'firstName' | 'lastName'>): string {
   return `${s.firstName?.charAt(0) ?? ''}${s.lastName?.charAt(0) ?? ''}`.toUpperCase();
 }
@@ -22,7 +22,11 @@ export function payModeLabel(s: Pick<StaffView, 'internal' | 'payMode'>): string
     @let s = staff();
     <div class="mp-banner"></div>
     <div class="mp-head">
-      <div class="mp-photo mp-initials" aria-hidden="true">{{ initials() }}</div>
+      @if (showPhoto()) {
+        <img class="mp-photo" [src]="photoUrl()" alt="" (error)="failedFor.set(s.id)" />
+      } @else {
+        <div class="mp-photo mp-initials" aria-hidden="true">{{ initials() }}</div>
+      }
       <div class="mp-identity">
         <div class="mp-name">{{ s.name }}</div>
         <div class="mp-tags">
@@ -54,6 +58,10 @@ export class StaffPreview {
   activityShare = input<number | null>(null);
 
   initials = computed(() => staffInitials(this.staff()));
+  /** Id of the staff member whose photo failed to load (e.g. no right to read it): falls back to initials. */
+  failedFor = signal<number | null>(null);
+  showPhoto = computed(() => this.staff().hasPhoto && this.failedFor() !== this.staff().id);
+  photoUrl = computed(() => `/api/staff/${this.staff().id}/photo`);
   monthSalary = computed(() => this.salary() ?? this.staff().salary);
   monthActivityShare = computed(() => (this.month() ? this.activityShare() : this.staff().activityShare));
   monthLabel = computed(() => monthName(this.month() ?? this.staff().salaryDetail.month));

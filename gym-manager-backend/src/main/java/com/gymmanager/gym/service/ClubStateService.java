@@ -235,7 +235,7 @@ public class ClubStateService {
             return new StaffView(s.getId(), s.getCode(), s.getLastName(), s.getFirstName(), staffName(s), s.getPhone(),
                     s.getFunctionId(), fnById.get(s.getFunctionId()), coached, coached.stream().map(sportRef).toList(),
                     s.isInternal(), s.getPayMode(), s.getFixedSalary(), s.isActive(), sc.amount(), sc.detail(), enrolled,
-                    activityShareTotal(activityShares(activities, s.getId(), currentMonth)));
+                    activityShareTotal(activityShares(activities, s.getId(), currentMonth)), s.getPhoto() != null);
         }).toList();
 
         Map<Long, ActivityView> actById = byId(activities, ActivityView::id);

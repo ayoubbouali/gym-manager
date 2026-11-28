@@ -5,6 +5,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +51,8 @@ public class DataResetService {
     @Transactional
     public Map<String, Long> wipe() {
         Map<String, Long> before = summary();
-        List<String> photos = jdbc.queryForList("SELECT photo FROM members WHERE photo IS NOT NULL", String.class);
+        List<String> photos = new ArrayList<>(jdbc.queryForList("SELECT photo FROM members WHERE photo IS NOT NULL", String.class));
+        photos.addAll(jdbc.queryForList("SELECT photo FROM staff WHERE photo IS NOT NULL", String.class));
         for (String t : TABLES) jdbc.update("DELETE FROM " + t);
         photos.forEach(files::delete);
         return before;

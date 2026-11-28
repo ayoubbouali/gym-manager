@@ -1,0 +1,180 @@
+<a class="skip" href="#contenu" (click)="$event.preventDefault(); go('contenu')"
+  >Aller au contenu</a
+>
+
+<header class="nav" [class.solid]="scrolled() || menuOpen()">
+  <div class="nav-inner">
+    <button
+      type="button"
+      class="s-brand"
+      (click)="top()"
+      [attr.aria-label]="(club()?.name ?? 'Accueil') + ', haut de page'"
+    >
+      <img [src]="logo()" alt="" />
+      <span class="brand-name">{{ club()?.name ?? '' }}</span>
+    </button>
+
+    <nav class="nav-links" aria-label="Sections">
+      @for (l of links(); track l.id) {
+        <button type="button" (click)="go(l.id)">{{ l.label }}</button>
+      }
+    </nav>
+
+    <div class="nav-actions">
+      @if (cta(); as href) {
+        <a class="btn btn-primary btn-sm" [href]="href" target="_blank" rel="noopener"
+          >Nous rejoindre</a
+        >
+      }
+      <button
+        type="button"
+        class="burger"
+        (click)="menuOpen.set(!menuOpen())"
+        [attr.aria-expanded]="menuOpen()"
+        aria-controls="menu-mobile"
+        aria-label="Menu"
+      >
+        <lucide-icon [img]="menuOpen() ? icons.X : icons.Menu" [size]="22" />
+      </button>
+    </div>
+  </div>
+
+  @if (menuOpen()) {
+    <nav id="menu-mobile" class="mobile-menu" aria-label="Sections">
+      @for (l of links(); track l.id; let i = $index) {
+        <button type="button" (click)="go(l.id)" [style.--i]="i">
+          <span class="idx">0{{ i + 1 }}</span
+          >{{ l.label }}<lucide-icon [img]="icons.ArrowUpRight" [size]="22" />
+        </button>
+      }
+    </nav>
+  }
+</header>
+
+<main id="contenu">
+  <section class="hero" [style.--g1]="glow().a" [style.--g2]="glow().b" [style.--g3]="glow().c">
+    <div class="hero-bg" aria-hidden="true">
+      <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span>
+      <span class="grid-lines"></span><span class="grain"></span>
+      <img class="watermark" [src]="logo()" alt="" />
+    </div>
+
+    <div class="wrap hero-inner">
+      <div class="hero-copy">
+        @if (open(); as o) {
+          <p class="status" [class.is-open]="o.open"><span class="s-dot"></span>{{ o.label }}</p>
+        }
+        <h1 class="hero-title">
+          <span class="line"><span>Entraîne-toi.</span></span>
+          <span class="line"><span class="hot">Dépasse-toi.</span></span>
+          <span class="line"><span class="outline">Recommence.</span></span>
+        </h1>
+      </div>
+
+      <div class="hero-sub">
+        <p class="hero-lead">
+          @if (data(); as d) {
+            <strong>{{ d.club.name }}</strong>
+            @if (d.club.city) {
+              <span>, à {{ d.club.city }}</span>
+            }
+            : {{ d.sports.length }} discipline{{ d.sports.length > 1 ? 's' : '' }} encadrée{{
+              d.sports.length > 1 ? 's' : ''
+            }}
+            par des coachs passionnés, un planning pensé pour s'adapter à ta vie.
+          } @else {
+            Ta salle, tes coachs, ton rythme.
+          }
+        </p>
+        <div class="hero-ctas">
+          @if (cta(); as href) {
+            <a class="btn btn-primary btn-lg" [href]="href" target="_blank" rel="noopener">
+              <lucide-icon [img]="icons.MessageCircle" [size]="20" />Réserver ma séance d'essai
+            </a>
+          }
+          <button type="button" class="btn btn-ghost btn-lg" (click)="go('planning')">
+            Voir le planning<lucide-icon [img]="icons.ArrowRight" [size]="18" />
+          </button>
+        </div>
+      </div>
+
+      <aside class="hero-card" [reveal]="200" aria-label="Prochaine séance">
+        @if (next(); as n) {
+          <p class="eyebrow"><lucide-icon [img]="icons.Clock" [size]="14" />Prochaine séance</p>
+          <p class="next-name" [style.--c]="n.color">{{ n.name }}</p>
+          <p class="next-when">
+            {{ n.when }} <span>→ {{ n.until }}</span>
+          </p>
+          @if (n.coach) {
+            <p class="next-coach">avec {{ n.coach }}</p>
+          }
+          <div class="pulse" aria-hidden="true"><span></span><span></span><span></span></div>
+        } @else if (failed()) {
+          <p class="eyebrow">Hors ligne</p>
+          <p class="next-when">Impossible de charger le programme.</p>
+          <button type="button" class="btn btn-ghost btn-sm" (click)="reload()">Réessayer</button>
+        } @else {
+          <span class="skeleton w60"></span><span class="skeleton w90 tall"></span
+          ><span class="skeleton w40"></span>
+        }
+      </aside>
+    </div>
+
+    @if (stats().length) {
+      <div class="wrap stats">
+        @for (s of stats(); track s.label; let i = $index) {
+          <div class="stat" [reveal]="i * 90">
+            <span class="stat-value" [countUp]="s.value"></span>
+            <span class="stat-label">{{ s.label }}</span>
+          </div>
+        }
+      </div>
+    }
+  </section>
+
+  @if (data(); as d) {
+    @if (d.sports.length) {
+      <div class="marquee" aria-hidden="true">
+        <div class="marquee-track">
+          @for (k of [0, 1]; track k) {
+            <div class="marquee-group">
+              @for (s of d.sports; track s.id) {
+                <span class="marquee-item" [style.--c]="s.color">{{ s.name }}<i></i></span>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <gm-site-sports id="disciplines" [data]="d" [clock]="clock()" />
+      <gm-site-planning id="planning" [sports]="d.sports" [clock]="clock()" />
+    }
+    @if (d.packs.length || d.sports.length) {
+      <gm-site-pricing id="tarifs" [data]="d" />
+    }
+    @if (d.coaches.length) {
+      <gm-site-coaches id="coachs" [data]="d" />
+    }
+    @if (d.events.length) {
+      <gm-site-events id="evenements" [data]="d" />
+    }
+    <gm-site-contact id="contact" [data]="d" [clock]="clock()" />
+  }
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <img class="footer-logo" [src]="logo()" alt="" />
+    <p class="footer-brand">{{ club()?.name ?? '' }}</p>
+    <p class="footer-meta">© {{ year }} · Tous droits réservés</p>
+    <a class="footer-staff" routerLink="/connexion"
+      >Espace gérant<lucide-icon [img]="icons.ArrowUpRight" [size]="14"
+    /></a>
+  </div>
+</footer>
+
+@if (cta(); as href) {
+  <a class="fab" [href]="href" target="_blank" rel="noopener" aria-label="Nous écrire sur WhatsApp">
+    <lucide-icon [img]="icons.MessageCircle" [size]="24" />
+  </a>
+}

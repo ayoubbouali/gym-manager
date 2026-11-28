@@ -1,0 +1,205 @@
+.cta {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  padding: clamp(40px, 7vw, 88px);
+  border-radius: 32px;
+  margin-bottom: clamp(80px, 10vw, 130px);
+  background: var(--s-heat);
+  color: #fff;
+  .kicker {
+    color: rgba(255, 255, 255, 0.85);
+    &::before {
+      background: #fff;
+    }
+  }
+}
+.cta-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.5;
+  background:
+    radial-gradient(circle at 85% 20%, rgba(255, 255, 255, 0.45), transparent 40%),
+    radial-gradient(circle at 10% 110%, rgba(80, 0, 0, 0.6), transparent 50%),
+    repeating-linear-gradient(115deg, transparent 0 22px, rgba(255, 255, 255, 0.06) 22px 23px);
+}
+.cta-title {
+  margin: 0;
+  font-size: clamp(40px, 7.4vw, 104px);
+  line-height: 0.9;
+  font-weight: 860;
+  letter-spacing: -0.055em;
+  text-transform: uppercase;
+  em {
+    font-style: normal;
+    color: #1a0503;
+  }
+}
+.cta-lead {
+  margin: 24px 0 0;
+  max-width: 50ch;
+  font-size: clamp(16px, 1.5vw, 19px);
+  color: rgba(255, 255, 255, 0.9);
+}
+.cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 34px;
+}
+.btn-light {
+  background: #0b0b0f;
+  color: #fff;
+  &:hover {
+    transform: translateY(-2px);
+    background: #000;
+    box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+  }
+}
+.cta .btn-ghost {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #fff;
+}
+
+.grid {
+  display: grid;
+  gap: 28px;
+  align-items: start;
+  @media (min-width: 900px) {
+    grid-template-columns: 1.1fr 1fr;
+    gap: 48px;
+  }
+}
+.infos .section-title {
+  margin-bottom: 28px;
+  font-size: clamp(34px, 4.6vw, 60px);
+}
+.info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 4px;
+  border-top: 1px solid var(--s-line);
+  text-decoration: none;
+  &:last-child {
+    border-bottom: 1px solid var(--s-line);
+  }
+  strong {
+    display: block;
+    font-size: 17px;
+    font-weight: 650;
+  }
+  small {
+    display: block;
+    color: var(--s-muted);
+    font-size: 14px;
+  }
+  .go {
+    margin-left: auto;
+    color: var(--s-faint);
+    transition:
+      transform 0.3s var(--s-ease),
+      color 0.3s;
+  }
+  &:hover .go {
+    color: var(--s-hot-2);
+    transform: translate(3px, -3px);
+  }
+}
+.ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--s-surface-2);
+  border: 1px solid var(--s-line);
+}
+
+.hours {
+  padding: 26px;
+}
+.hours-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-weight: 700;
+}
+.hours ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.hours li {
+  display: flex;
+  justify-content: space-between;
+  padding: 11px 12px;
+  border-radius: 12px;
+  color: var(--s-muted);
+  font-variant-numeric: tabular-nums;
+  &.today {
+    background: var(--s-surface-2);
+    color: var(--s-ink);
+    font-weight: 650;
+    span:first-child::after {
+      content: " · aujourd'hui";
+      color: var(--s-hot-2);
+      font-weight: 500;
+    }
+  }
+}
+
+.faq {
+  margin-top: clamp(64px, 8vw, 110px);
+  max-width: 860px;
+}
+.qa {
+  border-bottom: 1px solid var(--s-line);
+}
+.qa button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  padding: 22px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: clamp(18px, 2vw, 22px);
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  lucide-icon {
+    flex: none;
+    transition: transform 0.35s var(--s-ease);
+    color: var(--s-muted);
+  }
+}
+.answer {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s var(--s-ease);
+}
+.answer p {
+  overflow: hidden;
+  margin: 0;
+  color: var(--s-muted);
+  max-width: 64ch;
+}
+.qa.open {
+  .answer {
+    grid-template-rows: 1fr;
+  }
+  .answer p {
+    padding-bottom: 22px;
+  }
+  button lucide-icon {
+    transform: rotate(180deg);
+    color: var(--s-hot-2);
+  }
+}

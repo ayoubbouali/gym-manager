@@ -31,10 +31,25 @@ describe('carte d’aperçu personnel', () => {
     });
   });
 
-  it('affiche les initiales, jamais de photo, avec le style de l’aperçu adhérent', () => {
-    const el = render(staff());
+  it('sans photo, affiche les initiales, avec le style de l’aperçu adhérent', () => {
+    const el = render(staff({ hasPhoto: false }));
     expect(el.classList).toContain('member-preview');
     expect(el.getAttribute('role')).toBe('tooltip');
+    expect(el.querySelector('img')).toBeNull();
+    expect(el.querySelector('.mp-initials')!.textContent!.trim()).toBe('YB');
+  });
+
+  it('affiche la photo quand il en a une, et revient aux initiales si elle ne se charge pas', () => {
+    const f = TestBed.createComponent(StaffPreview);
+    f.componentRef.setInput('staff', staff({ hasPhoto: true }));
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    const img = el.querySelector('img.mp-photo') as HTMLImageElement;
+    expect(img.getAttribute('src')).toBe('/api/staff/6/photo');
+    expect(el.querySelector('.mp-initials')).toBeNull();
+
+    img.dispatchEvent(new Event('error'));
+    f.detectChanges();
     expect(el.querySelector('img')).toBeNull();
     expect(el.querySelector('.mp-initials')!.textContent!.trim()).toBe('YB');
   });

@@ -1,0 +1,549 @@
+<a class="skip" href="#contenu" (click)="$event.preventDefault(); go('contenu')"
+  >Aller au contenu</a
+>
+
+<header class="bar" [class.scrolled]="scrolled() || menuOpen()">
+  <div class="bar-inner">
+    <button
+      type="button"
+      class="brand"
+      (click)="top()"
+      [attr.aria-label]="(club()?.name ?? 'Accueil') + ', haut de page'"
+    >
+      <span class="brand-logo"><img [src]="logo()" alt="" /></span>
+      <span class="brand-name">{{ club()?.name ?? '' }}</span>
+    </button>
+
+    <nav class="bar-links" aria-label="Sections">
+      @for (l of links(); track l.id) {
+        <button type="button" (click)="go(l.id)">{{ l.label }}</button>
+      }
+    </nav>
+
+    <div class="bar-actions">
+      @if (cta(); as href) {
+        <a class="btn btn-y btn-sm" [href]="href" target="_blank" rel="noopener"
+          >Nous rejoindre</a
+        >
+      }
+      <button
+        type="button"
+        class="burger"
+        (click)="menuOpen.set(!menuOpen())"
+        [attr.aria-expanded]="menuOpen()"
+        aria-controls="menu-c3"
+        aria-label="Menu"
+      >
+        <lucide-icon [img]="menuOpen() ? icons.X : icons.Menu" [size]="24" />
+      </button>
+    </div>
+  </div>
+
+  @if (menuOpen()) {
+    <nav id="menu-c3" class="drawer" aria-label="Sections">
+      @for (l of links(); track l.id; let i = $index) {
+        <button type="button" (click)="go(l.id)">
+          <span class="drawer-num">{{ pad(i) }}</span>{{ l.label }}
+          <lucide-icon [img]="icons.ArrowRight" [size]="26" />
+        </button>
+      }
+      @if (cta(); as href) {
+        <a class="btn btn-y btn-lg drawer-cta" [href]="href" target="_blank" rel="noopener"
+          ><lucide-icon [img]="icons.MessageCircle" [size]="20" />Nous rejoindre</a
+        >
+      }
+    </nav>
+  }
+</header>
+
+<main id="contenu">
+  <!-- HERO -->
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-deco" aria-hidden="true">
+      <span class="halftone"></span>
+      <span class="stripe"></span>
+    </div>
+
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <p class="hero-kicker">
+          <span>Salle de sport</span>
+          @if (club()?.city; as city) {
+            <span>· {{ city }}</span>
+          }
+        </p>
+        <h1 id="hero-title" class="hero-title">
+          <span class="t1">Entraîne</span>
+          <span class="t2">-toi.</span>
+          <span class="t3">Dépasse-toi.</span>
+          @if (club()?.name; as name) {
+            <span class="t4">{{ name }}</span>
+          }
+        </h1>
+
+        <p class="hero-lead">
+          @if (data(); as d) {
+            {{ d.sports.length }} discipline{{ d.sports.length > 1 ? 's' : '' }}, des coachs qui
+            ne lâchent rien, un planning calé sur ta vie. Pas d'excuse : viens taper.
+          } @else {
+            Ta salle, tes coachs, ton rythme.
+          }
+        </p>
+
+        <div class="hero-ctas">
+          @if (cta(); as href) {
+            <a class="btn btn-k btn-lg" [href]="href" target="_blank" rel="noopener">
+              <lucide-icon [img]="icons.MessageCircle" [size]="20" />Réserve ta séance d'essai
+            </a>
+          }
+          <button type="button" class="btn btn-w btn-lg" (click)="go('planning')">
+            Voir le planning<lucide-icon [img]="icons.ArrowRight" [size]="20" />
+          </button>
+        </div>
+      </div>
+
+      <div class="hero-side">
+        @if (open(); as o) {
+          <p class="sticker" [class.is-open]="o.open">
+            <span class="sticker-big">{{ o.open ? 'Ouvert' : 'Fermé' }}</span>
+            <span class="sticker-small">{{ o.label }}</span>
+          </p>
+        }
+
+        <aside class="ticket" aria-label="Prochaine séance">
+          <p class="ticket-head">
+            <lucide-icon [img]="icons.Clock" [size]="16" />Prochaine séance
+            <span class="ticket-no" aria-hidden="true">N° 001</span>
+          </p>
+          <div class="ticket-body">
+            @if (next(); as n) {
+              <p class="ticket-sport">
+                <span class="ticket-swatch" [style.background]="n.color"></span>{{ n.name }}
+              </p>
+              <p class="ticket-when">{{ n.when }} <span>→ {{ n.until }}</span></p>
+              @if (n.coach) {
+                <p class="ticket-coach">Avec {{ n.coach }}</p>
+              }
+            } @else if (failed()) {
+              <p class="ticket-sport">Hors ligne</p>
+              <p class="ticket-coach">Impossible de charger le programme.</p>
+              <button type="button" class="btn btn-k btn-sm" (click)="reload()">Réessayer</button>
+            } @else if (data()) {
+              <p class="ticket-sport">Sur demande</p>
+              <p class="ticket-coach">Écris-nous pour caler ta séance.</p>
+            } @else {
+              <span class="sk w60"></span><span class="sk w90 tall"></span
+              ><span class="sk w40"></span>
+            }
+          </div>
+          <div class="ticket-barcode" aria-hidden="true"></div>
+        </aside>
+      </div>
+    </div>
+
+    @if (stats().length) {
+      <ul class="wrap stats" aria-label="Le club en chiffres">
+        @for (s of stats(); track s.label; let i = $index) {
+          <li class="stat" [reveal]="i * 80">
+            <span class="stat-value" [countUp]="s.value"></span>
+            <span class="stat-label">{{ s.label }}</span>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  <div class="tape tape-k" aria-hidden="true">
+    <div class="tape-track">
+      @for (k of [0, 1]; track k) {
+        <div class="tape-group">
+          @for (w of tape(); track $index) {
+            <span>{{ w }}</span><i>✱</i>
+          }
+        </div>
+      }
+    </div>
+  </div>
+
+  @if (failed() && !data()) {
+    <section class="sec sec-w">
+      <div class="wrap failed">
+        <h2 class="sec-title">Coupure de courant.</h2>
+        <p>Le programme du club n'a pas pu être chargé. Vérifie ta connexion et retente.</p>
+        <button type="button" class="btn btn-k btn-lg" (click)="reload()">Réessayer</button>
+      </div>
+    </section>
+  }
+
+  @if (data(); as d) {
+    <!-- DISCIPLINES -->
+    @if (d.sports.length) {
+      <section id="disciplines" class="sec sec-w" aria-labelledby="t-disc">
+        <div class="wrap">
+          <header class="sec-head" reveal>
+            <p class="round">Round {{ round()['disciplines'] }}</p>
+            <h2 id="t-disc" class="sec-title">Choisis ton combat</h2>
+          </header>
+          <div class="tiles">
+            @for (s of sports(); track s.id; let i = $index) {
+              <article class="tile" [style.--c]="s.color" [reveal]="(i % 3) * 80">
+                <div class="tile-band">
+                  <span class="tile-num" aria-hidden="true">{{ pad(i) }}</span>
+                  @if (s.live) {
+                    <span class="live-tag">En cours</span>
+                  }
+                </div>
+                <div class="tile-body">
+                  <h3 class="tile-name">{{ s.name }}</h3>
+                  <p class="tile-weekly">{{ s.weekly }}</p>
+                  <ol class="tile-days" aria-label="Jours de cours">
+                    @for (dl of daysShort; track dl; let j = $index) {
+                      <li [class.on]="s.days.has(j + 1)" [attr.aria-label]="days[j] + (s.days.has(j + 1) ? ' : cours' : ' : pas de cours')">
+                        {{ dl.charAt(0) }}
+                      </li>
+                    }
+                  </ol>
+                  @if (s.coaches.length) {
+                    <p class="tile-coach">Coach · {{ s.coaches.join(' · ') }}</p>
+                  }
+                  <div class="tile-foot">
+                    <p class="tile-price">
+                      <strong>{{ s.price }}</strong><span>/ mois</span>
+                    </p>
+                    @if (s.next) {
+                      <p class="tile-next">
+                        <span>Prochaine</span>{{ s.next }}
+                      </p>
+                    }
+                  </div>
+                </div>
+              </article>
+            }
+          </div>
+        </div>
+      </section>
+    }
+
+    <!-- PLANNING -->
+    @if (all().length) {
+      <section id="planning" class="sec sec-k" aria-labelledby="t-plan">
+        <div class="wrap">
+          <header class="sec-head" reveal>
+            <p class="round">Round {{ round()['planning'] }}</p>
+            <h2 id="t-plan" class="sec-title">Le tableau des séances</h2>
+          </header>
+
+          <div class="tabs" role="group" aria-label="Choisir un jour">
+            @for (w of week(); track w.day) {
+              <button
+                type="button"
+                class="tab"
+                [class.active]="planDay() === w.day"
+                [class.empty]="!w.count"
+                [attr.aria-pressed]="planDay() === w.day"
+                [attr.aria-label]="w.label + ', ' + w.count + ' séance' + (w.count > 1 ? 's' : '') + (w.today ? ', aujourd’hui' : '')"
+                (click)="chosenDay.set(w.day)"
+              >
+                <span class="tab-day">{{ w.short }}</span>
+                <span class="tab-count">{{ w.count }}</span>
+                @if (w.today) {
+                  <span class="tab-today">Auj.</span>
+                }
+              </button>
+            }
+          </div>
+
+          <div class="board" aria-live="polite">
+            <p class="board-head">
+              <span>{{ days[planDay() - 1] }}</span>
+              <span>{{ daySessions().length }} séance{{ daySessions().length > 1 ? 's' : '' }}</span>
+            </p>
+            @if (daySessions().length) {
+              <ul class="board-rows">
+                @for (r of daySessions(); track r.key) {
+                  <li class="row" [class.live]="r.live" [class.past]="r.past" [style.--c]="r.color">
+                    <span class="row-time">{{ r.start }}<small>{{ r.end }}</small></span>
+                    <span class="row-bar" aria-hidden="true"></span>
+                    <span class="row-main">
+                      <strong>{{ r.sport }}</strong>
+                      @if (r.coach) {
+                        <small>{{ r.coach }}</small>
+                      }
+                    </span>
+                    <span class="row-state">
+                      @if (r.live) {
+                        <span class="flash">● En direct</span>
+                      } @else if (r.past) {
+                        Terminé
+                      } @else {
+                        {{ r.duration }} min
+                      }
+                    </span>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="board-empty">Jour de repos. Récupère, reviens plus fort.</p>
+            }
+          </div>
+        </div>
+      </section>
+    }
+
+    <!-- TARIFS -->
+    @if (d.packs.length || d.sports.length) {
+      <section id="tarifs" class="sec sec-y" aria-labelledby="t-tarifs">
+        <div class="wrap">
+          <header class="sec-head" reveal>
+            <p class="round">Round {{ round()['tarifs'] }}</p>
+            <h2 id="t-tarifs" class="sec-title">Prends ton ticket</h2>
+          </header>
+
+          @if (durations().length > 1) {
+            <div class="switch" role="group" aria-label="Durée de l'abonnement">
+              @for (du of durations(); track du.months) {
+                <button
+                  type="button"
+                  [class.active]="months() === du.months"
+                  [attr.aria-pressed]="months() === du.months"
+                  (click)="chosenMonths.set(du.months)"
+                >
+                  {{ du.label }}
+                  @if (du.discount > 0) {
+                    <span class="switch-off">-{{ du.discount }}%</span>
+                  }
+                </button>
+              }
+            </div>
+          }
+
+          <div class="stubs">
+            @for (o of offers(); track o.key; let i = $index) {
+              <article class="stub" [class.best]="o.best" [style.--c]="o.color" [reveal]="(i % 3) * 80">
+                @if (o.best) {
+                  <p class="stamp">Meilleure offre</p>
+                }
+                <div class="stub-main">
+                  <p class="stub-sport"><span class="stub-dot"></span>{{ o.sport }}</p>
+                  <h3 class="stub-title">{{ o.title }}</h3>
+                  <p class="stub-price">
+                    <strong>{{ o.perMonth }}</strong><span>/ mois</span>
+                  </p>
+                  @if (o.total) {
+                    <p class="stub-total">{{ o.total }}</p>
+                  }
+                  @if (o.saving) {
+                    <p class="stub-saving">{{ o.saving }}</p>
+                  }
+                </div>
+                <div class="stub-tear">
+                  @if (o.link; as href) {
+                    <a class="stub-cta" [href]="href" target="_blank" rel="noopener"
+                      [attr.aria-label]="'Choisir la formule ' + o.title + ', ' + o.sport + ', sur WhatsApp'"
+                      >Je prends<lucide-icon [img]="icons.ArrowUpRight" [size]="18"
+                    /></a>
+                  } @else {
+                    <span class="stub-cta muted">Au club</span>
+                  }
+                </div>
+              </article>
+            }
+          </div>
+        </div>
+      </section>
+    }
+
+    <div class="tape tape-y" aria-hidden="true">
+      <div class="tape-track reverse">
+        @for (k of [0, 1]; track k) {
+          <div class="tape-group">
+            @for (w of ['Pas de pitié', 'Que du travail', 'Zéro excuse', 'Toujours debout']; track w) {
+              <span>{{ w }}</span><i>✱</i>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- COACHS -->
+    @if (d.coaches.length) {
+      <section id="coachs" class="sec sec-w" aria-labelledby="t-coachs">
+        <div class="wrap">
+          <header class="sec-head" reveal>
+            <p class="round">Round {{ round()['coachs'] }}</p>
+            <h2 id="t-coachs" class="sec-title">Ton équipe de coin</h2>
+          </header>
+          <div class="cards">
+            @for (c of coaches(); track c.id; let i = $index) {
+              <article class="card" [style.--c]="c.color" [reveal]="(i % 4) * 70">
+                <div class="card-photo">
+                  @if (c.photo) {
+                    <img [src]="c.photo" [alt]="'Portrait de ' + c.name" loading="lazy" />
+                  } @else {
+                    <span class="card-initials" aria-hidden="true">{{ c.initials }}</span>
+                  }
+                  <span class="card-num" aria-hidden="true">#{{ pad(i) }}</span>
+                </div>
+                <div class="card-body">
+                  <h3 class="card-name">{{ c.name }}</h3>
+                  @if (c.role) {
+                    <p class="card-role">{{ c.role }}</p>
+                  }
+                  @if (c.sports.length) {
+                    <ul class="card-tags" aria-label="Disciplines">
+                      @for (t of c.sports; track t.name) {
+                        <li><span [style.background]="t.color"></span>{{ t.name }}</li>
+                      }
+                    </ul>
+                  }
+                </div>
+              </article>
+            }
+          </div>
+        </div>
+      </section>
+    }
+
+    <!-- EVENEMENTS -->
+    @if (d.events.length) {
+      <section id="evenements" class="sec sec-k" aria-labelledby="t-events">
+        <div class="wrap">
+          <header class="sec-head" reveal>
+            <p class="round">Round {{ round()['evenements'] }}</p>
+            <h2 id="t-events" class="sec-title">À l'affiche</h2>
+          </header>
+          <div class="fights">
+            @for (e of events(); track e.id; let i = $index) {
+              <article class="fight" [class.full]="e.full" [reveal]="(i % 2) * 80">
+                <div class="fight-date">
+                  <span class="fight-day">{{ e.day }}</span>
+                  <span class="fight-month">{{ e.month }}</span>
+                  <span class="fight-wd">{{ e.weekday }} · {{ e.time }}</span>
+                </div>
+                <div class="fight-vs">
+                  <span class="fight-you">Toi</span>
+                  <span class="vs" aria-hidden="true">VS</span>
+                  <h3 class="fight-name">{{ e.name }}</h3>
+                </div>
+                <div class="fight-info">
+                  @if (e.location) {
+                    <p class="fight-loc"><lucide-icon [img]="icons.MapPin" [size]="16" />{{ e.location }}</p>
+                  }
+                  @if (e.description) {
+                    <p class="fight-desc">{{ e.description }}</p>
+                  }
+                  <p class="fight-meta">
+                    <span class="fight-price">{{ e.priceLabel }}</span>
+                    @if (e.maxPlaces) {
+                      <span>
+                        {{
+                          e.full
+                            ? 'Complet'
+                            : e.remainingPlaces + ' place' + ((e.remainingPlaces ?? 0) > 1 ? 's' : '') + ' restante' + ((e.remainingPlaces ?? 0) > 1 ? 's' : '')
+                        }}
+                      </span>
+                    }
+                  </p>
+                  @if (e.maxPlaces) {
+                    <div class="gauge" role="img" [attr.aria-label]="'Remplissage ' + (e.taken | number: '1.0-0') + ' %'">
+                      <span [style.width.%]="e.taken"></span>
+                    </div>
+                  }
+                  @if (e.full) {
+                    <p class="sold">Complet</p>
+                  } @else if (e.link) {
+                    <a class="btn btn-y btn-sm" [href]="e.link" target="_blank" rel="noopener"
+                      >Réserve ta place<lucide-icon [img]="icons.ArrowUpRight" [size]="16"
+                    /></a>
+                  }
+                </div>
+              </article>
+            }
+          </div>
+        </div>
+      </section>
+    }
+
+    <!-- CONTACT -->
+    <section id="contact" class="sec sec-y contact" aria-labelledby="t-contact">
+      <div class="wrap">
+        <header class="sec-head" reveal>
+          <p class="round">Round {{ round()['contact'] }} · Dernier round</p>
+          <h2 id="t-contact" class="sec-title">Monte sur le ring</h2>
+        </header>
+
+        @if (phone(); as href) {
+          <a class="big-phone" [href]="href" [attr.aria-label]="'Appeler le ' + phoneLabel()">
+            <lucide-icon [img]="icons.Phone" [size]="40" />
+            <span>{{ phoneLabel() }}</span>
+          </a>
+        }
+
+        <div class="contact-grid">
+          @if (cta(); as href) {
+            <a class="wa" [href]="href" target="_blank" rel="noopener" reveal>
+              <span class="wa-kicker">WhatsApp</span>
+              <span class="wa-title">Écris-nous, on répond vite.</span>
+              <span class="wa-go">Ouvrir la discussion<lucide-icon [img]="icons.ArrowUpRight" [size]="20" /></span>
+            </a>
+          }
+
+          <div class="where" [reveal]="80">
+            <p class="box-title">Le club</p>
+            <p class="where-name">{{ d.club.name }}</p>
+            @if (d.club.address || d.club.city) {
+              <a class="where-addr" [href]="map()" target="_blank" rel="noopener">
+                <lucide-icon [img]="icons.MapPin" [size]="20" />
+                <span>
+                  @if (d.club.address) {
+                    <strong>{{ d.club.address }}</strong>
+                  }
+                  <small>{{ d.club.city }}</small>
+                </span>
+                <lucide-icon class="go" [img]="icons.ArrowUpRight" [size]="18" />
+              </a>
+            }
+          </div>
+
+          @if (hasHours()) {
+            <div class="hours" [reveal]="160">
+              <p class="box-title"><lucide-icon [img]="icons.Clock" [size]="16" />Horaires des cours</p>
+              <ul>
+                @for (h of hours(); track h.label) {
+                  <li [class.today]="h.today">
+                    <span>{{ h.label }}</span>
+                    <span>{{ h.hours ?? 'Fermé' }}</span>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+        </div>
+      </div>
+    </section>
+  } @else if (!failed()) {
+    <section class="sec sec-w" aria-busy="true" aria-label="Chargement">
+      <div class="wrap tiles">
+        @for (k of [0, 1, 2]; track k) {
+          <div class="tile sk-tile"><span class="sk w40"></span><span class="sk w90 tall"></span><span class="sk w60"></span></div>
+        }
+      </div>
+    </section>
+  }
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-inner">
+    <p class="foot-name">{{ club()?.name ?? '' }}</p>
+    <p class="foot-meta">© {{ year }} · Tous droits réservés</p>
+    <a class="foot-staff" routerLink="/connexion"
+      >Espace gérant<lucide-icon [img]="icons.ArrowUpRight" [size]="16"
+    /></a>
+  </div>
+</footer>
+
+@if (cta(); as href) {
+  <a class="fab" [href]="href" target="_blank" rel="noopener" aria-label="Nous écrire sur WhatsApp">
+    <lucide-icon [img]="icons.MessageCircle" [size]="26" />
+  </a>
+}

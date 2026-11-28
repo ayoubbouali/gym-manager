@@ -41,3 +41,6 @@ databaseChangeLog:
   - include:
       file: sql/V14__activity_manager_share.sql
       relativeToChangelogFile: true
+  - include:
+      file: sql/V15__staff_photo.sql
+      relativeToChangelogFile: true

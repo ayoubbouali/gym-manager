@@ -174,6 +174,7 @@ export interface StaffView {
   activeMembers: number | null;
   /** Part of this month's paying activities they manage; null when none. Not included in `salary`. */
   activityShare: number | null;
+  hasPhoto: boolean;
 }
 
 export interface StaffList { rows: StaffView[]; payroll: number; activeCount: number; }

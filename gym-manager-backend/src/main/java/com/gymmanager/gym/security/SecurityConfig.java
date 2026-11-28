@@ -58,6 +58,7 @@ public class SecurityConfig {
                         // APIs proper to a page, including reads; the staff page lists the functions
                         .requestMatchers(HttpMethod.GET, "/api/functions/**").hasAnyAuthority(a(Permission.STAFF), a(Permission.SETTINGS))
                         .requestMatchers(HttpMethod.GET, "/api/payroll/stats").hasAnyAuthority(a(Permission.PAYROLL), a(Permission.STATS))
+                        .requestMatchers(HttpMethod.GET, "/api/staff/*/photo").hasAnyAuthority(a(Permission.STAFF), a(Permission.PAYROLL))
                         .requestMatchers("/api/staff/**").hasAuthority(a(Permission.STAFF))
                         .requestMatchers("/api/payroll/**").hasAuthority(a(Permission.PAYROLL))
                         .requestMatchers(HttpMethod.PUT, "/api/charges/payments/**").hasAuthority(a(Permission.MANAGE_CHARGES))

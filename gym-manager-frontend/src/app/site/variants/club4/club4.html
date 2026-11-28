@@ -1,0 +1,524 @@
+<a class="skip" href="#contenu" (click)="$event.preventDefault(); go('contenu')"
+  >Aller au contenu</a
+>
+
+<header class="bar" [class.raised]="scrolled() || menuOpen()">
+  <div class="bar-pill">
+    <button
+      type="button"
+      class="brand"
+      (click)="top()"
+      [attr.aria-label]="(club()?.name ?? 'Accueil') + ', haut de page'"
+    >
+      <img [src]="logo()" alt="" />
+      <span>{{ club()?.name ?? '' }}</span>
+    </button>
+
+    <nav class="bar-links" aria-label="Sections">
+      @for (l of links(); track l.id) {
+        <button type="button" (click)="go(l.id)">{{ l.label }}</button>
+      }
+    </nav>
+
+    <div class="bar-actions">
+      @if (cta(); as href) {
+        <a class="pill pill-dark pill-sm join" [href]="href" target="_blank" rel="noopener"
+          >Nous rejoindre</a
+        >
+      }
+      <button
+        type="button"
+        class="burger"
+        (click)="menuOpen.set(!menuOpen())"
+        [attr.aria-expanded]="menuOpen()"
+        aria-controls="club4-menu"
+        aria-label="Menu"
+      >
+        <lucide-icon [img]="menuOpen() ? icons.X : icons.Menu" [size]="20" />
+      </button>
+    </div>
+  </div>
+
+  @if (menuOpen()) {
+    <nav id="club4-menu" class="sheet" aria-label="Sections">
+      @for (l of links(); track l.id; let i = $index) {
+        <button type="button" (click)="go(l.id)" [style.--i]="i">
+          {{ l.label }}<lucide-icon [img]="icons.ArrowRight" [size]="18" />
+        </button>
+      }
+      @if (cta(); as href) {
+        <a class="pill pill-green" [href]="href" target="_blank" rel="noopener">
+          <lucide-icon [img]="icons.MessageCircle" [size]="18" />Nous rejoindre
+        </a>
+      }
+    </nav>
+  }
+</header>
+
+<main id="contenu">
+  <!-- Hero bento -->
+  <section class="wrap hero" aria-labelledby="club4-title">
+    <div class="bento">
+      <article class="card c-head" [reveal]="0">
+        <p class="kicker"><lucide-icon [img]="icons.Sparkles" [size]="16" />Ta salle, ton rythme</p>
+        <h1 id="club4-title">
+          Bouge mieux,<br />
+          <span class="grad" [style.--a]="palette().a" [style.--b]="palette().b"
+            >sens-toi bien.</span
+          >
+        </h1>
+        <p class="lead">
+          @if (data(); as d) {
+            <strong>{{ d.club.name }}</strong>
+            @if (d.club.city) {
+              à {{ d.club.city }}
+            }
+            · {{ d.sports.length }} discipline{{ d.sports.length > 1 ? 's' : '' }}, des coachs qui
+            te suivent et un planning qui s'adapte à ta semaine.
+          } @else {
+            Des coachs qui te suivent et un planning qui s'adapte à ta semaine.
+          }
+        </p>
+        <div class="ctas">
+          @if (cta(); as href) {
+            <a class="pill pill-dark pill-lg" [href]="href" target="_blank" rel="noopener">
+              <lucide-icon [img]="icons.MessageCircle" [size]="18" />Réserve ta séance d'essai
+            </a>
+          }
+          <button type="button" class="pill pill-soft pill-lg" (click)="go('planning')">
+            Voir le planning<lucide-icon [img]="icons.ArrowRight" [size]="18" />
+          </button>
+        </div>
+      </article>
+
+      <article class="card c-open" [class.is-open]="open()?.open" [reveal]="80">
+        @if (open(); as o) {
+          <span class="live-dot" aria-hidden="true"></span>
+          <p class="label">{{ o.open ? 'Ouvert maintenant' : 'Fermé pour le moment' }}</p>
+          <p class="big">{{ o.label }}</p>
+        } @else if (failed()) {
+          <p class="label">Hors ligne</p>
+          <p class="big">Impossible de charger le programme.</p>
+          <button type="button" class="pill pill-soft pill-sm" (click)="reload()">
+            <lucide-icon [img]="icons.RotateCw" [size]="16" />Réessayer
+          </button>
+        } @else if (data()) {
+          <p class="label">Horaires</p>
+          <p class="big">Sur demande</p>
+        } @else {
+          <span class="sk w40"></span><span class="sk w80 tall"></span>
+        }
+      </article>
+
+      <article
+        class="card c-next"
+        [style.--c]="next()?.color ?? palette().a"
+        [reveal]="140"
+        aria-label="Prochaine séance"
+      >
+        @if (next(); as n) {
+          <p class="label"><lucide-icon [img]="icons.Clock" [size]="15" />Prochaine séance</p>
+          <p class="next-name">{{ n.name }}</p>
+          <p class="next-when">{{ n.when }} → {{ n.until }}</p>
+          @if (n.coach) {
+            <p class="next-coach">
+              <span class="mini-avatar" aria-hidden="true">{{ n.coach.charAt(0) }}</span>avec
+              {{ n.coach }}
+            </p>
+          }
+        } @else if (data()) {
+          <p class="label"><lucide-icon [img]="icons.Clock" [size]="15" />Prochaine séance</p>
+          <p class="next-name">Sur rendez-vous</p>
+          <p class="next-when">Écris-nous pour caler un créneau.</p>
+        } @else if (!failed()) {
+          <span class="sk w40"></span><span class="sk w80 tall"></span><span class="sk w60"></span>
+        }
+      </article>
+
+      <article class="card c-logo" [reveal]="200">
+        <img [src]="logo()" [alt]="'Logo ' + (club()?.name ?? 'du club')" />
+      </article>
+
+      @for (s of stats(); track s.label; let i = $index) {
+        <article class="card c-stat" [reveal]="220 + i * 70" [style.--i]="i">
+          <span class="stat-value" [countUp]="s.value"></span>
+          <span class="stat-label">{{ s.label }}</span>
+        </article>
+      }
+    </div>
+  </section>
+
+  @if (data(); as d) {
+    <!-- Disciplines -->
+    @if (d.sports.length) {
+      <section id="disciplines" class="wrap section" aria-labelledby="club4-disc">
+        <div class="head" reveal>
+          <p class="eyebrow">Disciplines</p>
+          <h2 id="club4-disc">Trouve ce qui te fait vibrer</h2>
+        </div>
+        <div class="tiles">
+          @for (s of sports(); track s.id; let i = $index) {
+            <article
+              class="tile"
+              [attr.data-size]="tileSize(i, sports().length)"
+              [style.--c]="s.color"
+              [style.--soft]="s.soft"
+              [reveal]="i * 60"
+            >
+              <div class="tile-top">
+                <span class="tile-icon" aria-hidden="true"
+                  ><lucide-icon [img]="icons.Dumbbell" [size]="20"
+                /></span>
+                @if (s.live) {
+                  <span class="badge-live"><i aria-hidden="true"></i>En cours</span>
+                }
+              </div>
+              <h3>{{ s.name }}</h3>
+              <p class="tile-meta">{{ s.weekly }}</p>
+              @if (s.coaches.length) {
+                <p class="tile-coach">avec {{ s.coaches.join(', ') }}</p>
+              }
+              <div class="tile-foot">
+                <ul class="dots" [attr.aria-label]="'Jours de cours de ' + s.name">
+                  @for (n of dayIndexes; track n) {
+                    <li
+                      [class.on]="s.days.has(n)"
+                      [attr.aria-label]="days[n - 1] + (s.days.has(n) ? ' : cours' : ' : repos')"
+                    >
+                      {{ dayLetters[n - 1] }}
+                    </li>
+                  }
+                </ul>
+                <span class="tile-price">{{ s.price }}<small> / mois</small></span>
+              </div>
+              @if (s.next) {
+                <p class="tile-next"><lucide-icon [img]="icons.Clock" [size]="14" />{{ s.next }}</p>
+              }
+            </article>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Planning -->
+    @if (all().length) {
+      <section id="planning" class="wrap section" aria-labelledby="club4-plan">
+        <div class="head head-row" reveal>
+          <div>
+            <p class="eyebrow">Planning</p>
+            <h2 id="club4-plan">Ta semaine, séance par séance</h2>
+          </div>
+          @if (liveCount()) {
+            <p class="live-note"><i aria-hidden="true"></i>{{ liveCount() }} en cours</p>
+          }
+        </div>
+
+        <div class="segmented days-seg" role="tablist" aria-label="Jour du planning">
+          @for (w of week(); track w.day) {
+            <button
+              type="button"
+              role="tab"
+              [attr.aria-selected]="planDay() === w.day"
+              [class.active]="planDay() === w.day"
+              [class.today]="w.today"
+              (click)="chosenDay.set(w.day)"
+            >
+              <span class="seg-full">{{ w.short }}</span>
+              <span class="seg-count" [attr.aria-label]="w.count + ' séances'">{{ w.count }}</span>
+            </button>
+          }
+        </div>
+
+        <div class="timeline" role="tabpanel" [attr.aria-label]="days[planDay() - 1]">
+          @for (s of daySessions(); track s.key) {
+            <article
+              class="slot"
+              [class.live]="s.live"
+              [class.past]="s.past"
+              [style.--c]="s.color"
+            >
+              <div class="slot-time">
+                <strong>{{ s.start }}</strong><span>{{ s.end }}</span>
+              </div>
+              <div class="slot-body">
+                <div class="slot-row">
+                  <h3>{{ s.sport }}</h3>
+                  @if (s.live) {
+                    <span class="badge-live"><i aria-hidden="true"></i>En direct</span>
+                  } @else if (s.past) {
+                    <span class="badge-past">Terminé</span>
+                  } @else {
+                    <span class="badge-dur">{{ s.duration }} min</span>
+                  }
+                </div>
+                @if (s.coach) {
+                  <p class="slot-coach">avec {{ s.coach }}</p>
+                }
+                @if (s.live) {
+                  <div
+                    class="progress"
+                    role="progressbar"
+                    aria-label="Avancement de la séance"
+                    [attr.aria-valuenow]="round(progress(s.start, s.duration))"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                  >
+                    <span [style.width.%]="progress(s.start, s.duration)"></span>
+                  </div>
+                }
+              </div>
+            </article>
+          } @empty {
+            <div class="empty">
+              <lucide-icon [img]="icons.CalendarDays" [size]="28" />
+              <p>Pas de séance le {{ days[planDay() - 1].toLowerCase() }}. Profite pour récupérer !</p>
+            </div>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Pricing -->
+    @if (d.packs.length || d.sports.length) {
+      <section id="tarifs" class="wrap section" aria-labelledby="club4-price">
+        <div class="head center" reveal>
+          <p class="eyebrow">Tarifs</p>
+          <h2 id="club4-price">Choisis ta formule</h2>
+          <p class="sub">Sans frais cachés. Plus tu t'engages, plus tu économises.</p>
+        </div>
+
+        @if (durations().length > 1) {
+          <div class="segmented dur-seg" role="tablist" aria-label="Durée de la formule">
+            @for (m of durations(); track m.months) {
+              <button
+                type="button"
+                role="tab"
+                [attr.aria-selected]="months() === m.months"
+                [class.active]="months() === m.months"
+                (click)="chosenMonths.set(m.months)"
+              >
+                {{ m.label }}
+                @if (m.discount > 0) {
+                  <span class="seg-save">-{{ m.discount }} %</span>
+                }
+              </button>
+            }
+          </div>
+        }
+
+        <div class="prices">
+          @for (o of offers(); track o.key; let i = $index) {
+            <article class="price" [class.best]="o.best" [style.--c]="o.color" [reveal]="i * 70">
+              @if (o.best) {
+                <span class="best-tag"><lucide-icon [img]="icons.Sparkles" [size]="14" />Le plus avantageux</span>
+              }
+              <p class="price-sport"><i aria-hidden="true"></i>{{ o.sport }}</p>
+              <h3>{{ o.title }}</h3>
+              <p class="price-amount">{{ o.perMonth }}<small> / mois</small></p>
+              @if (o.total) {
+                <p class="price-total">{{ o.total }}</p>
+              }
+              @if (o.saving) {
+                <p class="price-save">{{ o.saving }}</p>
+              }
+              @if (o.link; as href) {
+                <a
+                  class="pill"
+                  [class.pill-dark]="o.best"
+                  [class.pill-soft]="!o.best"
+                  [href]="href"
+                  target="_blank"
+                  rel="noopener"
+                  >Je m'inscris<lucide-icon [img]="icons.ArrowUpRight" [size]="16"
+                /></a>
+              }
+            </article>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Coaches -->
+    @if (d.coaches.length) {
+      <section id="coachs" class="wrap section" aria-labelledby="club4-coach">
+        <div class="head" reveal>
+          <p class="eyebrow">Coachs</p>
+          <h2 id="club4-coach">Une équipe à tes côtés</h2>
+        </div>
+        <div class="coaches">
+          @for (c of coaches(); track c.id; let i = $index) {
+            <article class="coach" [style.--c]="c.color" [reveal]="i * 60">
+              <div class="avatar">
+                @if (c.photo) {
+                  <img [src]="c.photo" [alt]="'Photo de ' + c.name" loading="lazy" />
+                } @else {
+                  <span aria-hidden="true">{{ c.initials }}</span>
+                }
+              </div>
+              <h3>{{ c.name }}</h3>
+              @if (c.role) {
+                <p class="coach-role">{{ c.role }}</p>
+              }
+              @if (c.sports.length) {
+                <ul class="chips" aria-label="Disciplines">
+                  @for (t of c.sports; track t.name) {
+                    <li [style.--c]="t.color">{{ t.name }}</li>
+                  }
+                </ul>
+              }
+            </article>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Events -->
+    @if (d.events.length) {
+      <section id="evenements" class="section" aria-labelledby="club4-events">
+        <div class="wrap head" reveal>
+          <p class="eyebrow">Événements</p>
+          <h2 id="club4-events">À ne pas manquer</h2>
+        </div>
+        <div class="rail" tabindex="0" aria-label="Liste des événements, défilement horizontal">
+          @for (e of events(); track e.id; let i = $index) {
+            <article class="event" [class.full]="e.full" [style.--c]="palette().a">
+              <div class="event-top">
+                <div class="date" aria-hidden="true">
+                  <strong>{{ e.day }}</strong><span>{{ e.month }}</span>
+                </div>
+                <span class="event-price">{{ e.priceLabel }}</span>
+              </div>
+              <h3>{{ e.name }}</h3>
+              <p class="event-when">
+                <lucide-icon [img]="icons.CalendarDays" [size]="15" />{{ e.weekday }} {{ e.day }}
+                {{ e.month }} · {{ e.time }}
+              </p>
+              @if (e.location) {
+                <p class="event-when"><lucide-icon [img]="icons.MapPin" [size]="15" />{{ e.location }}</p>
+              }
+              @if (e.description) {
+                <p class="event-desc">{{ e.description }}</p>
+              }
+              @if (e.maxPlaces) {
+                <div class="places">
+                  <div class="places-row">
+                    <span><lucide-icon [img]="icons.Users" [size]="14" />Places</span>
+                    <span>{{ e.full ? 'Complet' : e.remainingPlaces + ' restantes / ' + e.maxPlaces }}</span>
+                  </div>
+                  <div
+                    class="progress"
+                    role="progressbar"
+                    aria-label="Places réservées"
+                    [attr.aria-valuenow]="round(e.taken)"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                  >
+                    <span [style.width.%]="e.taken"></span>
+                  </div>
+                </div>
+              }
+              @if (e.full) {
+                <span class="pill pill-soft pill-sm disabled" aria-disabled="true">Complet</span>
+              } @else if (e.link; as href) {
+                <a class="pill pill-dark pill-sm" [href]="href" target="_blank" rel="noopener"
+                  ><lucide-icon [img]="icons.Ticket" [size]="16" />Réserver ma place</a
+                >
+              }
+            </article>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Contact -->
+    <section id="contact" class="wrap section" aria-labelledby="club4-contact">
+      <div class="head" reveal>
+        <p class="eyebrow">Contact</p>
+        <h2 id="club4-contact">Passe nous voir</h2>
+      </div>
+      <div class="contact">
+        <article class="card c-map" reveal>
+          <div class="map-art" aria-hidden="true">
+            <span class="road r1"></span><span class="road r2"></span><span class="road r3"></span>
+            <span class="park"></span>
+            <span class="pin"><lucide-icon [img]="icons.MapPin" [size]="22" /></span>
+          </div>
+          <div class="map-info">
+            <p class="label">Adresse</p>
+            <p class="addr">{{ d.club.address || d.club.city || d.club.name }}</p>
+            <div class="ctas">
+              @if (map(); as href) {
+                <a class="pill pill-soft pill-sm" [href]="href" target="_blank" rel="noopener"
+                  ><lucide-icon [img]="icons.MapPin" [size]="16" />Itinéraire</a
+                >
+              }
+              @if (phone(); as href) {
+                <a class="pill pill-soft pill-sm" [href]="href"
+                  ><lucide-icon [img]="icons.Phone" [size]="16" />{{ phoneLabel() }}</a
+                >
+              }
+              @if (cta(); as href) {
+                <a class="pill pill-green pill-sm" [href]="href" target="_blank" rel="noopener"
+                  ><lucide-icon [img]="icons.MessageCircle" [size]="16" />WhatsApp</a
+                >
+              }
+            </div>
+          </div>
+        </article>
+
+        <article class="card c-hours" [reveal]="80">
+          <p class="label"><lucide-icon [img]="icons.Clock" [size]="15" />Horaires</p>
+          @if (hasHours()) {
+            <ul class="hours">
+              @for (h of hours(); track h.label) {
+                <li [class.today]="h.today" [class.closed]="!h.hours">
+                  <span>{{ h.label }}@if (h.today) {<em>Aujourd'hui</em>}</span>
+                  <span>{{ h.hours ?? 'Fermé' }}</span>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="sub">Horaires communiqués sur demande.</p>
+          }
+        </article>
+      </div>
+    </section>
+  } @else if (failed()) {
+    <section class="wrap section">
+      <div class="card state">
+        <p class="big">Oups, le programme n'a pas pu être chargé.</p>
+        <p class="sub">Vérifie ta connexion puis réessaie.</p>
+        <button type="button" class="pill pill-dark" (click)="reload()">
+          <lucide-icon [img]="icons.RotateCw" [size]="16" />Réessayer
+        </button>
+      </div>
+    </section>
+  } @else {
+    <section class="wrap section" aria-busy="true" aria-label="Chargement">
+      <div class="tiles">
+        <div class="tile sk-card" data-size="xl"></div>
+        <div class="tile sk-card" data-size="md"></div>
+        <div class="tile sk-card" data-size="md"></div>
+      </div>
+    </section>
+  }
+</main>
+
+<footer class="wrap foot">
+  <div class="foot-card">
+    <button type="button" class="brand" (click)="top()" aria-label="Haut de page">
+      <img [src]="logo()" alt="" />
+      <span>{{ club()?.name ?? '' }}</span>
+    </button>
+    <p class="foot-meta">© {{ year }} · Tous droits réservés</p>
+    <a class="pill pill-soft pill-sm" routerLink="/connexion"
+      >Espace gérant<lucide-icon [img]="icons.ArrowUpRight" [size]="14"
+    /></a>
+  </div>
+</footer>
+
+@if (cta(); as href) {
+  <a class="fab" [href]="href" target="_blank" rel="noopener" aria-label="Nous écrire sur WhatsApp">
+    <lucide-icon [img]="icons.MessageCircle" [size]="24" />
+  </a>
+}

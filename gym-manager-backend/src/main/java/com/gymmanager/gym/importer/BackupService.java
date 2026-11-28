@@ -34,7 +34,7 @@ import java.util.zip.ZipOutputStream;
 
 /**
  * Full backup of the club data as a zip archive: {@code data.json} (every table of the scope) and
- * {@code uploads/} (member photos and club logo referenced by the data).
+ * {@code uploads/} (member and staff photos, club logo referenced by the data).
  *
  * <p>The scope is the club data and {@code app_settings}; {@code app_users} is never exported nor touched,
  * so the administrator who restores keeps their access. Tables and columns are read from
@@ -155,6 +155,7 @@ public class BackupService {
 
         Set<String> newFiles = new LinkedHashSet<>();
         rows.get("members").forEach(r -> addIfPresent(newFiles, r.get("photo")));
+        rows.getOrDefault("staff", List.of()).forEach(r -> addIfPresent(newFiles, r.get("photo")));
         rows.get("app_settings").stream().filter(r -> LOGO_KEY.equals(r.get("setting_key")))
                 .forEach(r -> addIfPresent(newFiles, r.get("setting_value")));
         Set<String> oldFiles = referencedFiles();
@@ -334,9 +335,10 @@ public class BackupService {
         }
     }
 
-    /** Files of the uploads folder referenced by the current data: member photos and club logo. */
+    /** Files of the uploads folder referenced by the current data: member and staff photos, club logo. */
     private Set<String> referencedFiles() {
         Set<String> names = new LinkedHashSet<>(jdbc.queryForList("SELECT photo FROM members WHERE photo IS NOT NULL ORDER BY id", String.class));
+        names.addAll(jdbc.queryForList("SELECT photo FROM staff WHERE photo IS NOT NULL ORDER BY id", String.class));
         names.addAll(jdbc.queryForList("SELECT setting_value FROM app_settings WHERE setting_key = ?", String.class, LOGO_KEY));
         names.removeIf(String::isBlank);
         return names;

@@ -41,7 +41,7 @@ import { errorMessage } from '../../core/notify.service';
         <a class="auth-link" routerLink="/mot-de-passe-oublie">Mot de passe oublié ?</a>
         @if (error()) {<p class="form-error" role="alert">{{ error() }}</p>}
         <button mat-flat-button class="w-full big" type="submit" [disabled]="busy()">Se connecter</button>
-        <a class="auth-link" routerLink="/club">← Voir le site du club</a>
+        <a class="auth-link" routerLink="/">← Voir le site du club</a>
       </form>
     </div>
   `,

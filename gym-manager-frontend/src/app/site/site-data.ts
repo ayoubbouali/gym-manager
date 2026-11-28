@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
+import { DestroyRef, Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
 export interface SiteClub {
@@ -11,6 +11,7 @@ export interface SiteClub {
   country: string;
   currency: string;
   hasLogo: boolean;
+  logoVersion: string | null;
   today: string;
 }
 
@@ -51,6 +52,7 @@ export interface SiteCoach {
   role: string;
   sports: string[];
   hasPhoto: boolean;
+  photoVersion: string | null;
 }
 
 export interface SiteEvent {
@@ -71,6 +73,7 @@ export interface SiteData {
   packs: SitePack[];
   coaches: SiteCoach[];
   events: SiteEvent[];
+  version: string;
 }
 
 /** A session of the week, flattened from the sports' schedules. */
@@ -85,9 +88,49 @@ export interface Session {
 export class SiteDataService {
   private readonly http = inject(HttpClient);
 
-  load(): Promise<SiteData> {
-    return firstValueFrom(this.http.get<SiteData>('/api/public/site'));
+  /** `version` makes a new URL, so the browser cache cannot serve the data the server just replaced. */
+  load(version?: string): Promise<SiteData> {
+    const params: Record<string, string> = version ? { v: version } : {};
+    return firstValueFrom(this.http.get<SiteData>('/api/public/site', { params }));
   }
+
+  /**
+   * Loads the site, then reloads it each time the server announces a new version, until `destroyRef` ends.
+   * The server sends its version on every (re)connection, so a change missed while offline is caught up.
+   */
+  follow(destroyRef: DestroyRef, onData: (d: SiteData) => void, onError: () => void): void {
+    let current: string | undefined;
+    let loading: string | undefined;
+    const fetch = async (version?: string) => {
+      loading = version;
+      try {
+        const d = await this.load(version);
+        if (loading !== version) return;
+        current = d.version;
+        onData(d);
+      } catch {
+        // A failed refresh keeps the page shown; only a failed first load shows the error.
+        if (current === undefined) onError();
+      }
+    };
+    void fetch();
+    if (typeof EventSource === 'undefined') return;
+    const events = new EventSource('/api/public/site/events');
+    events.addEventListener('site', (e) => {
+      const version = (e as MessageEvent<string>).data;
+      if (version && version !== current && version !== loading) void fetch(version);
+    });
+    destroyRef.onDestroy(() => events.close());
+  }
+}
+
+/** The logo uploaded in the settings, otherwise the one shipped with the app. */
+export function logoUrl(club: SiteClub | undefined): string {
+  return club?.hasLogo ? `/api/public/logo?v=${club.logoVersion ?? ''}` : '/brand/logo.png';
+}
+
+export function coachPhotoUrl(coach: SiteCoach): string | null {
+  return coach.hasPhoto ? `/api/public/coaches/${coach.id}/photo?v=${coach.photoVersion ?? ''}` : null;
 }
 
 export const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];

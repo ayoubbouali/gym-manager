@@ -1,6 +1,6 @@
 import { Component, computed, input } from '@angular/core';
 import { Reveal } from '../motion';
-import { SiteData } from '../site-data';
+import { SiteData, coachPhotoUrl } from '../site-data';
 
 @Component({
   selector: 'gm-site-coaches',
@@ -28,8 +28,8 @@ import { SiteData } from '../site-data';
             [reveal]="(i % 4) * 80"
           >
             <div class="s-avatar" aria-hidden="true">
-              @if (c.hasPhoto) {
-                <img [src]="'/api/public/coaches/' + c.id + '/photo'" alt="" loading="lazy" />
+              @if (c.photo) {
+                <img [src]="c.photo" alt="" loading="lazy" />
               } @else {
                 <span>{{ c.initials }}</span>
               }
@@ -132,6 +132,7 @@ export class SiteCoaches {
       const tags = c.sports.map((name) => ({ name, color: color.get(name) ?? '#ff3b2f' }));
       return {
         ...c,
+        photo: coachPhotoUrl(c),
         sports: tags,
         color: tags[0]?.color ?? '#ff3b2f',
         color2: tags[1]?.color ?? '#ff8a1f',

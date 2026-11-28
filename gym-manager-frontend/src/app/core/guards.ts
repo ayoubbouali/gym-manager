@@ -1,19 +1,16 @@
 import { inject } from '@angular/core';
-import { CanActivateFn, Router } from '@angular/router';
+import { CanActivateFn, CanMatchFn, Router } from '@angular/router';
 import { AuthService } from './auth.service';
 import { ConfigService } from './config.service';
 import { Permission } from './models';
 
-/**
- * Authenticated user with an up-to-date password; loads the UI configuration.
- * A visitor without a session who opens the home page gets the public site; any other page asks to sign in.
- */
-export const authGuard: CanActivateFn = async (_route, state) => {
+/** Authenticated user with an up-to-date password; loads the UI configuration. */
+export const authGuard: CanActivateFn = async () => {
   const auth = inject(AuthService);
   const router = inject(Router);
   const config = inject(ConfigService);
   const user = await auth.ensureLoaded();
-  if (!user) return router.parseUrl(state.url === '/' ? '/club' : '/connexion');
+  if (!user) return router.parseUrl('/connexion');
   if (user.mustChangePassword) return router.parseUrl('/mot-de-passe');
   if (!config.config()) {
     try {
@@ -34,3 +31,6 @@ export const passwordGuard: CanActivateFn = async () => {
   const user = await inject(AuthService).ensureLoaded();
   return user ? true : inject(Router).parseUrl('/connexion');
 };
+
+/** Matches only without a session: the home page then shows the public site. */
+export const visitorGuard: CanMatchFn = async () => !(await inject(AuthService).ensureLoaded());

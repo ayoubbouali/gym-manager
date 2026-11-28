@@ -26,14 +26,17 @@ public class WebConfig implements WebMvcConfigurer {
             List.of("png", "jpg", "jpeg", "gif", "webp", "avif", "svg", "ico", "bmp", "tif", "tiff", "apng", "jxl");
 
     private final SessionUserInterceptor sessionUserInterceptor;
+    private final SiteChangeInterceptor siteChangeInterceptor;
 
-    public WebConfig(SessionUserInterceptor sessionUserInterceptor) {
+    public WebConfig(SessionUserInterceptor sessionUserInterceptor, SiteChangeInterceptor siteChangeInterceptor) {
         this.sessionUserInterceptor = sessionUserInterceptor;
+        this.siteChangeInterceptor = siteChangeInterceptor;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(sessionUserInterceptor).addPathPatterns("/api/**").excludePathPatterns("/api/public/**", "/api/auth/login");
+        registry.addInterceptor(siteChangeInterceptor).addPathPatterns("/api/**").excludePathPatterns("/api/public/**", "/api/auth/**");
     }
 
     /** MIME type of the web app manifest (application icon on phones / tablets). */

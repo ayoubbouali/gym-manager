@@ -5,7 +5,9 @@ import {
   DAYS_SHORT,
   SiteData,
   SiteDataService,
+  coachPhotoUrl,
   hhmm,
+  logoUrl,
   maps,
   money,
   nextSession,
@@ -106,9 +108,7 @@ export abstract class SiteView implements OnInit {
   protected readonly phone = computed(() => tel(this.club()));
   protected readonly phoneLabel = computed(() => this.club()?.phone ?? '');
   protected readonly map = computed(() => maps(this.club()));
-  protected readonly logo = computed(() =>
-    this.club()?.hasLogo ? '/api/public/logo' : '/brand/logo.png',
-  );
+  protected readonly logo = computed(() => logoUrl(this.club()));
   /** Brand palette derived from the sports' colors. */
   protected readonly palette = computed(() => {
     const colors = (this.data()?.sports ?? []).map((s) => s.color);
@@ -274,7 +274,7 @@ export abstract class SiteView implements OnInit {
         name: c.name,
         initials: c.initials,
         role: c.role,
-        photo: c.hasPhoto ? `/api/public/coaches/${c.id}/photo` : null,
+        photo: coachPhotoUrl(c),
         sports: tags,
         color: tags[0]?.color ?? '#ff3b2f',
       };
@@ -316,7 +316,7 @@ export abstract class SiteView implements OnInit {
   );
   protected readonly hasHours = computed(() => this.hours().some((h) => h.hours));
 
-  async ngOnInit(): Promise<void> {
+  ngOnInit(): void {
     const timer = setInterval(() => this.clock.set(now()), 60_000);
     const onScroll = () => this.scrolled.set(window.scrollY > 24);
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -324,23 +324,28 @@ export abstract class SiteView implements OnInit {
       clearInterval(timer);
       window.removeEventListener('scroll', onScroll);
     });
-    await this.reload();
+    // Shows the site, then every change made in the administration while the page stays open.
+    this.api.follow(this.destroyRef, (d) => this.show(d), () => this.failed.set(true));
   }
 
   protected async reload(): Promise<void> {
     this.failed.set(false);
     try {
-      const d = await this.api.load();
-      this.data.set(d);
-      const where = d.club.city ? ` à ${d.club.city}` : '';
-      this.title.setTitle(`${d.club.name} — Salle de sport${where}`);
-      this.meta.updateTag({
-        name: 'description',
-        content: `${d.club.name}${where} : ${d.sports.map((s) => s.name).join(', ')}. Planning des cours, tarifs, coachs et événements.`,
-      });
+      this.show(await this.api.load());
     } catch {
       this.failed.set(true);
     }
+  }
+
+  private show(d: SiteData): void {
+    this.failed.set(false);
+    this.data.set(d);
+    const where = d.club.city ? ` à ${d.club.city}` : '';
+    this.title.setTitle(`${d.club.name} — Salle de sport${where}`);
+    this.meta.updateTag({
+      name: 'description',
+      content: `${d.club.name}${where} : ${d.sports.map((s) => s.name).join(', ')}. Planning des cours, tarifs, coachs et événements.`,
+    });
   }
 
   protected go(id: string): void {

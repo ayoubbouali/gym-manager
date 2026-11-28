@@ -1,9 +1,11 @@
 import { Routes } from '@angular/router';
-import { authGuard, passwordGuard, permissionGuard as can } from './core/guards';
+import { authGuard, passwordGuard, permissionGuard as can, visitorGuard } from './core/guards';
 import { Shell } from './layout/shell';
 
 export const routes: Routes = [
-  { path: 'club', loadComponent: () => import('./site/site-page').then((m) => m.SitePage), title: 'Notre club' },
+  // The public site is the home page of a visitor; signed-in users get the dashboard there instead.
+  { path: '', pathMatch: 'full', canMatch: [visitorGuard], loadComponent: () => import('./site/site-page').then((m) => m.SitePage), title: 'Notre club' },
+  { path: 'club', redirectTo: '' },
   { path: 'club2', loadComponent: () => import('./site/variants/club2/club2').then((m) => m.Club2Page), title: 'Notre club' },
   { path: 'club3', loadComponent: () => import('./site/variants/club3/club3').then((m) => m.Club3Page), title: 'Notre club' },
   { path: 'club4', loadComponent: () => import('./site/variants/club4/club4').then((m) => m.Club4Page), title: 'Notre club' },
